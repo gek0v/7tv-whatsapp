@@ -18,4 +18,8 @@ sealed interface StickerError {
     data class NetworkError(val statusCode: Int? = null, val message: String) : StickerError
     data object ResourceNotFound : StickerError
     data object RateLimited : StickerError
+
+    // Pack & Persistence error cases
+    data class InsufficientStickers(val actual: Int, val min: Int = 3) : StickerError
+    data class PackNotFound(val identifier: String) : StickerError
 }
