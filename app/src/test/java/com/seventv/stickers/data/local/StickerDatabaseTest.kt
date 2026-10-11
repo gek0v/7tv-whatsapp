@@ -41,6 +41,7 @@ class StickerDatabaseTest {
 
     @After
     fun tearDown() {
+        AppDatabase.setTestInstance(null)
         db.close()
     }
 
@@ -292,6 +293,115 @@ class StickerDatabaseTest {
         val afterDelete = packDao.observeAllPacks().first()
         assertEquals(1, afterDelete.size)
         assertEquals("pack-1", afterDelete[0].pack.identifier)
+    }
+
+    @Test
+    fun getAllPacksDirect_returnsPacksSynchronouslyWithStickers() = runTest {
+        val pack1 = StickerPackEntity(
+            identifier = "pack-sync-1",
+            name = "Pack 1",
+            publisher = "7TV",
+            trayImageRelativePath = "tray1.webp",
+            isAnimated = false,
+            isWhitelisted = false,
+            createdAt = 1000L
+        )
+        val pack2 = StickerPackEntity(
+            identifier = "pack-sync-2",
+            name = "Pack 2",
+            publisher = "7TV",
+            trayImageRelativePath = "tray2.webp",
+            isAnimated = true,
+            isWhitelisted = true,
+            createdAt = 2000L
+        )
+        val stickers1 = listOf(
+            StickerEntity(
+                id = "s1",
+                packIdentifier = "pack-sync-1",
+                emoteId = "e1",
+                emoteName = "emote1",
+                relativeFilePath = "s1.webp",
+                emojis = listOf("😀"),
+                fileLength = 1000L,
+                sortOrder = 0
+            )
+        )
+        val stickers2 = listOf(
+            StickerEntity(
+                id = "s2",
+                packIdentifier = "pack-sync-2",
+                emoteId = "e2",
+                emoteName = "emote2",
+                relativeFilePath = "s2.webp",
+                emojis = listOf("🎉"),
+                fileLength = 2000L,
+                sortOrder = 0
+            )
+        )
+        packDao.insertPackWithStickers(pack1, stickers1)
+        packDao.insertPackWithStickers(pack2, stickers2)
+
+        val directPacks = packDao.getAllPacksDirect()
+        assertEquals(2, directPacks.size)
+        assertEquals("pack-sync-2", directPacks[0].pack.identifier)
+        assertEquals(1, directPacks[0].stickers.size)
+        assertEquals("s2", directPacks[0].stickers[0].id)
+
+        assertEquals("pack-sync-1", directPacks[1].pack.identifier)
+        assertEquals(1, directPacks[1].stickers.size)
+        assertEquals("s1", directPacks[1].stickers[0].id)
+    }
+
+    @Test
+    fun getPackByIdentifierDirect_returnsPackSynchronously_andNullWhenNotFound() = runTest {
+        val pack = StickerPackEntity(
+            identifier = "pack-direct-find",
+            name = "Direct Find Pack",
+            publisher = "7TV",
+            trayImageRelativePath = "tray.webp",
+            isAnimated = false,
+            isWhitelisted = false,
+            createdAt = 1500L
+        )
+        val sticker = StickerEntity(
+            id = "s-find",
+            packIdentifier = "pack-direct-find",
+            emoteId = "e-find",
+            emoteName = "emoteFind",
+            relativeFilePath = "find.webp",
+            emojis = listOf("🔍"),
+            fileLength = 1200L,
+            sortOrder = 0
+        )
+        packDao.insertPackWithStickers(pack, listOf(sticker))
+
+        val found = packDao.getPackByIdentifierDirect("pack-direct-find")
+        assertNotNull(found)
+        assertEquals("pack-direct-find", found!!.pack.identifier)
+        assertEquals(1, found.stickers.size)
+        assertEquals("s-find", found.stickers[0].id)
+
+        val notFound = packDao.getPackByIdentifierDirect("non-existent-pack")
+        assertNull(notFound)
+    }
+
+    @Test
+    fun appDatabaseSingleton_getInstanceReturnsSameInstance_andSetTestInstanceOverrides() {
+        val context = RuntimeEnvironment.getApplication()
+        try {
+            AppDatabase.setTestInstance(null)
+            val instance1 = AppDatabase.getInstance(context)
+            val instance2 = AppDatabase.getInstance(context)
+            assertNotNull(instance1)
+            assertTrue(instance1 === instance2)
+
+            AppDatabase.setTestInstance(db)
+            val testInstance = AppDatabase.getInstance(context)
+            assertTrue(testInstance === db)
+        } finally {
+            AppDatabase.setTestInstance(null)
+        }
     }
 
     private fun countStickersInDb(packIdentifier: String): Int {

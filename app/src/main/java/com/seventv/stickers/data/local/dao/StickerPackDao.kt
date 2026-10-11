@@ -17,8 +17,16 @@ interface StickerPackDao {
     fun observeAllPacks(): Flow<List<PackWithStickers>>
 
     @Transaction
+    @Query("SELECT * FROM sticker_packs ORDER BY createdAt DESC")
+    fun getAllPacksDirect(): List<PackWithStickers>
+
+    @Transaction
     @Query("SELECT * FROM sticker_packs WHERE identifier = :identifier LIMIT 1")
     suspend fun getPackByIdentifier(identifier: String): PackWithStickers?
+
+    @Transaction
+    @Query("SELECT * FROM sticker_packs WHERE identifier = :identifier LIMIT 1")
+    fun getPackByIdentifierDirect(identifier: String): PackWithStickers?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertPack(pack: StickerPackEntity)
