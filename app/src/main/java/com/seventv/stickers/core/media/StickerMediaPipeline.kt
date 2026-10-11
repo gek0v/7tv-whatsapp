@@ -244,45 +244,58 @@ class StickerMediaPipeline(
             return StickerResult.Failure(StickerError.CorruptedSourceData)
         }
 
-        var lastExceededSize = 0L
+        var isFramesRecycled = false
+        return try {
+            var lastExceededSize = 0L
 
-        // Primary adaptive compression loop at <= 30 fps
-        val primaryResult = tryEncodeFrameSequence(currentFrames, outputDir)
-        if (primaryResult is TryEncodeResult.Success) {
-            recycleFrames(currentFrames)
-            return StickerResult.Success(primaryResult.sticker)
-        } else if (primaryResult is TryEncodeResult.ExceededLimit) {
-            lastExceededSize = primaryResult.lastExceededBytes
-        }
-
-        // Secondary decimation step to 15 fps if still exceeding 480 KB
-        val decimated15Frames = frameThrottler.decimateFramerate(currentFrames, SECONDARY_DECIMATE_FPS)
-        currentFrames = decimated15Frames
-
-        if (decimated15Frames.isNotEmpty()) {
-            val secondaryResult = tryEncodeFrameSequence(decimated15Frames, outputDir)
-            if (secondaryResult is TryEncodeResult.Success) {
-                recycleFrames(decimated15Frames)
-                return StickerResult.Success(secondaryResult.sticker)
-            } else if (secondaryResult is TryEncodeResult.ExceededLimit) {
-                lastExceededSize = secondaryResult.lastExceededBytes
+            // Primary adaptive compression loop at <= 30 fps
+            val primaryResult = tryEncodeFrameSequence(currentFrames, outputDir)
+            if (primaryResult is TryEncodeResult.Success) {
+                recycleFrames(currentFrames)
+                isFramesRecycled = true
+                return StickerResult.Success(primaryResult.sticker)
+            } else if (primaryResult is TryEncodeResult.ExceededLimit) {
+                lastExceededSize = primaryResult.lastExceededBytes
             }
-        }
 
-        recycleFrames(currentFrames)
+            // Secondary decimation step to 15 fps if still exceeding 480 KB and frames can be further reduced
+            val decimated15Frames = frameThrottler.decimateFramerate(currentFrames, SECONDARY_DECIMATE_FPS)
+            val didDecimateFurther = decimated15Frames.size < currentFrames.size
+            currentFrames = decimated15Frames
 
-        return if (lastExceededSize > 0L) {
-            StickerResult.Failure(
-                StickerError.ExceedsSizeLimit(
-                    actualBytes = lastExceededSize,
-                    maxBytes = StickerSpecs.ANIMATED_MAX_BYTES,
-                    canFallbackToStatic = true
+            if (didDecimateFurther && decimated15Frames.isNotEmpty()) {
+                val secondaryResult = tryEncodeFrameSequence(decimated15Frames, outputDir)
+                if (secondaryResult is TryEncodeResult.Success) {
+                    recycleFrames(decimated15Frames)
+                    isFramesRecycled = true
+                    return StickerResult.Success(secondaryResult.sticker)
+                } else if (secondaryResult is TryEncodeResult.ExceededLimit) {
+                    lastExceededSize = secondaryResult.lastExceededBytes
+                }
+            }
+
+            recycleFrames(currentFrames)
+            isFramesRecycled = true
+
+            if (lastExceededSize > 0L) {
+                StickerResult.Failure(
+                    StickerError.ExceedsSizeLimit(
+                        actualBytes = lastExceededSize,
+                        maxBytes = StickerSpecs.ANIMATED_MAX_BYTES,
+                        canFallbackToStatic = true
+                    )
                 )
-            )
-        } else {
-            StickerResult.Failure(
-                StickerError.NativeEncodingFailed("Animated WebP encoding failed")
-            )
+            } else {
+                StickerResult.Failure(
+                    StickerError.NativeEncodingFailed("Animated WebP encoding failed")
+                )
+            }
+        } catch (e: Exception) {
+            StickerResult.Failure(StickerError.StorageIoError(e))
+        } finally {
+            if (!isFramesRecycled) {
+                recycleFrames(currentFrames)
+            }
         }
     }
 
@@ -298,7 +311,8 @@ class StickerMediaPipeline(
 
             val bitmapsArray = normalizedBitmaps.toTypedArray()
             val timestampsArray = frames.map { it.timestampMs }.toIntArray()
-            val totalDurationMs = frames.lastOrNull()?.timestampMs ?: frames.sumOf { it.durationMs }
+            val totalDurationMs = frames.lastOrNull()?.timestampMs?.takeIf { it > 0 }
+                ?: frames.sumOf { it.durationMs }
             var lastExceededSize = 0L
 
             for (quality in ANIMATED_QUALITY_STEPS) {
