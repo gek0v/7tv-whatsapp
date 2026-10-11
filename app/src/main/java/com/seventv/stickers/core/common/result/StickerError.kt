@@ -13,4 +13,9 @@ sealed interface StickerError {
     ) : StickerError
     data class NativeEncodingFailed(val details: String) : StickerError
     data class StorageIoError(val cause: Throwable) : StickerError
+
+    // Network & API error cases
+    data class NetworkError(val statusCode: Int? = null, val message: String) : StickerError
+    data object ResourceNotFound : StickerError
+    data object RateLimited : StickerError
 }
