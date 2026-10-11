@@ -3,7 +3,6 @@ package com.seventv.stickers.core.media.normalizer
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Paint
-import android.graphics.RectF
 import com.seventv.stickers.core.media.model.StickerSpecs
 import kotlin.math.roundToInt
 
@@ -34,6 +33,7 @@ class CanvasStickerNormalizer : StickerNormalizer {
         canvasSize: Int,
         usableArea: Int
     ): Bitmap {
+        require(!source.isRecycled) { "Source bitmap must not be recycled" }
         require(source.width > 0 && source.height > 0) { "Source bitmap dimensions must be positive" }
 
         val targetBitmap = Bitmap.createBitmap(canvasSize, canvasSize, Bitmap.Config.ARGB_8888)
@@ -44,13 +44,20 @@ class CanvasStickerNormalizer : StickerNormalizer {
             usableArea.toFloat() / source.width,
             usableArea.toFloat() / source.height
         )
-        val scaledWidth = (source.width * scale).roundToInt()
-        val scaledHeight = (source.height * scale).roundToInt()
+        val scaledWidth = (source.width * scale).roundToInt().coerceAtLeast(1)
+        val scaledHeight = (source.height * scale).roundToInt().coerceAtLeast(1)
         val left = (canvasSize - scaledWidth) / 2f
         val top = (canvasSize - scaledHeight) / 2f
 
-        val destRect = RectF(left, top, left + scaledWidth, top + scaledHeight)
-        canvas.drawBitmap(source, null, destRect, paint)
+        val scaledBitmap = if (source.width == scaledWidth && source.height == scaledHeight) {
+            source
+        } else {
+            Bitmap.createScaledBitmap(source, scaledWidth, scaledHeight, true)
+        }
+        canvas.drawBitmap(scaledBitmap, left, top, paint)
+        if (scaledBitmap !== source) {
+            scaledBitmap.recycle()
+        }
 
         return targetBitmap
     }
