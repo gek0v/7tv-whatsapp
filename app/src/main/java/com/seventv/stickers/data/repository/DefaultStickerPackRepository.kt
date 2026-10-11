@@ -1,9 +1,11 @@
 package com.seventv.stickers.data.repository
 
+import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import com.seventv.stickers.core.common.result.StickerError
 import com.seventv.stickers.core.common.result.StickerResult
+import com.seventv.stickers.whatsapp.WhatsAppWhitelistChecker
 import com.seventv.stickers.core.domain.engine.PackSplittingEngine
 import com.seventv.stickers.core.domain.model.PackSticker
 import com.seventv.stickers.core.domain.model.StickerPack
@@ -303,6 +305,20 @@ class DefaultStickerPackRepository(
             throw e
         } catch (e: Exception) {
             StickerResult.Failure(StickerError.StorageIoError(e))
+        }
+    }
+
+    override suspend fun syncWhitelistStatus(
+        context: Context,
+        packIdentifier: String
+    ): StickerResult<Boolean> = withContext(dispatcher) {
+        try {
+            val isWhitelisted = WhatsAppWhitelistChecker.isPackWhitelisted(context, packIdentifier)
+            stickerPackDao.updateWhitelisted(packIdentifier, isWhitelisted)
+            StickerResult.Success(isWhitelisted)
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            StickerResult.Failure(StickerError.StorageIoError("Failed to sync whitelist: ${e.message}"))
         }
     }
 

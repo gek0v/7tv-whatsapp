@@ -12,7 +12,9 @@ sealed interface StickerError {
         val canFallbackToStatic: Boolean = false
     ) : StickerError
     data class NativeEncodingFailed(val details: String) : StickerError
-    data class StorageIoError(val cause: Throwable) : StickerError
+    data class StorageIoError(val cause: Throwable) : StickerError {
+        constructor(message: String) : this(Exception(message))
+    }
 
     // Network & API error cases
     data class NetworkError(val statusCode: Int? = null, val message: String) : StickerError

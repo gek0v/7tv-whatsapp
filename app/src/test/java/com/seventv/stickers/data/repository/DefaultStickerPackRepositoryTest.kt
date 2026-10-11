@@ -1,7 +1,13 @@
 package com.seventv.stickers.data.repository
 
+import android.content.ContentProvider
+import android.content.ContentValues
 import android.content.Context
+import android.content.pm.ProviderInfo
+import android.database.Cursor
+import android.database.MatrixCursor
 import android.graphics.Bitmap
+import android.net.Uri
 import androidx.room.Room
 import com.seventv.stickers.core.common.result.StickerError
 import com.seventv.stickers.core.common.result.StickerResult
@@ -16,6 +22,7 @@ import com.seventv.stickers.data.local.dao.StickerPackDao
 import com.seventv.stickers.data.local.entity.StickerEntity
 import com.seventv.stickers.data.local.entity.StickerPackEntity
 import com.seventv.stickers.data.local.storage.DefaultStickerStorageManager
+import com.seventv.stickers.whatsapp.WhatsAppConstants
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
@@ -33,6 +40,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import org.junit.runner.RunWith
+import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
@@ -43,6 +51,35 @@ import java.io.File
 @RunWith(RobolectricTestRunner::class)
 @Config(manifest = Config.NONE)
 class DefaultStickerPackRepositoryTest {
+
+    class MockWhitelistContentProvider : ContentProvider() {
+        companion object {
+            var cursorToReturn: Cursor? = null
+            var exceptionToThrow: RuntimeException? = null
+
+            fun reset() {
+                cursorToReturn = null
+                exceptionToThrow = null
+            }
+        }
+
+        override fun onCreate(): Boolean = true
+        override fun query(
+            uri: Uri,
+            projection: Array<out String>?,
+            selection: String?,
+            selectionArgs: Array<out String>?,
+            sortOrder: String?
+        ): Cursor? {
+            exceptionToThrow?.let { throw it }
+            return cursorToReturn
+        }
+
+        override fun getType(uri: Uri): String? = null
+        override fun insert(uri: Uri, values: ContentValues?): Uri? = null
+        override fun delete(uri: Uri, selection: String?, selectionArgs: Array<out String>?): Int = 0
+        override fun update(uri: Uri, values: ContentValues?, selection: String?, selectionArgs: Array<out String>?): Int = 0
+    }
 
     @get:Rule
     val tempFolder = TemporaryFolder()
@@ -61,6 +98,14 @@ class DefaultStickerPackRepositoryTest {
     @Before
     fun setUp() {
         val context: Context = RuntimeEnvironment.getApplication()
+        MockWhitelistContentProvider.reset()
+        val providerInfo = ProviderInfo().apply {
+            authority = WhatsAppConstants.WHITELIST_AUTHORITY
+        }
+        Robolectric.buildContentProvider(MockWhitelistContentProvider::class.java)
+            .create(providerInfo)
+            .get()
+
         db = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java)
             .allowMainThreadQueries()
             .build()
@@ -86,6 +131,7 @@ class DefaultStickerPackRepositoryTest {
 
     @After
     fun tearDown() {
+        MockWhitelistContentProvider.reset()
         db.close()
     }
 
@@ -430,6 +476,125 @@ class DefaultStickerPackRepositoryTest {
             fail("CancellationException should be rethrown")
         } catch (e: CancellationException) {
             assertEquals("Emote conversion was cancelled", e.message)
+        }
+    }
+
+    @Test
+    fun syncWhitelistStatusUpdatesDatabaseAndReturnsTrueWhenWhitelisted() = runTest(testDispatcher) {
+        val context: Context = RuntimeEnvironment.getApplication()
+        val packIdentifier = "sync-test-pack-1"
+        val packEntity = StickerPackEntity(
+            identifier = packIdentifier,
+            name = "Sync Whitelist Pack",
+            publisher = "Tester",
+            trayImageRelativePath = "tray.webp",
+            isAnimated = false,
+            isWhitelisted = false,
+            createdAt = 1000L
+        )
+        packDao.insertPackWithStickers(packEntity, emptyList())
+
+        // Mock whitelist provider returns 1 (whitelisted)
+        val cursor = MatrixCursor(arrayOf(WhatsAppConstants.WHITELIST_QUERY_RESULT_COLUMN)).apply {
+            addRow(arrayOf(1))
+        }
+        MockWhitelistContentProvider.cursorToReturn = cursor
+
+        val result = repository.syncWhitelistStatus(context, packIdentifier)
+
+        assertTrue("Expected Success, got $result", result is StickerResult.Success<*>)
+        val isWhitelisted = (result as StickerResult.Success<Boolean>).data
+        assertTrue("Expected isWhitelisted = true", isWhitelisted)
+
+        val updatedPack = packDao.getPackByIdentifier(packIdentifier)
+        assertNotNull(updatedPack)
+        assertTrue("Pack in database should be updated to whitelisted", updatedPack!!.pack.isWhitelisted)
+    }
+
+    @Test
+    fun syncWhitelistStatusUpdatesDatabaseAndReturnsFalseWhenNotWhitelisted() = runTest(testDispatcher) {
+        val context: Context = RuntimeEnvironment.getApplication()
+        val packIdentifier = "sync-test-pack-2"
+        val packEntity = StickerPackEntity(
+            identifier = packIdentifier,
+            name = "Sync Whitelist Pack 2",
+            publisher = "Tester",
+            trayImageRelativePath = "tray.webp",
+            isAnimated = false,
+            isWhitelisted = true,
+            createdAt = 1000L
+        )
+        packDao.insertPackWithStickers(packEntity, emptyList())
+
+        // Mock whitelist provider returns 0 (not whitelisted)
+        val cursor = MatrixCursor(arrayOf(WhatsAppConstants.WHITELIST_QUERY_RESULT_COLUMN)).apply {
+            addRow(arrayOf(0))
+        }
+        MockWhitelistContentProvider.cursorToReturn = cursor
+
+        val result = repository.syncWhitelistStatus(context, packIdentifier)
+
+        assertTrue("Expected Success, got $result", result is StickerResult.Success<*>)
+        val isWhitelisted = (result as StickerResult.Success<Boolean>).data
+        assertFalse("Expected isWhitelisted = false", isWhitelisted)
+
+        val updatedPack = packDao.getPackByIdentifier(packIdentifier)
+        assertNotNull(updatedPack)
+        assertFalse("Pack in database should be updated to not whitelisted", updatedPack!!.pack.isWhitelisted)
+    }
+
+    @Test
+    fun syncWhitelistStatusReturnsFailureWhenDatabaseUpdateThrows() = runTest(testDispatcher) {
+        val context: Context = RuntimeEnvironment.getApplication()
+        val packIdentifier = "sync-test-pack-error"
+
+        val throwingDao = object : StickerPackDao by packDao {
+            override suspend fun updateWhitelisted(identifier: String, isWhitelisted: Boolean) {
+                throw RuntimeException("Database write error")
+            }
+        }
+
+        val errorRepo = DefaultStickerPackRepository(
+            stickerPackDao = throwingDao,
+            stickerDao = stickerDao,
+            storageManager = storageManager,
+            emoteBridge = emoteBridge,
+            mediaPipeline = mediaPipeline,
+            dispatcher = testDispatcher
+        )
+
+        val result = errorRepo.syncWhitelistStatus(context, packIdentifier)
+
+        assertTrue("Expected Failure on db error, got $result", result is StickerResult.Failure)
+        val error = (result as StickerResult.Failure).error
+        assertTrue("Expected StorageIoError, got $error", error is StickerError.StorageIoError)
+    }
+
+    @Test
+    fun syncWhitelistStatusRethrowsCancellationException() = runTest(testDispatcher) {
+        val context: Context = RuntimeEnvironment.getApplication()
+        val packIdentifier = "sync-test-pack-cancel"
+
+        val throwingDao = object : StickerPackDao by packDao {
+            override suspend fun updateWhitelisted(identifier: String, isWhitelisted: Boolean) {
+                throw CancellationException("Sync cancelled")
+            }
+        }
+
+        val errorRepo = DefaultStickerPackRepository(
+            stickerPackDao = throwingDao,
+            stickerDao = stickerDao,
+            storageManager = storageManager,
+            emoteBridge = emoteBridge,
+            mediaPipeline = mediaPipeline,
+            dispatcher = testDispatcher
+        )
+
+        try {
+            errorRepo.syncWhitelistStatus(context, packIdentifier)
+            fail("CancellationException should be rethrown")
+        } catch (e: CancellationException) {
+            assertEquals("Sync cancelled", e.message)
         }
     }
 

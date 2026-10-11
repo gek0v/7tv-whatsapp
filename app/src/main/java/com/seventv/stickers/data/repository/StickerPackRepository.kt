@@ -1,5 +1,6 @@
 package com.seventv.stickers.data.repository
 
+import android.content.Context
 import com.seventv.stickers.core.common.result.StickerResult
 import com.seventv.stickers.core.domain.model.StickerPack
 import com.seventv.stickers.core.network.model.SevenTvEmote
@@ -16,4 +17,5 @@ interface StickerPackRepository {
     suspend fun deletePack(identifier: String): StickerResult<Unit>
     suspend fun updateStickerEmojis(stickerId: String, emojis: List<String>): StickerResult<Unit>
     suspend fun updatePackWhitelisted(identifier: String, isWhitelisted: Boolean): StickerResult<Unit>
+    suspend fun syncWhitelistStatus(context: Context, packIdentifier: String): StickerResult<Boolean>
 }
