@@ -40,16 +40,19 @@ class MainActivity : Activity() {
 
         val subtitle = TextView(this).apply {
             text = """
-                Motor de procesamiento de stickers listo.
+                Motor de procesamiento & Red 7TV listos.
                 
                 • Canvas: 512x512 px (16px margen)
                 • Optimización estática: < 100 KB
                 • WebP animado: < 500 KB (≤ 30 fps, ≤ 3s)
+                • Cliente 7TV API v3: Configurado (Retrofit + OkHttp)
+                • Descargador & Caché atómica: Listo (15 MB límite)
+                • Puente de stickers (EmoteStickerBridge): Integrado
                 
                 Estado del motor:
                 $nativeStatus
             """.trimIndent()
-            textSize = 15f
+            textSize = 14f
             setTextColor(Color.parseColor("#CCCCCC"))
             setPadding(0, (16 * density).toInt(), 0, 0)
             gravity = Gravity.CENTER
