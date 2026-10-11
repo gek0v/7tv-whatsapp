@@ -4,6 +4,7 @@ import com.seventv.stickers.core.common.result.StickerError
 import com.seventv.stickers.core.common.result.StickerResult
 import com.seventv.stickers.core.network.model.DownloadedEmoteAsset
 import com.seventv.stickers.core.network.model.SevenTvEmote
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -18,6 +19,7 @@ import java.io.OutputStream
 import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
+import java.util.UUID
 
 /**
  * Production implementation of [EmoteDownloader] with atomic disk caching,
@@ -67,12 +69,14 @@ class DefaultEmoteDownloader(
         }
 
         // Cache miss: Stream from network to temporary file
-        val tempFile = File(emoteCacheDir, "$fileName.tmp")
+        val uniqueSuffix = UUID.randomUUID().toString()
+        val tempFile = File(emoteCacheDir, "$fileName.$uniqueSuffix.tmp")
         try {
             if (tempFile.exists()) {
                 tempFile.delete()
             }
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             return@withContext StickerResult.Failure(StickerError.StorageIoError(e))
         }
 
@@ -116,6 +120,7 @@ class DefaultEmoteDownloader(
             )
         } catch (e: Exception) {
             tempFile.delete()
+            if (e is CancellationException) throw e
             StickerResult.Failure(StickerError.StorageIoError(e))
         }
     }
@@ -144,19 +149,22 @@ class DefaultEmoteDownloader(
         val fileOutputStream = try {
             FileOutputStream(targetFile)
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             return StickerResult.Failure(StickerError.StorageIoError(e))
         }
 
+        var streamResult: StickerResult<Long>? = null
         return try {
             fileOutputStream.use { out ->
-                val result = streamPayload(url, out, onResponse)
-                if (result is StickerResult.Failure) {
-                    targetFile.delete()
-                }
-                result
+                streamResult = streamPayload(url, out, onResponse)
             }
+            if (streamResult is StickerResult.Failure) {
+                targetFile.delete()
+            }
+            streamResult ?: StickerResult.Failure(StickerError.NetworkError(message = "Download stream incomplete"))
         } catch (e: Exception) {
             targetFile.delete()
+            if (e is CancellationException) throw e
             if (e is DiskStorageException) {
                 StickerResult.Failure(StickerError.StorageIoError(e.cause ?: e))
             } else {
@@ -255,6 +263,7 @@ class DefaultEmoteDownloader(
                 StickerError.NetworkError(message = e.message ?: "Network error")
             )
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             return StickerResult.Failure(
                 StickerError.NetworkError(message = e.message ?: "Unexpected error")
             )
