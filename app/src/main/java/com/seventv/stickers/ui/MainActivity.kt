@@ -40,7 +40,7 @@ class MainActivity : Activity() {
 
         val subtitle = TextView(this).apply {
             text = """
-                Motor de procesamiento & Red 7TV listos.
+                Motor de Medios, Red 7TV & Persistencia listos.
                 
                 • Canvas: 512x512 px (16px margen)
                 • Optimización estática: < 100 KB
@@ -48,13 +48,16 @@ class MainActivity : Activity() {
                 • Cliente 7TV API v3: Configurado (Retrofit + OkHttp)
                 • Descargador & Caché atómica: Listo (15 MB límite)
                 • Puente de stickers (EmoteStickerBridge): Integrado
+                • Persistencia Room: Configurada (Cascade ON DELETE)
+                • Partición de packs (PackSplittingEngine): Lista (3..30)
+                • Gestor de almacenamiento interno: Operativo
                 
                 Estado del motor:
                 $nativeStatus
             """.trimIndent()
-            textSize = 14f
+            textSize = 13f
             setTextColor(Color.parseColor("#CCCCCC"))
-            setPadding(0, (16 * density).toInt(), 0, 0)
+            setPadding(0, (14 * density).toInt(), 0, 0)
             gravity = Gravity.CENTER
         }
 
