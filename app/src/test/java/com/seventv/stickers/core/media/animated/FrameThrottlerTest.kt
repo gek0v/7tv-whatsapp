@@ -158,4 +158,19 @@ class FrameThrottlerTest {
         assertEquals(30 * 33, decimated.sumOf { it.durationMs })
         assertEquals(30 * 33, decimated.last().timestampMs)
     }
+
+    @Test
+    fun decimateFrameratePreventsOvershootFor68FpsWithTarget30() {
+        // 48 * 15ms + 20 * 14ms = 720ms + 280ms = 1000ms total duration for 68 frames -> exactly 68 source FPS
+        val frames = (0 until 68).map { i ->
+            val duration = if (i < 48) 15 else 14
+            AnimationFrame(mockBitmap(), duration, 0)
+        }
+        val decimated = throttler.decimateFramerate(frames, targetFps = 30)
+        val totalDurationMs = decimated.sumOf { it.durationMs }
+        val effectiveFps = (decimated.size * 1000.0) / totalDurationMs
+
+        assertEquals(1000, totalDurationMs)
+        assertTrue("Effective FPS ($effectiveFps) must not exceed target FPS (30)", effectiveFps <= 30.0)
+    }
 }

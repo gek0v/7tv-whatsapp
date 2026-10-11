@@ -1,3 +1,5 @@
+@file:Suppress("DEPRECATION")
+
 package com.seventv.stickers.core.media.animated
 
 import android.graphics.Bitmap
@@ -27,14 +29,19 @@ interface FrameExtractor {
  *
  * Supports decoding animated GIF sequences using [Movie] fallback, and static/WebP images
  * via [BitmapFactory], ensuring extracted bitmaps conform to ARGB_8888.
+ *
+ * Note: Multi-frame extraction currently uses GIF/Movie, while animated WebP fallback
+ * decodes the initial frame (full multi-frame WebP extraction to be wired with native decoder).
  */
 class DefaultFrameExtractor : FrameExtractor {
 
-    @Suppress("DEPRECATION")
     override fun extractFrames(bytes: ByteArray): StickerResult<List<AnimationFrame>> {
         if (bytes.isEmpty() || !isValidImageHeader(bytes)) {
             return StickerResult.Failure(StickerError.CorruptedSourceData)
         }
+
+        val frames = mutableListOf<AnimationFrame>()
+        var singleBitmap: Bitmap? = null
 
         return try {
             // Attempt decoding as animated GIF using Movie
@@ -45,7 +52,6 @@ class DefaultFrameExtractor : FrameExtractor {
             }
 
             if (movie != null && movie.duration() > 0 && movie.width() > 0 && movie.height() > 0) {
-                val frames = mutableListOf<AnimationFrame>()
                 val duration = movie.duration()
                 val frameStepMs = 100 // 10 fps default sampling if frame delays are uniform
                 var timeMs = 0
@@ -69,6 +75,7 @@ class DefaultFrameExtractor : FrameExtractor {
             }
             val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)
             if (bitmap != null) {
+                singleBitmap = bitmap
                 val argbBitmap = if (bitmap.config != Bitmap.Config.ARGB_8888) {
                     bitmap.copy(Bitmap.Config.ARGB_8888, false).also {
                         bitmap.recycle()
@@ -76,6 +83,7 @@ class DefaultFrameExtractor : FrameExtractor {
                 } else {
                     bitmap
                 }
+                singleBitmap = argbBitmap
                 StickerResult.Success(
                     listOf(
                         AnimationFrame(
@@ -89,6 +97,16 @@ class DefaultFrameExtractor : FrameExtractor {
                 StickerResult.Failure(StickerError.CorruptedSourceData)
             }
         } catch (_: Throwable) {
+            for (frame in frames) {
+                if (!frame.bitmap.isRecycled) {
+                    frame.bitmap.recycle()
+                }
+            }
+            singleBitmap?.let {
+                if (!it.isRecycled) {
+                    it.recycle()
+                }
+            }
             StickerResult.Failure(StickerError.CorruptedSourceData)
         }
     }

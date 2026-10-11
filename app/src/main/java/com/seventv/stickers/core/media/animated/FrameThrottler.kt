@@ -5,6 +5,7 @@ import com.seventv.stickers.core.media.model.AnimationFrame
 import com.seventv.stickers.core.media.model.StickerSpecs
 import java.util.Collections
 import java.util.IdentityHashMap
+import kotlin.math.ceil
 import kotlin.math.roundToInt
 
 /**
@@ -87,7 +88,7 @@ class FrameThrottler {
         val sourceFps = ((frames.size * 1000.0) / totalDurationMs).roundToInt()
         if (sourceFps <= targetFps) return frames
 
-        val step = (sourceFps.toDouble() / targetFps.toDouble()).roundToInt().coerceAtLeast(2)
+        val step = ceil(sourceFps.toDouble() / targetFps.toDouble()).toInt().coerceAtLeast(2)
         val chunks = frames.chunked(step)
         val result = mutableListOf<AnimationFrame>()
         val dropped = mutableListOf<AnimationFrame>()
