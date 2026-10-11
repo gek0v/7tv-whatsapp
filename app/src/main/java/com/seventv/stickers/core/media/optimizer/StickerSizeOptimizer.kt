@@ -12,6 +12,7 @@ import com.seventv.stickers.core.media.model.StickerSpecs
 import java.io.ByteArrayOutputStream
 import java.io.File
 import kotlin.math.pow
+import com.seventv.stickers.core.media.normalizer.StickerNormalizer
 import kotlin.math.roundToInt
 
 /**
@@ -19,7 +20,10 @@ import kotlin.math.roundToInt
  * Uses a progressive quality degradation loop ([90, 80, 70, 60, 50]) and geometric downscaling
  * to guarantee compliance with WhatsApp byte limits.
  */
-class StickerSizeOptimizer {
+class StickerSizeOptimizer(
+    @Suppress("unused")
+    private val normalizer: StickerNormalizer? = null
+) {
 
     companion object {
         private val QUALITY_STEPS = intArrayOf(90, 80, 70, 60, 50)
