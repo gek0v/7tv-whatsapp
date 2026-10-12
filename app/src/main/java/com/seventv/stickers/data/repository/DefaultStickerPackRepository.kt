@@ -371,7 +371,22 @@ class DefaultStickerPackRepository(
                 )
             }
 
+            val seenEmoteIds = mutableSetOf<String>()
+            val seenEmoteNames = mutableSetOf<String>()
             val allStickers = sourcePacks.flatMap { it.stickers }
+                .filter { sticker ->
+                    val id = sticker.emoteId.trim()
+                    val name = sticker.emoteName.trim().lowercase()
+                    val isDuplicate = (id.isNotEmpty() && seenEmoteIds.contains(id)) ||
+                        (name.isNotEmpty() && seenEmoteNames.contains(name))
+                    if (!isDuplicate) {
+                        if (id.isNotEmpty()) seenEmoteIds.add(id)
+                        if (name.isNotEmpty()) seenEmoteNames.add(name)
+                        true
+                    } else {
+                        false
+                    }
+                }
             if (allStickers.size < 3) {
                 return@withContext StickerResult.Failure(
                     StickerError.InsufficientStickers(allStickers.size, 3)
