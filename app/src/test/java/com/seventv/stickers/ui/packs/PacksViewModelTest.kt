@@ -2,6 +2,7 @@ package com.seventv.stickers.ui.packs
 
 import android.content.Context
 import android.content.pm.PackageInfo
+import java.io.File
 import org.robolectric.RuntimeEnvironment
 import com.seventv.stickers.core.common.result.StickerError
 import com.seventv.stickers.core.common.result.StickerResult
@@ -367,21 +368,153 @@ class PacksViewModelTest {
         assertTrue(viewModel.uiState.value.userFeedbackMessage?.contains("Paquetes combinados con éxito") == true)
     }
 
+    @Test
+    fun selectPackDetail_inspectsPackAndPopulatesStickerIssues() = runTest(testDispatcher) {
+        val pack = createSamplePack("pack_invalid", "Invalid Pack")
+        // Corrupt one sticker file: empty file (0 bytes)
+        val badFile = File(pack.stickers[0].filePath)
+        badFile.writeBytes(ByteArray(0))
+
+        fakeStickerPackRepository.packsFlow.value = listOf(pack)
+        advanceUntilIdle()
+
+        viewModel.onSelectPackDetail("pack_invalid")
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertEquals("pack_invalid", state.selectedPackDetail?.identifier)
+        assertTrue("Expected stickerIssues to contain bad sticker", state.stickerIssues.containsKey("s_1"))
+        assertTrue(state.stickerIssues["s_1"]?.reason?.contains("0 bytes") == true || state.stickerIssues["s_1"]?.reason?.contains("vacío") == true)
+    }
+
+    @Test
+    fun addPackToWhatsApp_whenPackHasInvalidSticker_opensDiagnosticDialog() = runTest(testDispatcher) {
+        val packageManager = shadowOf(context.packageManager)
+        packageManager.installPackage(
+            PackageInfo().apply { packageName = WhatsAppConstants.PACKAGE_WHATSAPP }
+        )
+
+        val pack = createSamplePack("pack_bad", "Bad Pack")
+        // Corrupt first sticker: write 0 bytes
+        File(pack.stickers[0].filePath).writeBytes(ByteArray(0))
+
+        viewModel.onAddPackToWhatsApp(context, pack)
+
+        val state = viewModel.uiState.value
+        assertNull("Export intent should not be launched for invalid pack", state.exportEvent)
+        assertTrue("Diagnostic dialog should open", state.isDiagnosticDialogOpen)
+        assertTrue(state.stickerIssues.containsKey("s_1"))
+    }
+
+    @Test
+    fun deleteInvalidStickers_deletesAllProblematicStickersFromPack() = runTest(testDispatcher) {
+        val pack = createSamplePack("pack_to_clean", "Clean Pack")
+        // Make s_1 invalid (0 bytes)
+        File(pack.stickers[0].filePath).writeBytes(ByteArray(0))
+
+        fakeStickerPackRepository.packsFlow.value = listOf(pack)
+        advanceUntilIdle()
+
+        viewModel.onSelectPackDetail("pack_to_clean")
+        advanceUntilIdle()
+
+        assertTrue(viewModel.uiState.value.stickerIssues.containsKey("s_1"))
+
+        viewModel.onDeleteInvalidStickers("pack_to_clean")
+        advanceUntilIdle()
+
+        val updatedPack = fakeStickerPackRepository.packsFlow.value.find { it.identifier == "pack_to_clean" }
+        assertNotNull(updatedPack)
+        assertFalse("s_1 should have been deleted", updatedPack!!.stickers.any { it.id == "s_1" })
+        assertEquals(2, updatedPack.stickers.size)
+        assertFalse(viewModel.uiState.value.isDiagnosticDialogOpen)
+    }
+
+    @Test
+    fun onWhatsAppPreviewValidationFailed_opensDiagnosticDialog() = runTest(testDispatcher) {
+        val pack = createSamplePack("pack_failed", "Failed Pack")
+        File(pack.stickers[0].filePath).writeBytes(ByteArray(0))
+
+        fakeStickerPackRepository.packsFlow.value = listOf(pack)
+        advanceUntilIdle()
+
+        viewModel.onSelectPackDetail("pack_failed")
+        advanceUntilIdle()
+
+        viewModel.onWhatsAppPreviewValidationFailed("pack_failed")
+
+        val state = viewModel.uiState.value
+        assertTrue(state.isDiagnosticDialogOpen)
+        assertTrue(state.stickerIssues.containsKey("s_1"))
+    }
+
+    private fun createMinimalWebp(isAnimated: Boolean): ByteArray {
+        val out = java.io.ByteArrayOutputStream()
+        val body = java.io.ByteArrayOutputStream()
+        body.write("WEBP".toByteArray(Charsets.US_ASCII))
+        body.write("VP8X".toByteArray(Charsets.US_ASCII))
+        body.write(byteArrayOf(10, 0, 0, 0))
+        body.write(if (isAnimated) 0x02 else 0x00)
+        body.write(byteArrayOf(0, 0, 0))
+        val w511 = 511
+        body.write(w511 and 0xFF)
+        body.write((w511 shr 8) and 0xFF)
+        body.write((w511 shr 16) and 0xFF)
+        body.write(w511 and 0xFF)
+        body.write((w511 shr 8) and 0xFF)
+        body.write((w511 shr 16) and 0xFF)
+        if (isAnimated) {
+            body.write("ANIM".toByteArray(Charsets.US_ASCII))
+            body.write(byteArrayOf(6, 0, 0, 0))
+            body.write(byteArrayOf(0, 0, 0, 0, 0, 0))
+            for (i in 0 until 2) {
+                body.write("ANMF".toByteArray(Charsets.US_ASCII))
+                body.write(byteArrayOf(16, 0, 0, 0))
+                body.write(byteArrayOf(0, 0, 0))
+                body.write(byteArrayOf(0, 0, 0))
+                body.write(w511 and 0xFF)
+                body.write((w511 shr 8) and 0xFF)
+                body.write((w511 shr 16) and 0xFF)
+                body.write(w511 and 0xFF)
+                body.write((w511 shr 8) and 0xFF)
+                body.write((w511 shr 16) and 0xFF)
+                body.write(100)
+                body.write(0)
+                body.write(0)
+                body.write(0)
+            }
+        }
+        val bodyBytes = body.toByteArray()
+        out.write("RIFF".toByteArray(Charsets.US_ASCII))
+        val riffLen = bodyBytes.size
+        out.write(riffLen and 0xFF)
+        out.write((riffLen shr 8) and 0xFF)
+        out.write((riffLen shr 16) and 0xFF)
+        out.write((riffLen shr 24) and 0xFF)
+        out.write(bodyBytes)
+        return out.toByteArray()
+    }
+
     private fun createSamplePack(
         id: String,
         name: String,
         isWhitelisted: Boolean = false,
         isAnimated: Boolean = false
     ): StickerPack {
+        val packDir = File(context.cacheDir, "test_packs/$id").apply { mkdirs() }
+        val webpBytes = createMinimalWebp(isAnimated)
         val stickers = (1..3).map { i ->
+            val file = File(packDir, "sticker_$i.webp").apply {
+                writeBytes(webpBytes)
+            }
             PackSticker(
                 id = "s_$i",
                 packIdentifier = id,
                 emoteId = "e_$i",
                 emoteName = "pepe$i",
-                filePath = "/data/pack/$id/sticker_$i.webp",
+                filePath = file.absolutePath,
                 emojis = listOf("💬"),
-                fileLength = 1000L,
+                fileLength = file.length(),
                 sortOrder = i - 1
             )
         }
