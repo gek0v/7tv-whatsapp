@@ -26,8 +26,8 @@ class StickerSizeOptimizer(
 ) {
 
     companion object {
-        private val QUALITY_STEPS = intArrayOf(90, 80, 70, 60, 50)
-        private const val MAX_DOWNSCALE_ATTEMPTS = 3
+        private val QUALITY_STEPS = intArrayOf(90, 80, 70, 60, 50, 40, 30)
+        private const val MAX_DOWNSCALE_ATTEMPTS = 5
         private const val DOWNSCALE_FACTOR = 0.9f
     }
 
@@ -44,15 +44,34 @@ class StickerSizeOptimizer(
     }
 
     /**
-     * Compresses [bitmap] into a tray icon WebP file at [outputFile], ensuring file size
-     * does not exceed [StickerSpecs.TRAY_ICON_MAX_BYTES] (50 KB).
+     * Compresses [bitmap] into a tray icon PNG file at [outputFile], ensuring file size
+     * does not exceed [StickerSpecs.TRAY_ICON_MAX_BYTES] (50 KB). WhatsApp strictly mandates
+     * PNG format for the sticker picker tray icon.
      */
     fun compressTrayIcon(bitmap: Bitmap, outputFile: File): StickerResult<Long> {
-        return compressWithOptimizer(
-            bitmap = bitmap,
-            outputFile = outputFile,
-            maxCeilingBytes = StickerSpecs.TRAY_ICON_MAX_BYTES
-        )
+        require(!bitmap.isRecycled) { "Bitmap must not be recycled" }
+        require(bitmap.width > 0 && bitmap.height > 0) { "Bitmap dimensions must be positive" }
+
+        val outputStream = ByteArrayOutputStream()
+        val success = bitmap.compress(Bitmap.CompressFormat.PNG, 100, outputStream)
+        if (!success) {
+            return StickerResult.Failure(
+                StickerError.NativeEncodingFailed("Bitmap PNG compression returned false")
+            )
+        }
+        val bytes = outputStream.toByteArray()
+        if (bytes.size > StickerSpecs.TRAY_ICON_MAX_BYTES) {
+            return StickerResult.Failure(
+                StickerError.ExceedsSizeLimit(bytes.size.toLong(), StickerSpecs.TRAY_ICON_MAX_BYTES, false)
+            )
+        }
+        return try {
+            outputFile.parentFile?.mkdirs()
+            outputFile.writeBytes(bytes)
+            StickerResult.Success(outputFile.length())
+        } catch (e: Exception) {
+            StickerResult.Failure(StickerError.StorageIoError(e))
+        }
     }
 
     internal fun compressWithOptimizer(

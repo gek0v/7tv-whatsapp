@@ -20,6 +20,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.IOException
+import java.util.Collections
+import java.util.IdentityHashMap
 import java.util.UUID
 
 /**
@@ -42,8 +44,15 @@ class StickerMediaPipeline(
 ) {
 
     companion object {
-        private val ANIMATED_QUALITY_STEPS = floatArrayOf(75f, 65f, 50f, 40f)
+        private val ANIMATED_QUALITY_STEPS = floatArrayOf(75f, 65f, 50f, 40f, 30f)
+        private val ANIMATED_QUALITY_STEPS_TIER2 = floatArrayOf(50f, 35f, 25f)
+        private val ANIMATED_QUALITY_STEPS_TIER3 = floatArrayOf(35f, 25f, 18f)
+        private val ANIMATED_QUALITY_STEPS_TIER4 = floatArrayOf(30f, 20f, 15f)
+        private val ANIMATED_QUALITY_STEPS_FAILSAFE = floatArrayOf(65f, 45f, 30f)
+
         private const val SECONDARY_DECIMATE_FPS = 15
+        private const val TERTIARY_DECIMATE_FPS = 10
+        private const val TRUNCATE_DURATION_TIER4_MS = 1500
     }
 
     /**
@@ -244,11 +253,13 @@ class StickerMediaPipeline(
             return StickerResult.Failure(StickerError.CorruptedSourceData)
         }
 
+        currentFrames = ensureAtLeastTwoFrames(currentFrames)
+
         var isFramesRecycled = false
         return try {
             var lastExceededSize = 0L
 
-            // Primary adaptive compression loop at <= 30 fps
+            // Tier 1: Primary adaptive compression loop at <= 30 fps
             val primaryResult = tryEncodeFrameSequence(currentFrames, outputDir)
             if (primaryResult is TryEncodeResult.Success) {
                 recycleFrames(currentFrames)
@@ -258,19 +269,93 @@ class StickerMediaPipeline(
                 lastExceededSize = primaryResult.lastExceededBytes
             }
 
-            // Secondary decimation step to 15 fps if still exceeding 480 KB and frames can be further reduced
+            // Tier 2: Secondary decimation step to 15 fps
             val decimated15Frames = frameThrottler.decimateFramerate(currentFrames, SECONDARY_DECIMATE_FPS)
             val didDecimateFurther = decimated15Frames.size < currentFrames.size
-            currentFrames = decimated15Frames
+            currentFrames = ensureAtLeastTwoFrames(decimated15Frames)
 
-            if (didDecimateFurther && decimated15Frames.isNotEmpty()) {
-                val secondaryResult = tryEncodeFrameSequence(decimated15Frames, outputDir)
+            if (didDecimateFurther && currentFrames.isNotEmpty()) {
+                val secondaryResult = tryEncodeFrameSequence(
+                    frames = currentFrames,
+                    outputDir = outputDir,
+                    customQualitySteps = ANIMATED_QUALITY_STEPS_TIER2
+                )
                 if (secondaryResult is TryEncodeResult.Success) {
-                    recycleFrames(decimated15Frames)
+                    recycleFrames(currentFrames)
                     isFramesRecycled = true
                     return StickerResult.Success(secondaryResult.sticker)
                 } else if (secondaryResult is TryEncodeResult.ExceededLimit) {
                     lastExceededSize = secondaryResult.lastExceededBytes
+                }
+            }
+
+            // Tier 3: Tertiary decimation step to 10 fps
+            val decimated10Frames = frameThrottler.decimateFramerate(currentFrames, TERTIARY_DECIMATE_FPS)
+            val didDecimate10Further = decimated10Frames.size < currentFrames.size
+            currentFrames = ensureAtLeastTwoFrames(decimated10Frames)
+
+            if (didDecimate10Further && currentFrames.isNotEmpty()) {
+                val tertiaryResult = tryEncodeFrameSequence(
+                    frames = currentFrames,
+                    outputDir = outputDir,
+                    customQualitySteps = ANIMATED_QUALITY_STEPS_TIER3
+                )
+                if (tertiaryResult is TryEncodeResult.Success) {
+                    recycleFrames(currentFrames)
+                    isFramesRecycled = true
+                    return StickerResult.Success(tertiaryResult.sticker)
+                } else if (tertiaryResult is TryEncodeResult.ExceededLimit) {
+                    lastExceededSize = tertiaryResult.lastExceededBytes
+                }
+            }
+
+            // Tier 4: Truncate duration to 1500 ms at 10 fps
+            val truncated1500Frames = frameThrottler.truncateDuration(currentFrames, TRUNCATE_DURATION_TIER4_MS)
+            val didTruncateFurther = truncated1500Frames.size < currentFrames.size
+            currentFrames = ensureAtLeastTwoFrames(truncated1500Frames)
+
+            if (didTruncateFurther && currentFrames.isNotEmpty()) {
+                val tier4Result = tryEncodeFrameSequence(
+                    frames = currentFrames,
+                    outputDir = outputDir,
+                    customQualitySteps = ANIMATED_QUALITY_STEPS_TIER4
+                )
+                if (tier4Result is TryEncodeResult.Success) {
+                    recycleFrames(currentFrames)
+                    isFramesRecycled = true
+                    return StickerResult.Success(tier4Result.sticker)
+                } else if (tier4Result is TryEncodeResult.ExceededLimit) {
+                    lastExceededSize = tier4Result.lastExceededBytes
+                }
+            }
+
+            // Tier 5: Fail-safe guarantee - 2-frame animated loop from first frame
+            if (currentFrames.isNotEmpty()) {
+                val firstFrame = currentFrames.first()
+                for (i in 1 until currentFrames.size) {
+                    val b = currentFrames[i].bitmap
+                    if (b !== firstFrame.bitmap && !b.isRecycled) {
+                        b.recycle()
+                    }
+                }
+                val clonedBitmap = firstFrame.bitmap.copy(Bitmap.Config.ARGB_8888, true) ?: firstFrame.bitmap
+                val failSafeFrames = listOf(
+                    firstFrame.copy(durationMs = 500, timestampMs = 500),
+                    AnimationFrame(bitmap = clonedBitmap, durationMs = 500, timestampMs = 1000)
+                )
+                currentFrames = failSafeFrames
+
+                val failSafeResult = tryEncodeFrameSequence(
+                    frames = failSafeFrames,
+                    outputDir = outputDir,
+                    customQualitySteps = ANIMATED_QUALITY_STEPS_FAILSAFE
+                )
+                if (failSafeResult is TryEncodeResult.Success) {
+                    recycleFrames(failSafeFrames)
+                    isFramesRecycled = true
+                    return StickerResult.Success(failSafeResult.sticker)
+                } else if (failSafeResult is TryEncodeResult.ExceededLimit) {
+                    lastExceededSize = failSafeResult.lastExceededBytes
                 }
             }
 
@@ -299,9 +384,22 @@ class StickerMediaPipeline(
         }
     }
 
+    private fun ensureAtLeastTwoFrames(frames: List<AnimationFrame>): List<AnimationFrame> {
+        if (frames.size == 1) {
+            val single = frames.first()
+            val clonedBitmap = single.bitmap.copy(Bitmap.Config.ARGB_8888, true) ?: single.bitmap
+            return listOf(
+                single.copy(durationMs = 500, timestampMs = 500),
+                AnimationFrame(bitmap = clonedBitmap, durationMs = 500, timestampMs = 1000)
+            )
+        }
+        return frames
+    }
+
     private fun tryEncodeFrameSequence(
         frames: List<AnimationFrame>,
-        outputDir: File
+        outputDir: File,
+        customQualitySteps: FloatArray? = null
     ): TryEncodeResult {
         val normalizedBitmaps = mutableListOf<Bitmap>()
         try {
@@ -315,7 +413,13 @@ class StickerMediaPipeline(
                 ?: frames.sumOf { it.durationMs }
             var lastExceededSize = 0L
 
-            for (quality in ANIMATED_QUALITY_STEPS) {
+            val qualitySteps = customQualitySteps ?: when {
+                frames.size > 25 -> floatArrayOf(55f, 40f, 30f)
+                frames.size > 12 -> floatArrayOf(65f, 50f, 40f, 30f)
+                else -> ANIMATED_QUALITY_STEPS
+            }
+
+            for (quality in qualitySteps) {
                 val tempFile = File.createTempFile("anim_opt_", ".webp", outputDir)
                 try {
                     val encoded = animatedWebPEncoder.encode(
@@ -370,9 +474,11 @@ class StickerMediaPipeline(
     }
 
     private fun recycleFrames(frames: List<AnimationFrame>) {
+        val recycled = Collections.newSetFromMap(IdentityHashMap<Bitmap, Boolean>())
         for (frame in frames) {
-            if (!frame.bitmap.isRecycled) {
-                frame.bitmap.recycle()
+            val bmp = frame.bitmap
+            if (!bmp.isRecycled && recycled.add(bmp)) {
+                bmp.recycle()
             }
         }
     }
@@ -383,3 +489,6 @@ class StickerMediaPipeline(
         data object EncodingFailed : TryEncodeResult
     }
 }
+
+typealias DefaultStickerMediaPipeline = StickerMediaPipeline
+

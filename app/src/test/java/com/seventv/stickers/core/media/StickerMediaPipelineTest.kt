@@ -54,7 +54,8 @@ class StickerMediaPipelineTest {
 
     class FakeAnimatedWebPEncoder(
         private val outputByteSize: Int = 100 * 1024,
-        private val shouldSucceed: Boolean = true
+        private val shouldSucceed: Boolean = true,
+        private val sizeCalculator: ((bitmaps: Array<Bitmap>, quality: Float) -> Int)? = null
     ) : AnimatedWebPEncoder {
         var lastEncodedBitmaps: Array<Bitmap>? = null
         var lastEncodedTimestamps: IntArray? = null
@@ -76,7 +77,8 @@ class StickerMediaPipelineTest {
 
             val outFile = File(outputPath)
             outFile.parentFile?.mkdirs()
-            val dummyBytes = ByteArray(outputByteSize)
+            val effectiveSize = sizeCalculator?.invoke(bitmaps, quality) ?: outputByteSize
+            val dummyBytes = ByteArray(effectiveSize)
             outFile.writeBytes(dummyBytes)
             return true
         }
@@ -297,5 +299,105 @@ class StickerMediaPipelineTest {
         assertTrue(processed.durationMs <= StickerSpecs.ANIMATED_MAX_DURATION_MS)
         assertEquals(3000, processed.durationMs)
         assertEquals(30, processed.frameCount)
+    }
+
+    @Test
+    fun processStickerAnimatedProgressiveDecimationSucceedsAtTier2() = runTest(testDispatcher) {
+        // Source is 30 fps (30 frames, 1000ms total). Exceeds limit if > 15 frames,
+        // but succeeds when decimated to 15 fps (15 frames).
+        val fakeEncoder = FakeAnimatedWebPEncoder(
+            sizeCalculator = { bitmaps, _ ->
+                if (bitmaps.size > 15) 600 * 1024 else 350 * 1024
+            }
+        )
+        val frames = (1..30).map { i ->
+            AnimationFrame(
+                bitmap = Bitmap.createBitmap(64, 64, Bitmap.Config.ARGB_8888),
+                durationMs = 33,
+                timestampMs = i * 33
+            )
+        }
+        val fakeExtractor = FakeFrameExtractor(frames)
+        val pipeline = StickerMediaPipeline(
+            frameExtractor = fakeExtractor,
+            animatedWebPEncoder = fakeEncoder,
+            dispatcher = testDispatcher
+        )
+
+        val input = RawMediaInput(bytes = byteArrayOf(1, 2, 3), isAnimated = true)
+        val result = pipeline.processSticker(input, outputDir)
+
+        assertTrue("Expected Success at Tier 2 decimation", result is StickerResult.Success<*>)
+        val processed = (result as StickerResult.Success<ProcessedSticker>).data
+        assertTrue(processed.isAnimated)
+        assertEquals(15, processed.frameCount)
+        assertTrue(processed.byteSize <= StickerSpecs.ANIMATED_SAFE_CEILING_BYTES)
+    }
+
+    @Test
+    fun processStickerAnimatedProgressiveDecimationSucceedsAtTier3() = runTest(testDispatcher) {
+        // Source is 30 fps (30 frames, 1000ms total). Exceeds limit at Tier 1 (30 frames)
+        // and Tier 2 (15 frames), but succeeds when decimated to <= 10 fps at Tier 3.
+        val fakeEncoder = FakeAnimatedWebPEncoder(
+            sizeCalculator = { bitmaps, _ ->
+                if (bitmaps.size > 10) 600 * 1024 else 280 * 1024
+            }
+        )
+        val frames = (1..30).map { i ->
+            AnimationFrame(
+                bitmap = Bitmap.createBitmap(64, 64, Bitmap.Config.ARGB_8888),
+                durationMs = 33,
+                timestampMs = i * 33
+            )
+        }
+        val fakeExtractor = FakeFrameExtractor(frames)
+        val pipeline = StickerMediaPipeline(
+            frameExtractor = fakeExtractor,
+            animatedWebPEncoder = fakeEncoder,
+            dispatcher = testDispatcher
+        )
+
+        val input = RawMediaInput(bytes = byteArrayOf(1, 2, 3), isAnimated = true)
+        val result = pipeline.processSticker(input, outputDir)
+
+        assertTrue("Expected Success at Tier 3 decimation", result is StickerResult.Success<*>)
+        val processed = (result as StickerResult.Success<ProcessedSticker>).data
+        assertTrue(processed.isAnimated)
+        assertTrue(processed.frameCount in 2..10)
+        assertTrue(processed.byteSize <= StickerSpecs.ANIMATED_SAFE_CEILING_BYTES)
+    }
+
+    @Test
+    fun processStickerAnimatedFailSafeProducesTwoFrameStickerWhenAllTiersExceed() = runTest(testDispatcher) {
+        // Exceeds limit for any normal frame count (> 2), but succeeds on the 2-frame fail-safe loop
+        val fakeEncoder = FakeAnimatedWebPEncoder(
+            sizeCalculator = { bitmaps, _ ->
+                if (bitmaps.size > 2) 600 * 1024 else 25 * 1024
+            }
+        )
+        val frames = (1..30).map { i ->
+            AnimationFrame(
+                bitmap = Bitmap.createBitmap(64, 64, Bitmap.Config.ARGB_8888),
+                durationMs = 100,
+                timestampMs = i * 100
+            )
+        }
+        val fakeExtractor = FakeFrameExtractor(frames)
+        val pipeline = StickerMediaPipeline(
+            frameExtractor = fakeExtractor,
+            animatedWebPEncoder = fakeEncoder,
+            dispatcher = testDispatcher
+        )
+
+        val input = RawMediaInput(bytes = byteArrayOf(1, 2, 3), isAnimated = true)
+        val result = pipeline.processSticker(input, outputDir)
+
+        assertTrue("Expected Success via Tier 5 fail-safe 2-frame animated loop", result is StickerResult.Success<*>)
+        val processed = (result as StickerResult.Success<ProcessedSticker>).data
+        assertTrue(processed.isAnimated)
+        assertEquals(2, processed.frameCount)
+        assertEquals(1000, processed.durationMs)
+        assertEquals(25 * 1024L, processed.byteSize)
+        assertTrue(processed.byteSize <= StickerSpecs.ANIMATED_SAFE_CEILING_BYTES)
     }
 }
