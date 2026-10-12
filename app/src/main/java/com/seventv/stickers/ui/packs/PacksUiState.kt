@@ -31,9 +31,11 @@ data class PacksUiState(
     val isMergeDialogOpen: Boolean = false,
     val isMergingPacks: Boolean = false,
     val exportQueue: List<StickerPack> = emptyList(),
-    // Rename
+    // Rename & Duplicate
     val isRenameDialogOpen: Boolean = false,
     val packToRename: StickerPack? = null,
+    val isDuplicateDialogOpen: Boolean = false,
+    val packToDuplicate: StickerPack? = null,
     // Sticker Management in Detail
     val isDeleteStickerConfirmDialogOpen: Boolean = false,
     val stickerToDelete: PackSticker? = null,

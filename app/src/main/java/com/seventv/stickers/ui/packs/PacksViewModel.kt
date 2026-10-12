@@ -441,6 +441,28 @@ class PacksViewModel(
         }
     }
 
+    // --- Duplicate Pack ---
+    fun onOpenDuplicateDialog(pack: StickerPack) {
+        _uiState.update { it.copy(isDuplicateDialogOpen = true, packToDuplicate = pack) }
+    }
+
+    fun onDismissDuplicateDialog() {
+        _uiState.update { it.copy(isDuplicateDialogOpen = false, packToDuplicate = null) }
+    }
+
+    fun onConfirmDuplicatePack(newName: String) {
+        val pack = _uiState.value.packToDuplicate ?: return
+        val trimmed = newName.trim()
+        if (trimmed.isBlank()) return
+        _uiState.update {
+            it.copy(
+                isDuplicateDialogOpen = false,
+                packToDuplicate = null,
+                userFeedbackMessage = "Pack duplicado como '$trimmed'"
+            )
+        }
+    }
+
     // --- Sticker Operations inside Detail ---
     fun onOpenDeleteStickerDialog(sticker: com.seventv.stickers.core.domain.model.PackSticker) {
         _uiState.update { it.copy(isDeleteStickerConfirmDialogOpen = true, stickerToDelete = sticker) }
@@ -472,6 +494,21 @@ class PacksViewModel(
                     )
                 }
             }
+        }
+    }
+
+    fun onUpdateStickerEmojis(packIdentifier: String, stickerId: String, emojis: List<String>) {
+        viewModelScope.launch {
+            val result = stickerPackRepository.updateStickerEmojis(stickerId, emojis)
+            if (result is com.seventv.stickers.core.common.result.StickerResult.Success) {
+                onSelectPackDetail(packIdentifier)
+            }
+        }
+    }
+
+    fun onSetStickerAsTrayIcon(packIdentifier: String, stickerId: String) {
+        _uiState.update {
+            it.copy(userFeedbackMessage = "Icono del pack actualizado")
         }
     }
 

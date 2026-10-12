@@ -141,6 +141,14 @@ class ExploreViewModel(
     }
 
     /**
+     * Creates a sticker pack from the active draft with the given pack name.
+     */
+    fun onCreatePackFromDraft(packName: String, publisher: String = DEFAULT_PUBLISHER) {
+        onDraftPackNameChanged(packName)
+        onConfirmSavePack(publisher)
+    }
+
+    /**
      * Confirms pack creation:
      * - Verifies that the draft contains at least [MIN_DRAFT_STICKERS] (3) stickers.
      * - Invokes [StickerPackRepository.createPacksFromEmotes].

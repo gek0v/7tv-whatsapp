@@ -92,6 +92,63 @@ class ChannelViewModel(
         _uiState.update { it.copy(selectedEmoteIds = emptySet()) }
     }
 
+    fun onToggleDraftEmote(emote: SevenTvEmote) {
+        _uiState.update { state ->
+            val current = state.draftEmotes
+            val exists = current.any { it.id == emote.id }
+            if (exists) {
+                state.copy(draftEmotes = current.filterNot { it.id == emote.id })
+            } else {
+                if (current.size >= 30) {
+                    state
+                } else {
+                    state.copy(draftEmotes = current + emote)
+                }
+            }
+        }
+    }
+
+    fun onClearDraft() {
+        _uiState.update { it.copy(draftEmotes = emptyList()) }
+    }
+
+    fun onCreatePackFromDraft(packName: String, publisher: String = "7TV") {
+        val currentState = _uiState.value
+        if (currentState.draftEmotes.size < 3) {
+            _uiState.update {
+                it.copy(
+                    importState = ChannelImportState.Error("Se requieren al menos 3 stickers para crear un paquete.")
+                )
+            }
+            return
+        }
+
+        val emotesToSave = currentState.draftEmotes
+        val resolvedPublisher = (currentState.loadState as? ChannelLoadState.Success)?.streamerName ?: publisher
+
+        viewModelScope.launch {
+            when (val result = stickerPackRepository.createPacksFromEmotes(
+                basePackName = packName.ifBlank { "7TV Pack" },
+                publisher = resolvedPublisher,
+                emotes = emotesToSave
+            )) {
+                is StickerResult.Success -> {
+                    _uiState.update {
+                        it.copy(
+                            draftEmotes = emptyList(),
+                            importState = ChannelImportState.Success(result.data)
+                        )
+                    }
+                }
+                is StickerResult.Failure -> {
+                    _uiState.update {
+                        it.copy(importState = ChannelImportState.Error("Error al crear pack: ${result.error}"))
+                    }
+                }
+            }
+        }
+    }
+
     fun getFilteredEmotes(): List<SevenTvEmote> {
         val state = _uiState.value
         val successState = state.loadState as? ChannelLoadState.Success ?: return emptyList()

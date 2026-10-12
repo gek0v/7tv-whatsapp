@@ -1,5 +1,13 @@
 package com.seventv.stickers.ui.components
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -12,18 +20,18 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
@@ -33,19 +41,17 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.seventv.stickers.core.network.model.SevenTvEmote
-import com.seventv.stickers.ui.theme.DarkSurface
-import com.seventv.stickers.ui.theme.DarkSurfaceVariant
-import com.seventv.stickers.ui.theme.OnSurfaceSubtext
-import com.seventv.stickers.ui.theme.OnSurfaceText
-import com.seventv.stickers.ui.theme.SevenTvCyan
-import com.seventv.stickers.ui.theme.WhatsAppGreen
 
 object EmoteCardDefaults {
-    fun badgeText(isAnimated: Boolean): String = if (isAnimated) "ANIM" else "STATIC"
+    const val ANIMATED_BADGE = "ANIM"
+    const val STATIC_BADGE = "STATIC"
+
+    fun badgeText(isAnimated: Boolean): String = if (isAnimated) ANIMATED_BADGE else STATIC_BADGE
 }
 
 /**
- * Grid card component displaying an individual 7TV emote thumbnail, type badge, and draft toggle action.
+ * Grid card component displaying an individual 7TV emote thumbnail with M3 ElevatedCard styling,
+ * format badge (ANIM / STATIC), and animated draft toggle action.
  */
 @Composable
 fun EmoteCard(
@@ -61,10 +67,12 @@ fun EmoteCard(
         modifier
     }
 
-    Card(
+    ElevatedCard(
         modifier = cardModifier,
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = DarkSurface)
+        shape = MaterialTheme.shapes.medium, // 16dp
+        colors = CardDefaults.elevatedCardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+        )
     ) {
         Column(
             modifier = Modifier
@@ -89,24 +97,28 @@ fun EmoteCard(
                         .align(Alignment.Center)
                 )
 
-                // Type badge in top-end corner: "ANIM" or "STATIC"
+                // Format badge in top-end corner: "ANIM" or "STATIC"
                 Surface(
                     modifier = Modifier
                         .align(Alignment.TopEnd)
                         .padding(4.dp),
-                    shape = RoundedCornerShape(4.dp),
-                    color = DarkSurfaceVariant.copy(alpha = 0.85f)
+                    shape = MaterialTheme.shapes.extraSmall, // 8dp
+                    color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.85f)
                 ) {
                     Text(
                         text = EmoteCardDefaults.badgeText(emote.isAnimated),
                         style = MaterialTheme.typography.labelSmall,
-                        color = if (emote.isAnimated) SevenTvCyan else OnSurfaceSubtext,
-                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                        color = if (emote.isAnimated) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(6.dp))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -115,29 +127,35 @@ fun EmoteCard(
             ) {
                 Text(
                     text = emote.name,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = OnSurfaceText,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f)
+                )
+
+                val tintColor by animateColorAsState(
+                    targetValue = if (isInDraft) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.primary,
+                    animationSpec = tween(durationMillis = 200),
+                    label = "DraftTintAnimation"
                 )
 
                 IconButton(
                     onClick = onToggleDraft,
                     modifier = Modifier.size(32.dp)
                 ) {
-                    if (isInDraft) {
+                    AnimatedContent(
+                        targetState = isInDraft,
+                        transitionSpec = {
+                            (fadeIn(animationSpec = tween(180)) + scaleIn(initialScale = 0.7f, animationSpec = tween(180)))
+                                .togetherWith(fadeOut(animationSpec = tween(140)) + scaleOut(targetScale = 0.7f, animationSpec = tween(140)))
+                        },
+                        label = "DraftToggleIcon"
+                    ) { inDraft ->
                         Icon(
-                            imageVector = Icons.Default.Check,
-                            contentDescription = "Quitar del borrador",
-                            tint = WhatsAppGreen,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    } else {
-                        Icon(
-                            imageVector = Icons.Default.Add,
-                            contentDescription = "Añadir al borrador",
-                            tint = SevenTvCyan,
+                            imageVector = if (inDraft) Icons.Default.Check else Icons.Default.Add,
+                            contentDescription = if (inDraft) "Quitar del borrador" else "Añadir al borrador",
+                            tint = tintColor,
                             modifier = Modifier.size(20.dp)
                         )
                     }

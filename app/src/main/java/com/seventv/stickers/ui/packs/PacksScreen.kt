@@ -18,11 +18,13 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -31,13 +33,20 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -46,34 +55,24 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import coil.compose.AsyncImage
-import com.seventv.stickers.core.domain.model.StickerPack
-import com.seventv.stickers.ui.components.WhatsAppAddButton
-import com.seventv.stickers.ui.theme.DarkBackground
-import com.seventv.stickers.ui.theme.DarkSurface
-import com.seventv.stickers.ui.theme.DarkSurfaceVariant
-import com.seventv.stickers.ui.theme.ErrorRed
-import com.seventv.stickers.ui.theme.OnSurfaceSubtext
-import com.seventv.stickers.ui.theme.OnSurfaceText
-import com.seventv.stickers.ui.theme.SevenTvCyan
+import com.seventv.stickers.ui.components.PackHeroCard
+import com.seventv.stickers.ui.components.PackMenuAction
 import com.seventv.stickers.whatsapp.WhatsAppIntentHelper
-import java.io.File
+import kotlinx.coroutines.launch
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PacksScreen(
     viewModel: PacksViewModel,
     onNavigateToPackDetail: (String) -> Unit = {},
+    onCreatePackClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -146,33 +145,31 @@ fun PacksScreen(
         viewModel.onClearFeedbackMessage()
     }
 
-    Box(
-        modifier = modifier
-            .fillMaxSize()
-            .background(DarkBackground)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 16.dp)
-        ) {
-            Spacer(modifier = Modifier.height(16.dp))
+    val currentPacks = (state.loadState as? PacksLoadState.Success)?.packs.orEmpty()
 
-            // Top Header Bar
-            val currentPacks = (state.loadState as? PacksLoadState.Success)?.packs.orEmpty()
-            if (state.isSelectionMode) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(
-                        text = "${state.selectedPackIds.size} seleccionados",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = OnSurfaceText
-                    )
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = {
+                    Column {
+                        Text(
+                            text = if (state.isSelectionMode) "${state.selectedPackIds.size} seleccionados" else "Mis Packs",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        if (!state.isSelectionMode) {
+                            val count = currentPacks.size
+                            Text(
+                                text = "$count ${if (count == 1) "paquete" else "paquetes"}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                },
+                actions = {
+                    if (state.isSelectionMode) {
                         TextButton(
                             onClick = {
                                 if (state.selectedPackIds.size == currentPacks.size) {
@@ -184,195 +181,277 @@ fun PacksScreen(
                         ) {
                             Text(
                                 text = if (state.selectedPackIds.size == currentPacks.size) "Deseleccionar" else "Todos",
-                                color = SevenTvCyan,
+                                color = MaterialTheme.colorScheme.primary,
                                 fontWeight = FontWeight.SemiBold
                             )
                         }
-                        Spacer(modifier = Modifier.width(4.dp))
                         TextButton(onClick = { viewModel.onToggleSelectionMode() }) {
-                            Text("Cancelar", color = OnSurfaceSubtext)
+                            Text(
+                                text = "Cancelar",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    } else if (currentPacks.isNotEmpty()) {
+                        TextButton(onClick = { viewModel.onToggleSelectionMode() }) {
+                            Text(
+                                text = "Seleccionar",
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.SemiBold
+                            )
                         }
                     }
-                }
-            } else {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    titleContentColor = MaterialTheme.colorScheme.onSurface,
+                    actionIconContentColor = MaterialTheme.colorScheme.onSurface
+                )
+            )
+        },
+        floatingActionButton = {
+            if (!state.isSelectionMode) {
+                ExtendedFloatingActionButton(
+                    onClick = onCreatePackClick,
+                    icon = { Icon(Icons.Default.Add, contentDescription = null) },
+                    text = { Text("Crear Pack", fontWeight = FontWeight.Bold) },
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary
+                )
+            }
+        },
+        bottomBar = {
+            if (state.isSelectionMode) {
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    shape = MaterialTheme.shapes.large,
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    shadowElevation = 6.dp
                 ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "Mis Packs de Stickers",
-                            fontSize = 22.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = OnSurfaceText
-                        )
-                        Text(
-                            text = "Gestiona y exporta tus paquetes guardados a WhatsApp",
-                            fontSize = 13.sp,
-                            color = OnSurfaceSubtext
-                        )
-                    }
-                    if (currentPacks.isNotEmpty()) {
-                        TextButton(onClick = { viewModel.onToggleSelectionMode() }) {
-                            Text("Seleccionar", color = SevenTvCyan, fontWeight = FontWeight.SemiBold)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Button(
+                            onClick = { viewModel.onOpenBulkDeleteDialog() },
+                            enabled = state.selectedPackIds.isNotEmpty(),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.error,
+                                contentColor = MaterialTheme.colorScheme.onError,
+                                disabledContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                            ),
+                            modifier = Modifier.weight(1f),
+                            shape = MaterialTheme.shapes.medium
+                        ) {
+                            Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                "Eliminar (${state.selectedPackIds.size})",
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+
+                        if (state.selectedPackIds.size >= 2) {
+                            Button(
+                                onClick = { viewModel.onOpenMergeDialog() },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                                ),
+                                modifier = Modifier.weight(1f),
+                                shape = MaterialTheme.shapes.medium
+                            ) {
+                                Text(
+                                    "Combinar (${state.selectedPackIds.size})",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+
+                        Button(
+                            onClick = { viewModel.onStartBatchWhatsAppExport(context) },
+                            enabled = state.selectedPackIds.isNotEmpty(),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.tertiary,
+                                contentColor = MaterialTheme.colorScheme.onTertiary,
+                                disabledContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                            ),
+                            modifier = Modifier.weight(1f),
+                            shape = MaterialTheme.shapes.medium
+                        ) {
+                            Text(
+                                "Añadir a WA (${state.selectedPackIds.size})",
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.Bold
+                            )
                         }
                     }
                 }
             }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
+        },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        containerColor = MaterialTheme.colorScheme.background,
+        modifier = modifier.fillMaxSize()
+    ) { innerPadding ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+        ) {
             when (val load = state.loadState) {
                 is PacksLoadState.Loading -> {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(color = SevenTvCyan)
+                        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                     }
                 }
                 is PacksLoadState.Error -> {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text(load.message, color = ErrorRed, textAlign = TextAlign.Center)
+                        Text(
+                            text = load.message,
+                            color = MaterialTheme.colorScheme.error,
+                            textAlign = TextAlign.Center,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
                     }
                 }
                 is PacksLoadState.Success -> {
                     if (load.packs.isEmpty()) {
                         Box(
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .weight(1f),
+                                .fillMaxSize()
+                                .padding(16.dp),
                             contentAlignment = Alignment.Center
                         ) {
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                modifier = Modifier.padding(32.dp)
+                            Card(
+                                shape = MaterialTheme.shapes.large,
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceContainer
+                                ),
+                                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                                modifier = Modifier.fillMaxWidth()
                             ) {
-                                Text(
-                                    text = "No tienes paquetes creados todavía",
-                                    fontSize = 16.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = OnSurfaceText,
-                                    textAlign = TextAlign.Center
-                                )
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Text(
-                                    text = "Explora emotes de 7TV o importa un canal completo para crear tus primeros stickers de WhatsApp.",
-                                    fontSize = 13.sp,
-                                    color = OnSurfaceSubtext,
-                                    textAlign = TextAlign.Center
-                                )
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(32.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(72.dp)
+                                            .clip(CircleShape)
+                                            .background(MaterialTheme.colorScheme.primaryContainer),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Folder,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(36.dp)
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.height(16.dp))
+                                    Text(
+                                        text = "No tienes paquetes creados todavía",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        textAlign = TextAlign.Center
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text(
+                                        text = "Explora emotes de 7TV o importa un canal completo para crear tus primeros stickers de WhatsApp.",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        textAlign = TextAlign.Center
+                                    )
+                                    Spacer(modifier = Modifier.height(20.dp))
+                                    Button(
+                                        onClick = onCreatePackClick,
+                                        shape = MaterialTheme.shapes.medium,
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = MaterialTheme.colorScheme.primary,
+                                            contentColor = MaterialTheme.colorScheme.onPrimary
+                                        )
+                                    ) {
+                                        Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(18.dp))
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text("Explorar emotes", fontWeight = FontWeight.SemiBold)
+                                    }
+                                }
                             }
                         }
                     } else {
                         LazyColumn(
-                            contentPadding = PaddingValues(bottom = if (state.isSelectionMode) 90.dp else 24.dp),
+                            contentPadding = PaddingValues(
+                                start = 16.dp,
+                                end = 16.dp,
+                                top = 8.dp,
+                                bottom = if (state.isSelectionMode) 100.dp else 88.dp
+                            ),
                             verticalArrangement = Arrangement.spacedBy(12.dp),
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.fillMaxSize()
                         ) {
                             items(load.packs, key = { it.identifier }) { pack ->
-                                PackCard(
-                                    pack = pack,
-                                    isSelectionMode = state.isSelectionMode,
-                                    isSelected = pack.identifier in state.selectedPackIds,
-                                    onToggleSelect = { viewModel.onTogglePackSelection(pack.identifier) },
-                                    onClick = {
-                                        if (state.isSelectionMode) {
-                                            viewModel.onTogglePackSelection(pack.identifier)
-                                        } else {
-                                            onNavigateToPackDetail(pack.identifier)
+                                if (state.isSelectionMode) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable { viewModel.onTogglePackSelection(pack.identifier) },
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Checkbox(
+                                            checked = pack.identifier in state.selectedPackIds,
+                                            onCheckedChange = { viewModel.onTogglePackSelection(pack.identifier) },
+                                            colors = CheckboxDefaults.colors(
+                                                checkedColor = MaterialTheme.colorScheme.primary,
+                                                checkmarkColor = MaterialTheme.colorScheme.onPrimary,
+                                                uncheckedColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        PackHeroCard(
+                                            pack = pack,
+                                            stickers = pack.stickers,
+                                            onExportToWhatsApp = { viewModel.onAddPackToWhatsApp(context, pack) },
+                                            onPackClick = { viewModel.onTogglePackSelection(pack.identifier) },
+                                            onMenuAction = { action ->
+                                                when (action) {
+                                                    PackMenuAction.RENAME -> viewModel.onOpenRenameDialog(pack)
+                                                    PackMenuAction.DUPLICATE -> viewModel.onOpenDuplicateDialog(pack)
+                                                    PackMenuAction.DELETE -> viewModel.onOpenDeleteDialog(pack)
+                                                }
+                                            },
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                    }
+                                } else {
+                                    PackHeroCard(
+                                        pack = pack,
+                                        stickers = pack.stickers,
+                                        onExportToWhatsApp = { viewModel.onAddPackToWhatsApp(context, pack) },
+                                        onPackClick = { onNavigateToPackDetail(pack.identifier) },
+                                        onMenuAction = { action ->
+                                            when (action) {
+                                                PackMenuAction.RENAME -> viewModel.onOpenRenameDialog(pack)
+                                                PackMenuAction.DUPLICATE -> viewModel.onOpenDuplicateDialog(pack)
+                                                PackMenuAction.DELETE -> viewModel.onOpenDeleteDialog(pack)
+                                            }
                                         }
-                                    },
-                                    onRenameClick = { viewModel.onOpenRenameDialog(pack) },
-                                    onAddWhatsAppClick = { viewModel.onAddPackToWhatsApp(context, pack) },
-                                    onDeleteClick = { viewModel.onOpenDeleteDialog(pack) }
-                                )
+                                    )
+                                }
                             }
                         }
                     }
                 }
             }
         }
-
-        // Bottom Bar for Batch Actions in Selection Mode
-        if (state.isSelectionMode) {
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .align(Alignment.BottomCenter)
-                    .padding(16.dp),
-                shape = RoundedCornerShape(16.dp),
-                color = DarkSurfaceVariant,
-                shadowElevation = 8.dp
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 14.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Button(
-                        onClick = { viewModel.onOpenBulkDeleteDialog() },
-                        enabled = state.selectedPackIds.isNotEmpty(),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = ErrorRed,
-                            contentColor = Color.White,
-                            disabledContainerColor = DarkSurface
-                        ),
-                        modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(10.dp)
-                    ) {
-                        Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            "Eliminar (${state.selectedPackIds.size})",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 13.sp
-                        )
-                    }
-
-                    if (state.selectedPackIds.size >= 2) {
-                        Button(
-                            onClick = { viewModel.onOpenMergeDialog() },
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = SevenTvCyan,
-                                contentColor = Color.Black
-                            ),
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(10.dp)
-                        ) {
-                            Text(
-                                "Combinar (${state.selectedPackIds.size})",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 13.sp
-                            )
-                        }
-                    }
-
-                    Button(
-                        onClick = { viewModel.onStartBatchWhatsAppExport(context) },
-                        enabled = state.selectedPackIds.isNotEmpty(),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFF25D366),
-                            contentColor = Color.White,
-                            disabledContainerColor = DarkSurface
-                        ),
-                        modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(10.dp)
-                    ) {
-                        Text(
-                            "Añadir a WA (${state.selectedPackIds.size})",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 13.sp
-                        )
-                    }
-                }
-            }
-        }
-
-        SnackbarHost(
-            hostState = snackbarHostState,
-            modifier = Modifier.align(Alignment.BottomCenter)
-        )
     }
 
     // Merge Confirmation Dialog
@@ -391,8 +470,9 @@ fun PacksScreen(
             },
             title = {
                 Text(
-                    "Combinar Paquetes",
-                    color = OnSurfaceText,
+                    text = "Combinar Paquetes",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
                     fontWeight = FontWeight.Bold
                 )
             },
@@ -405,27 +485,27 @@ fun PacksScreen(
                                 } else {
                                     "Se auto-reempaquetarán en $expectedPacksCount paquetes (hasta 30 stickers por paquete)."
                                 },
-                        color = OnSurfaceSubtext,
-                        fontSize = 13.sp
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Spacer(modifier = Modifier.height(14.dp))
                     Text(
                         text = "Nombre del nuevo paquete:",
-                        color = OnSurfaceText,
-                        fontSize = 12.sp,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
                         fontWeight = FontWeight.SemiBold
                     )
                     Spacer(modifier = Modifier.height(6.dp))
-                    androidx.compose.material3.OutlinedTextField(
+                    OutlinedTextField(
                         value = baseName,
                         onValueChange = { baseName = it },
                         singleLine = true,
                         enabled = !state.isMergingPacks,
-                        colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = OnSurfaceText,
-                            unfocusedTextColor = OnSurfaceText,
-                            focusedBorderColor = SevenTvCyan,
-                            unfocusedBorderColor = DarkSurfaceVariant
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                            unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                            focusedBorderColor = MaterialTheme.colorScheme.primary,
+                            unfocusedBorderColor = MaterialTheme.colorScheme.outline
                         ),
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -436,9 +516,16 @@ fun PacksScreen(
                             horizontalArrangement = Arrangement.Center,
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            CircularProgressIndicator(color = SevenTvCyan, modifier = Modifier.size(20.dp))
+                            CircularProgressIndicator(
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp)
+                            )
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("Combinando y reempaquetando...", color = SevenTvCyan, fontSize = 12.sp)
+                            Text(
+                                text = "Combinando y reempaquetando...",
+                                color = MaterialTheme.colorScheme.primary,
+                                style = MaterialTheme.typography.bodySmall
+                            )
                         }
                     }
                 }
@@ -451,7 +538,10 @@ fun PacksScreen(
                         }
                     },
                     enabled = baseName.isNotBlank() && !state.isMergingPacks,
-                    colors = ButtonDefaults.buttonColors(containerColor = SevenTvCyan, contentColor = Color.Black)
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary
+                    )
                 ) {
                     Text("Combinar", fontWeight = FontWeight.Bold)
                 }
@@ -459,11 +549,11 @@ fun PacksScreen(
             dismissButton = {
                 if (!state.isMergingPacks) {
                     TextButton(onClick = { viewModel.onDismissMergeDialog() }) {
-                        Text("Cancelar", color = OnSurfaceSubtext)
+                        Text("Cancelar")
                     }
                 }
             },
-            containerColor = DarkSurface
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
         )
     }
 
@@ -472,27 +562,38 @@ fun PacksScreen(
         val pack = state.packToDelete!!
         AlertDialog(
             onDismissRequest = { viewModel.onDismissDeleteDialog() },
-            title = { Text("Eliminar Paquete", color = OnSurfaceText, fontWeight = FontWeight.Bold) },
+            title = {
+                Text(
+                    text = "Eliminar Paquete",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontWeight = FontWeight.Bold
+                )
+            },
             text = {
                 Text(
-                    "¿Estás seguro de que deseas eliminar '${pack.name}'? Se borrarán sus ${pack.stickers.size} stickers del almacenamiento interno.",
-                    color = OnSurfaceSubtext
+                    text = "¿Estás seguro de que deseas eliminar '${pack.name}'? Se borrarán sus ${pack.stickers.size} stickers del almacenamiento.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             },
             confirmButton = {
                 Button(
                     onClick = { viewModel.onConfirmDeletePack() },
-                    colors = ButtonDefaults.buttonColors(containerColor = ErrorRed, contentColor = Color.White)
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error,
+                        contentColor = MaterialTheme.colorScheme.onError
+                    )
                 ) {
                     Text("Eliminar", fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { viewModel.onDismissDeleteDialog() }) {
-                    Text("Cancelar", color = OnSurfaceSubtext)
+                    Text("Cancelar")
                 }
             },
-            containerColor = DarkSurface
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
         )
     }
 
@@ -500,27 +601,38 @@ fun PacksScreen(
     if (state.isBulkDeleteConfirmDialogOpen && state.selectedPackIds.isNotEmpty()) {
         AlertDialog(
             onDismissRequest = { viewModel.onDismissBulkDeleteDialog() },
-            title = { Text("Eliminar Paquetes", color = OnSurfaceText, fontWeight = FontWeight.Bold) },
+            title = {
+                Text(
+                    text = "Eliminar Paquetes",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontWeight = FontWeight.Bold
+                )
+            },
             text = {
                 Text(
-                    "¿Estás seguro de que deseas eliminar los ${state.selectedPackIds.size} paquetes seleccionados? Se borrarán todos sus stickers del almacenamiento.",
-                    color = OnSurfaceSubtext
+                    text = "¿Estás seguro de que deseas eliminar los ${state.selectedPackIds.size} paquetes seleccionados? Se borrarán todos sus stickers del almacenamiento.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             },
             confirmButton = {
                 Button(
                     onClick = { viewModel.onConfirmBulkDelete() },
-                    colors = ButtonDefaults.buttonColors(containerColor = ErrorRed, contentColor = Color.White)
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error,
+                        contentColor = MaterialTheme.colorScheme.onError
+                    )
                 ) {
                     Text("Eliminar Todos", fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { viewModel.onDismissBulkDeleteDialog() }) {
-                    Text("Cancelar", color = OnSurfaceSubtext)
+                    Text("Cancelar")
                 }
             },
-            containerColor = DarkSurface
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
         )
     }
 
@@ -530,24 +642,31 @@ fun PacksScreen(
         var newName by remember(pack.identifier) { mutableStateOf(pack.name) }
         AlertDialog(
             onDismissRequest = { viewModel.onDismissRenameDialog() },
-            title = { Text("Editar Nombre del Pack", color = OnSurfaceText, fontWeight = FontWeight.Bold) },
+            title = {
+                Text(
+                    text = "Editar Nombre del Pack",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontWeight = FontWeight.Bold
+                )
+            },
             text = {
                 Column {
                     Text(
-                        "Introduce el nuevo nombre para este paquete de stickers:",
-                        color = OnSurfaceSubtext,
-                        fontSize = 13.sp
+                        text = "Introduce el nuevo nombre para este paquete de stickers:",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Spacer(modifier = Modifier.height(12.dp))
-                    androidx.compose.material3.OutlinedTextField(
+                    OutlinedTextField(
                         value = newName,
                         onValueChange = { newName = it },
                         singleLine = true,
-                        colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = OnSurfaceText,
-                            unfocusedTextColor = OnSurfaceText,
-                            focusedBorderColor = SevenTvCyan,
-                            unfocusedBorderColor = DarkSurfaceVariant
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                            unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                            focusedBorderColor = MaterialTheme.colorScheme.primary,
+                            unfocusedBorderColor = MaterialTheme.colorScheme.outline
                         ),
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -560,18 +679,74 @@ fun PacksScreen(
                             viewModel.onConfirmRename(newName)
                         }
                     },
-                    enabled = newName.isNotBlank(),
-                    colors = ButtonDefaults.buttonColors(containerColor = SevenTvCyan, contentColor = Color.Black)
+                    enabled = newName.isNotBlank()
                 ) {
                     Text("Guardar", fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { viewModel.onDismissRenameDialog() }) {
-                    Text("Cancelar", color = OnSurfaceSubtext)
+                    Text("Cancelar")
                 }
             },
-            containerColor = DarkSurface
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+        )
+    }
+
+    // Duplicate Pack Dialog
+    if (state.isDuplicateDialogOpen && state.packToDuplicate != null) {
+        val pack = state.packToDuplicate!!
+        var duplicateName by remember(pack.identifier) { mutableStateOf("${pack.name} (Copia)") }
+        AlertDialog(
+            onDismissRequest = { viewModel.onDismissDuplicateDialog() },
+            title = {
+                Text(
+                    text = "Duplicar Paquete",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Column {
+                    Text(
+                        text = "Introduce el nombre para el paquete duplicado:",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = duplicateName,
+                        onValueChange = { duplicateName = it },
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                            unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                            focusedBorderColor = MaterialTheme.colorScheme.primary,
+                            unfocusedBorderColor = MaterialTheme.colorScheme.outline
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (duplicateName.isNotBlank()) {
+                            viewModel.onConfirmDuplicatePack(duplicateName)
+                        }
+                    },
+                    enabled = duplicateName.isNotBlank()
+                ) {
+                    Text("Duplicar", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.onDismissDuplicateDialog() }) {
+                    Text("Cancelar")
+                }
+            },
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
         )
     }
 
@@ -581,153 +756,38 @@ fun PacksScreen(
             onDismissRequest = { viewModel.onClearExportEvent() },
             title = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Info, contentDescription = null, tint = SevenTvCyan)
+                    Icon(
+                        imageVector = Icons.Default.Info,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary
+                    )
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("WhatsApp no encontrado", color = OnSurfaceText)
+                    Text(
+                        text = "WhatsApp no encontrado",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
                 }
             },
             text = {
                 Text(
-                    "WhatsApp Estándar (com.whatsapp) no parece estar instalado en tu dispositivo. Instálalo desde Google Play Store para poder añadir tus stickers.",
-                    color = OnSurfaceSubtext
+                    text = "WhatsApp Estándar (com.whatsapp) no parece estar instalado en tu dispositivo. Instálalo desde Google Play Store para poder añadir tus stickers.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             },
             confirmButton = {
                 Button(
                     onClick = { viewModel.onClearExportEvent() },
-                    colors = ButtonDefaults.buttonColors(containerColor = SevenTvCyan, contentColor = Color.Black)
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary
+                    )
                 ) {
                     Text("Entendido", fontWeight = FontWeight.Bold)
                 }
             },
-            containerColor = DarkSurface
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
         )
-    }
-}
-
-@Composable
-private fun PackCard(
-    pack: StickerPack,
-    isSelectionMode: Boolean,
-    isSelected: Boolean,
-    onToggleSelect: () -> Unit,
-    onClick: () -> Unit,
-    onRenameClick: () -> Unit,
-    onAddWhatsAppClick: () -> Unit,
-    onDeleteClick: () -> Unit
-) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable {
-                if (isSelectionMode) {
-                    onToggleSelect()
-                } else {
-                    onClick()
-                }
-            },
-        colors = CardDefaults.cardColors(containerColor = DarkSurface),
-        shape = RoundedCornerShape(14.dp)
-    ) {
-        Column(modifier = Modifier.padding(14.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                if (isSelectionMode) {
-                    Checkbox(
-                        checked = isSelected,
-                        onCheckedChange = { onToggleSelect() },
-                        colors = CheckboxDefaults.colors(
-                            checkedColor = SevenTvCyan,
-                            checkmarkColor = Color.Black,
-                            uncheckedColor = OnSurfaceSubtext
-                        )
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                }
-
-                // Tray Icon or First sticker
-                val context = LocalContext.current
-                val trayFile = remember(pack.trayImagePath) {
-                    val f = File(pack.trayImagePath)
-                    if (f.isAbsolute && f.exists()) f else File(context.filesDir, pack.trayImagePath)
-                }
-                Box(
-                    modifier = Modifier
-                        .size(52.dp)
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(DarkSurfaceVariant),
-                    contentAlignment = Alignment.Center
-                ) {
-                    if (trayFile.exists()) {
-                        AsyncImage(
-                            model = trayFile,
-                            contentDescription = "Icono de ${pack.name}",
-                            modifier = Modifier.size(44.dp)
-                        )
-                    } else {
-                        Text(
-                            text = pack.name.take(1).uppercase(),
-                            color = SevenTvCyan,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 20.sp
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.width(14.dp))
-
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = pack.name,
-                        color = OnSurfaceText,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 16.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = "${pack.stickers.size} stickers • ${if (pack.isAnimated) "Animados" else "Estáticos"}",
-                        color = OnSurfaceSubtext,
-                        fontSize = 13.sp
-                    )
-                    Text(
-                        text = "Por ${pack.publisher}",
-                        color = OnSurfaceSubtext,
-                        fontSize = 11.sp
-                    )
-                }
-
-                if (!isSelectionMode) {
-                    IconButton(onClick = onRenameClick) {
-                        Icon(
-                            imageVector = Icons.Default.Edit,
-                            contentDescription = "Editar nombre",
-                            tint = OnSurfaceSubtext
-                        )
-                    }
-                    IconButton(onClick = onDeleteClick) {
-                        Icon(
-                            imageVector = Icons.Default.Delete,
-                            contentDescription = "Eliminar pack",
-                            tint = OnSurfaceSubtext
-                        )
-                    }
-                }
-            }
-
-            if (!isSelectionMode) {
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // Action Button
-                WhatsAppAddButton(
-                    isWhitelisted = pack.isWhitelisted,
-                    onClick = onAddWhatsAppClick,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-        }
     }
 }

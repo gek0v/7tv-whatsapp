@@ -8,17 +8,47 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.seventv.stickers.ui.theme.CheckerboardDark
 import com.seventv.stickers.ui.theme.CheckerboardLight
+import com.seventv.stickers.ui.theme.WhatsAppDarkBubble
 import com.seventv.stickers.ui.theme.WhatsAppDarkChatBackground
+import com.seventv.stickers.ui.theme.WhatsAppLightBubble
 import com.seventv.stickers.ui.theme.WhatsAppLightChatBackground
 
 enum class ChatSimulatorMode {
     WHATSAPP_DARK,
     WHATSAPP_LIGHT,
     CHECKERBOARD
+}
+
+object ChatSimulatorDefaults {
+    val DarkChat: Color = WhatsAppDarkChatBackground
+    val DarkBubble: Color = WhatsAppDarkBubble
+    val LightChat: Color = WhatsAppLightChatBackground
+    val LightBubble: Color = WhatsAppLightBubble
+    val CheckerDark: Color = CheckerboardDark
+    val CheckerLight: Color = CheckerboardLight
+
+    fun backgroundColor(mode: ChatSimulatorMode): Color = when (mode) {
+        ChatSimulatorMode.WHATSAPP_DARK -> DarkChat
+        ChatSimulatorMode.WHATSAPP_LIGHT -> LightChat
+        ChatSimulatorMode.CHECKERBOARD -> CheckerLight
+    }
+
+    fun bubbleColor(mode: ChatSimulatorMode): Color = when (mode) {
+        ChatSimulatorMode.WHATSAPP_DARK -> DarkBubble
+        ChatSimulatorMode.WHATSAPP_LIGHT -> LightBubble
+        ChatSimulatorMode.CHECKERBOARD -> Color.Transparent
+    }
+
+    fun modeTitle(mode: ChatSimulatorMode): String = when (mode) {
+        ChatSimulatorMode.WHATSAPP_DARK -> "WA Oscuro"
+        ChatSimulatorMode.WHATSAPP_LIGHT -> "WA Claro"
+        ChatSimulatorMode.CHECKERBOARD -> "Malla"
+    }
 }
 
 @Composable

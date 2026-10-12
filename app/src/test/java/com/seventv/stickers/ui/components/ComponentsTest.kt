@@ -136,4 +136,181 @@ class ComponentsTest {
         assertEquals("ANIM", EmoteCardDefaults.badgeText(isAnimated = true))
         assertEquals("STATIC", EmoteCardDefaults.badgeText(isAnimated = false))
     }
+
+    @Test
+    fun sevenTvSearchBarDefaults_providesExpectedFiltersAndQueryBehaviors() {
+        val expectedFilters = listOf("Todos", "Animados", "Estáticos", "Populares hoy")
+        assertEquals(expectedFilters, SevenTvSearchBarDefaults.filters)
+        assertEquals(4, SevenTvSearchBarDefaults.filters.size)
+        assertTrue(SevenTvSearchBarDefaults.filters.contains("Todos"))
+        assertTrue(SevenTvSearchBarDefaults.filters.contains("Animados"))
+        assertTrue(SevenTvSearchBarDefaults.filters.contains("Estáticos"))
+        assertTrue(SevenTvSearchBarDefaults.filters.contains("Populares hoy"))
+
+        // Search clear button visibility logic
+        assertFalse("Empty query should not show clear button", SevenTvSearchBarDefaults.shouldShowClear(""))
+        assertTrue("Non-empty query should show clear button", SevenTvSearchBarDefaults.shouldShowClear("pepe"))
+
+        // Direct 7TV Emote URL extraction
+        val fullUrl = "https://7tv.app/emotes/60ccf4479f59298d1a7b4698"
+        val nakedUrl = "7tv.app/emotes/60ccf4479f59298d1a7b4698"
+        val nonUrl = "catJAM"
+
+        assertEquals("60ccf4479f59298d1a7b4698", SevenTvSearchBarDefaults.extractEmoteIdFromUrl(fullUrl))
+        assertEquals("60ccf4479f59298d1a7b4698", SevenTvSearchBarDefaults.extractEmoteIdFromUrl(nakedUrl))
+        org.junit.Assert.assertNull(SevenTvSearchBarDefaults.extractEmoteIdFromUrl(nonUrl))
+
+        assertTrue(SevenTvSearchBarDefaults.isDirectEmoteUrl(fullUrl))
+        assertTrue(SevenTvSearchBarDefaults.isDirectEmoteUrl(nakedUrl))
+        assertFalse(SevenTvSearchBarDefaults.isDirectEmoteUrl(nonUrl))
+    }
+
+    @Test
+    fun emoteCardDefaults_badgeConstantsAndHelpers() {
+        assertEquals("ANIM", EmoteCardDefaults.ANIMATED_BADGE)
+        assertEquals("STATIC", EmoteCardDefaults.STATIC_BADGE)
+        assertEquals("ANIM", EmoteCardDefaults.badgeText(isAnimated = true))
+        assertEquals("STATIC", EmoteCardDefaults.badgeText(isAnimated = false))
+    }
+
+    @Test
+    fun dockedDraftPillDefaults_evaluatesDraftHealthAndStatus() {
+        // Less than 3 stickers: INSUFFICIENT
+        for (count in 0..2) {
+            assertEquals(DraftStatus.INSUFFICIENT, DockedDraftPillDefaults.draftStatus(count))
+            assertEquals("Mínimo 3 requeridos", DockedDraftPillDefaults.statusMessage(count))
+            assertEquals(com.seventv.stickers.ui.theme.ErrorRed, DockedDraftPillDefaults.statusColor(count))
+            assertFalse("Draft count $count should not be valid for pack export", DockedDraftPillDefaults.isValid(count))
+        }
+
+        // 3 to 30 stickers: READY
+        for (count in 3..30) {
+            assertEquals(DraftStatus.READY, DockedDraftPillDefaults.draftStatus(count))
+            assertEquals("Listo para WhatsApp", DockedDraftPillDefaults.statusMessage(count))
+            assertEquals(com.seventv.stickers.ui.theme.WhatsAppGreen, DockedDraftPillDefaults.statusColor(count))
+            assertTrue("Draft count $count should be valid for pack export", DockedDraftPillDefaults.isValid(count))
+        }
+
+        // More than 30 stickers: EXCEEDED
+        assertEquals(DraftStatus.EXCEEDED, DockedDraftPillDefaults.draftStatus(31))
+        assertEquals("Límite excedido", DockedDraftPillDefaults.statusMessage(31))
+        assertEquals(DockedDraftPillDefaults.WarningOrange, DockedDraftPillDefaults.statusColor(31))
+        assertFalse("Draft count 31 should not be valid for pack export", DockedDraftPillDefaults.isValid(31))
+
+        // Custom limits
+        assertEquals(DraftStatus.READY, DockedDraftPillDefaults.draftStatus(10, minCount = 5, maxCount = 10))
+        assertEquals(DraftStatus.EXCEEDED, DockedDraftPillDefaults.draftStatus(11, minCount = 5, maxCount = 10))
+        assertEquals(DraftStatus.INSUFFICIENT, DockedDraftPillDefaults.draftStatus(4, minCount = 5, maxCount = 10))
+
+        // Counter text format: "X / 30 stickers"
+        assertEquals("0 / 30 stickers", DockedDraftPillDefaults.counterText(0))
+        assertEquals("3 / 30 stickers", DockedDraftPillDefaults.counterText(3))
+        assertEquals("30 / 30 stickers", DockedDraftPillDefaults.counterText(30))
+        assertEquals("5 / 15 stickers", DockedDraftPillDefaults.counterText(5, maxCount = 15))
+    }
+
+    @Test
+    fun draftBottomSheetDefaults_validatesThresholdAndHelperTexts() {
+        // Can create: count in 3..30 AND non-blank packName
+        assertFalse(DraftBottomSheetDefaults.canCreate(count = 2, packName = "My Pack"))
+        assertFalse(DraftBottomSheetDefaults.canCreate(count = 3, packName = ""))
+        assertFalse(DraftBottomSheetDefaults.canCreate(count = 3, packName = "   "))
+        assertTrue(DraftBottomSheetDefaults.canCreate(count = 3, packName = "My Pack"))
+        assertTrue(DraftBottomSheetDefaults.canCreate(count = 30, packName = "My Pack"))
+        assertFalse(DraftBottomSheetDefaults.canCreate(count = 31, packName = "My Pack"))
+
+        // Helper text evaluation
+        assertEquals("Añade al menos 3 stickers para exportar a WhatsApp", DraftBottomSheetDefaults.helperText(0))
+        assertEquals("Añade al menos 3 stickers para exportar a WhatsApp", DraftBottomSheetDefaults.helperText(2))
+        org.junit.Assert.assertNull(DraftBottomSheetDefaults.helperText(3))
+        org.junit.Assert.assertNull(DraftBottomSheetDefaults.helperText(30))
+        assertEquals("El límite máximo es de 30 stickers por paquete", DraftBottomSheetDefaults.helperText(31))
+    }
+
+    @Test
+    fun packHeroCardDefaults_validatesSyncStatusAndLabels() {
+        // Sync status determination
+        assertEquals(
+            PackSyncStatus.SYNCED,
+            PackHeroCardDefaults.syncStatus(isWhitelisted = true, hasPendingChanges = false)
+        )
+        assertEquals(
+            PackSyncStatus.PENDING,
+            PackHeroCardDefaults.syncStatus(isWhitelisted = true, hasPendingChanges = true)
+        )
+        assertEquals(
+            PackSyncStatus.PENDING,
+            PackHeroCardDefaults.syncStatus(isWhitelisted = false, hasPendingChanges = true)
+        )
+        assertEquals(
+            PackSyncStatus.NOT_EXPORTED,
+            PackHeroCardDefaults.syncStatus(isWhitelisted = false, hasPendingChanges = false)
+        )
+
+        // Labels
+        assertEquals("Sincronizado", PackHeroCardDefaults.statusLabel(PackSyncStatus.SYNCED))
+        assertEquals("Pendiente", PackHeroCardDefaults.statusLabel(PackSyncStatus.PENDING))
+        assertEquals("No exportado", PackHeroCardDefaults.statusLabel(PackSyncStatus.NOT_EXPORTED))
+
+        // Emojis / Chips
+        assertEquals("🟢", PackHeroCardDefaults.statusEmoji(PackSyncStatus.SYNCED))
+        assertEquals("🟡", PackHeroCardDefaults.statusEmoji(PackSyncStatus.PENDING))
+        assertEquals("⚪", PackHeroCardDefaults.statusEmoji(PackSyncStatus.NOT_EXPORTED))
+
+        assertEquals("🟢 Sincronizado", PackHeroCardDefaults.statusChipText(PackSyncStatus.SYNCED))
+        assertEquals("🟡 Pendiente", PackHeroCardDefaults.statusChipText(PackSyncStatus.PENDING))
+        assertEquals("⚪ No exportado", PackHeroCardDefaults.statusChipText(PackSyncStatus.NOT_EXPORTED))
+
+        // Counter text format
+        assertEquals("5 / 30", PackHeroCardDefaults.counterText(5))
+        assertEquals("30 / 30", PackHeroCardDefaults.counterText(30))
+        assertEquals("12 / 20", PackHeroCardDefaults.counterText(12, maxCount = 20))
+    }
+
+    @Test
+    fun chatSimulatorDefaults_providesExactSpecTokensAndHelpers() {
+        val modes = ChatSimulatorMode.values()
+        assertTrue(modes.contains(ChatSimulatorMode.WHATSAPP_DARK))
+        assertTrue(modes.contains(ChatSimulatorMode.WHATSAPP_LIGHT))
+        assertTrue(modes.contains(ChatSimulatorMode.CHECKERBOARD))
+
+        // Exact spec tokens
+        assertEquals(androidx.compose.ui.graphics.Color(0xFF0B141A), ChatSimulatorDefaults.DarkChat)
+        assertEquals(androidx.compose.ui.graphics.Color(0xFF005C4B), ChatSimulatorDefaults.DarkBubble)
+        assertEquals(androidx.compose.ui.graphics.Color(0xFFEFEAE2), ChatSimulatorDefaults.LightChat)
+        assertEquals(androidx.compose.ui.graphics.Color(0xFFD9FDD3), ChatSimulatorDefaults.LightBubble)
+
+        // Background color helper
+        assertEquals(ChatSimulatorDefaults.DarkChat, ChatSimulatorDefaults.backgroundColor(ChatSimulatorMode.WHATSAPP_DARK))
+        assertEquals(ChatSimulatorDefaults.LightChat, ChatSimulatorDefaults.backgroundColor(ChatSimulatorMode.WHATSAPP_LIGHT))
+
+        // Bubble color helper
+        assertEquals(ChatSimulatorDefaults.DarkBubble, ChatSimulatorDefaults.bubbleColor(ChatSimulatorMode.WHATSAPP_DARK))
+        assertEquals(ChatSimulatorDefaults.LightBubble, ChatSimulatorDefaults.bubbleColor(ChatSimulatorMode.WHATSAPP_LIGHT))
+        assertEquals(androidx.compose.ui.graphics.Color.Transparent, ChatSimulatorDefaults.bubbleColor(ChatSimulatorMode.CHECKERBOARD))
+    }
+
+    @Test
+    fun stickerInspectorSheetDefaults_calculatesMetricsAndValidations() {
+        // Size limits: Static <= 100KB (102400 bytes), Animated <= 500KB (512000 bytes)
+        assertFalse(StickerInspectorSheetDefaults.isFileSizeExceeded(100 * 1024L, isAnimated = false))
+        assertTrue(StickerInspectorSheetDefaults.isFileSizeExceeded(100 * 1024L + 1, isAnimated = false))
+
+        assertFalse(StickerInspectorSheetDefaults.isFileSizeExceeded(500 * 1024L, isAnimated = true))
+        assertTrue(StickerInspectorSheetDefaults.isFileSizeExceeded(500 * 1024L + 1, isAnimated = true))
+
+        // Formatted file size string
+        assertEquals("50.0 KB", StickerInspectorSheetDefaults.formatFileSize(50 * 1024L))
+        assertEquals("500.0 KB", StickerInspectorSheetDefaults.formatFileSize(500 * 1024L))
+
+        // Emoji capacity limit: max 3 emojis
+        assertTrue(StickerInspectorSheetDefaults.canAddEmoji(emptyList()))
+        assertTrue(StickerInspectorSheetDefaults.canAddEmoji(listOf("👍", "🔥")))
+        assertFalse(StickerInspectorSheetDefaults.canAddEmoji(listOf("👍", "🔥", "❤️")))
+
+        // Metric string formats
+        assertEquals("2.5s", StickerInspectorSheetDefaults.formatDuration(2.5f))
+        assertEquals("30 FPS", StickerInspectorSheetDefaults.formatFps(30))
+    }
 }
+
