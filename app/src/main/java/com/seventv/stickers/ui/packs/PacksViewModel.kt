@@ -214,6 +214,70 @@ class PacksViewModel(
         }
     }
 
+    // --- Merge Packs ---
+    fun onOpenMergeDialog() {
+        val packs = (_uiState.value.loadState as? PacksLoadState.Success)?.packs ?: return
+        val selectedPacks = packs.filter { it.identifier in _uiState.value.selectedPackIds }
+        if (selectedPacks.size < 2) {
+            _uiState.update { it.copy(userFeedbackMessage = "Selecciona al menos 2 paquetes para combinarlos.") }
+            return
+        }
+
+        val isAnimated = selectedPacks.first().isAnimated
+        if (selectedPacks.any { it.isAnimated != isAnimated }) {
+            _uiState.update {
+                it.copy(userFeedbackMessage = "No se pueden combinar paquetes animados y estáticos juntos.")
+            }
+            return
+        }
+
+        _uiState.update { it.copy(isMergeDialogOpen = true) }
+    }
+
+    fun onDismissMergeDialog() {
+        _uiState.update { it.copy(isMergeDialogOpen = false) }
+    }
+
+    fun onConfirmMergePacks(baseName: String) {
+        val trimmed = baseName.trim()
+        if (trimmed.isBlank()) return
+        val selectedIds = _uiState.value.selectedPackIds.toList()
+        if (selectedIds.size < 2) return
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isMergingPacks = true) }
+            val result = stickerPackRepository.mergePacks(selectedIds, trimmed)
+            when (result) {
+                is com.seventv.stickers.core.common.result.StickerResult.Success -> {
+                    _uiState.update {
+                        it.copy(
+                            isMergeDialogOpen = false,
+                            isMergingPacks = false,
+                            isSelectionMode = false,
+                            selectedPackIds = emptySet(),
+                            userFeedbackMessage = "Paquetes combinados con éxito (${result.data.size} pack(s) creados)"
+                        )
+                    }
+                }
+                is com.seventv.stickers.core.common.result.StickerResult.Failure -> {
+                    val msg = when (val error = result.error) {
+                        is com.seventv.stickers.core.common.result.StickerError.UnsupportedFormat ->
+                            "No se pueden combinar paquetes animados y estáticos juntos."
+                        is com.seventv.stickers.core.common.result.StickerError.InsufficientStickers ->
+                            "Se necesitan al menos 3 stickers en total para crear un paquete de WhatsApp."
+                        else -> "Error al combinar los paquetes"
+                    }
+                    _uiState.update {
+                        it.copy(
+                            isMergingPacks = false,
+                            userFeedbackMessage = msg
+                        )
+                    }
+                }
+            }
+        }
+    }
+
     // --- Rename Pack ---
     fun onOpenRenameDialog(pack: StickerPack) {
         _uiState.update { it.copy(isRenameDialogOpen = true, packToRename = pack) }

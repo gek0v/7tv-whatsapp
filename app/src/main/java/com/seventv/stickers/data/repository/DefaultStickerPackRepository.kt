@@ -350,6 +350,170 @@ class DefaultStickerPackRepository(
         }
     }
 
+    override suspend fun mergePacks(
+        sourcePackIdentifiers: List<String>,
+        basePackName: String
+    ): StickerResult<List<StickerPack>> = withContext(dispatcher) {
+        try {
+            if (sourcePackIdentifiers.size < 2) {
+                return@withContext StickerResult.Failure(StickerError.InsufficientStickers(sourcePackIdentifiers.size, 2))
+            }
+
+            val sourcePacks = sourcePackIdentifiers.map { id ->
+                stickerPackDao.getPackByIdentifier(id)
+                    ?: return@withContext StickerResult.Failure(StickerError.PackNotFound(id))
+            }
+
+            val isAnimated = sourcePacks.first().pack.isAnimated
+            if (sourcePacks.any { it.pack.isAnimated != isAnimated }) {
+                return@withContext StickerResult.Failure(
+                    StickerError.UnsupportedFormat("No se pueden combinar paquetes animados y estáticos juntos.")
+                )
+            }
+
+            val allStickers = sourcePacks.flatMap { it.stickers }
+            if (allStickers.size < 3) {
+                return@withContext StickerResult.Failure(
+                    StickerError.InsufficientStickers(allStickers.size, 3)
+                )
+            }
+
+            val chunks = partitionStickersIntoPacks(allStickers, maxPerPack = 30, minPerPack = 3)
+            val createdPacks = mutableListOf<StickerPack>()
+
+            for ((chunkIndex, chunk) in chunks.withIndex()) {
+                val newPackId = java.util.UUID.randomUUID().toString()
+                val packName = if (chunks.size == 1) basePackName else "$basePackName ${chunkIndex + 1}"
+                val packDir = storageManager.getPackDirectory(newPackId)
+                packDir.mkdirs()
+
+                val newPackStickers = mutableListOf<PackSticker>()
+                val newPackStickerEntities = mutableListOf<StickerEntity>()
+                var firstSavedFile: java.io.File? = null
+
+                for ((stickerIndex, sticker) in chunk.withIndex()) {
+                    val newStickerId = java.util.UUID.randomUUID().toString()
+                    val sourceFile = storageManager.getAbsoluteFile(sticker.relativeFilePath)
+                    val bytes = if (sourceFile.exists()) {
+                        sourceFile.readBytes()
+                    } else {
+                        val fallback = java.io.File(storageManager.getPackDirectory(sticker.packIdentifier), "sticker_${sticker.id}.webp")
+                        if (fallback.exists()) fallback.readBytes() else ByteArray(0)
+                    }
+
+                    if (bytes.isNotEmpty()) {
+                        val savedFile = storageManager.saveStickerFile(newPackId, newStickerId, bytes)
+                        if (firstSavedFile == null) {
+                            firstSavedFile = savedFile
+                        }
+                        val relativePath = "sticker_packs/$newPackId/sticker_${newStickerId}.webp"
+                        val entity = StickerEntity(
+                            id = newStickerId,
+                            packIdentifier = newPackId,
+                            emoteId = sticker.emoteId,
+                            emoteName = sticker.emoteName,
+                            relativeFilePath = relativePath,
+                            emojis = sticker.emojis,
+                            fileLength = savedFile.length(),
+                            sortOrder = stickerIndex
+                        )
+                        newPackStickerEntities.add(entity)
+                        newPackStickers.add(
+                            PackSticker(
+                                id = newStickerId,
+                                packIdentifier = newPackId,
+                                emoteId = sticker.emoteId,
+                                emoteName = sticker.emoteName,
+                                filePath = savedFile.absolutePath,
+                                emojis = sticker.emojis,
+                                fileLength = savedFile.length(),
+                                sortOrder = stickerIndex
+                            )
+                        )
+                    }
+                }
+
+                if (firstSavedFile != null && firstSavedFile.exists()) {
+                    val stagingDir = java.io.File(packDir, "staging_tray").apply { mkdirs() }
+                    val trayOutFile = java.io.File(stagingDir, "tray_icon.webp")
+                    val options = BitmapFactory.Options().apply { inPreferredConfig = Bitmap.Config.ARGB_8888 }
+                    var firstBitmap: Bitmap? = BitmapFactory.decodeFile(firstSavedFile.absolutePath, options)
+                    if (firstBitmap == null) {
+                        val frameExtractor = DefaultFrameExtractor()
+                        val framesResult = frameExtractor.extractFrames(firstSavedFile.readBytes())
+                        if (framesResult is StickerResult.Success && framesResult.data.isNotEmpty()) {
+                            firstBitmap = framesResult.data.first().bitmap
+                        }
+                    }
+
+                    if (firstBitmap != null) {
+                        try {
+                            val trayResult = mediaPipeline.processTrayIcon(firstBitmap, trayOutFile)
+                            if (trayResult is StickerResult.Success && trayOutFile.exists()) {
+                                storageManager.saveTrayIcon(newPackId, trayOutFile.readBytes())
+                            } else {
+                                storageManager.saveTrayIcon(newPackId, firstSavedFile.readBytes())
+                            }
+                        } finally {
+                            stagingDir.deleteRecursively()
+                            if (!firstBitmap.isRecycled) firstBitmap.recycle()
+                        }
+                    } else {
+                        storageManager.saveTrayIcon(newPackId, firstSavedFile.readBytes())
+                    }
+                }
+
+                val createdAt = System.currentTimeMillis() + chunkIndex
+                val packEntity = StickerPackEntity(
+                    identifier = newPackId,
+                    name = packName,
+                    publisher = "7TV Stickers",
+                    trayImageRelativePath = "sticker_packs/$newPackId/tray_icon.webp",
+                    isAnimated = isAnimated,
+                    isWhitelisted = false,
+                    createdAt = createdAt
+                )
+                stickerPackDao.insertPackWithStickers(packEntity, newPackStickerEntities)
+
+                createdPacks.add(
+                    StickerPack(
+                        identifier = newPackId,
+                        name = packName,
+                        publisher = "7TV Stickers",
+                        trayImagePath = "sticker_packs/$newPackId/tray_icon.webp",
+                        isAnimated = isAnimated,
+                        isWhitelisted = false,
+                        stickers = newPackStickers
+                    )
+                )
+            }
+
+            deletePacks(sourcePackIdentifiers)
+
+            StickerResult.Success(createdPacks)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            StickerResult.Failure(StickerError.StorageIoError(e))
+        }
+    }
+
+    private fun <T> partitionStickersIntoPacks(items: List<T>, maxPerPack: Int = 30, minPerPack: Int = 3): List<List<T>> {
+        if (items.size <= maxPerPack) return listOf(items)
+        val rawChunks = items.chunked(maxPerPack).toMutableList()
+        if (rawChunks.size > 1 && rawChunks.last().size < minPerPack) {
+            val needed = minPerPack - rawChunks.last().size
+            val prev = rawChunks[rawChunks.size - 2].toMutableList()
+            val last = rawChunks.last().toMutableList()
+            if (prev.size - needed >= minPerPack) {
+                val stolen = prev.takeLast(needed)
+                rawChunks[rawChunks.size - 2] = prev.dropLast(needed)
+                rawChunks[rawChunks.size - 1] = stolen + last
+            }
+        }
+        return rawChunks
+    }
+
     override suspend fun deleteStickerFromPack(packIdentifier: String, stickerId: String): StickerResult<Unit> = withContext(dispatcher) {
         try {
             stickerDao.deleteSticker(stickerId)

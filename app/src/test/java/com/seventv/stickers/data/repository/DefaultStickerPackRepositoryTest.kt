@@ -662,6 +662,54 @@ class DefaultStickerPackRepositoryTest {
         }
     }
 
+    @Test
+    fun mergePacksCombinesStickersAndDeletesSourcePacks() = runTest(testDispatcher) {
+        val pack1Entity = StickerPackEntity(
+            identifier = "merge-pack-1",
+            name = "Pack 1",
+            publisher = "Author",
+            trayImageRelativePath = "sticker_packs/merge-pack-1/tray_icon.webp",
+            isAnimated = false,
+            isWhitelisted = false,
+            createdAt = 1000L
+        )
+        val s1 = StickerEntity("s1", "merge-pack-1", "e1", "Emote1", "sticker_packs/merge-pack-1/sticker_s1.webp", listOf("😄"), 100L, 0)
+        val s2 = StickerEntity("s2", "merge-pack-1", "e2", "Emote2", "sticker_packs/merge-pack-1/sticker_s2.webp", listOf("😆"), 100L, 1)
+
+        val pack2Entity = StickerPackEntity(
+            identifier = "merge-pack-2",
+            name = "Pack 2",
+            publisher = "Author",
+            trayImageRelativePath = "sticker_packs/merge-pack-2/tray_icon.webp",
+            isAnimated = false,
+            isWhitelisted = false,
+            createdAt = 2000L
+        )
+        val s3 = StickerEntity("s3", "merge-pack-2", "e3", "Emote3", "sticker_packs/merge-pack-2/sticker_s3.webp", listOf("🔥"), 100L, 0)
+        val s4 = StickerEntity("s4", "merge-pack-2", "e4", "Emote4", "sticker_packs/merge-pack-2/sticker_s4.webp", listOf("😎"), 100L, 1)
+
+        packDao.insertPackWithStickers(pack1Entity, listOf(s1, s2))
+        packDao.insertPackWithStickers(pack2Entity, listOf(s3, s4))
+
+        val dummyBytes = byteArrayOf(1, 2, 3, 4)
+        storageManager.saveStickerFile("merge-pack-1", "s1", dummyBytes)
+        storageManager.saveStickerFile("merge-pack-1", "s2", dummyBytes)
+        storageManager.saveStickerFile("merge-pack-2", "s3", dummyBytes)
+        storageManager.saveStickerFile("merge-pack-2", "s4", dummyBytes)
+
+        val result = repository.mergePacks(listOf("merge-pack-1", "merge-pack-2"), "Combined Pack")
+        assertTrue("Expected merge success, got $result", result is StickerResult.Success)
+
+        val mergedPacks = (result as StickerResult.Success).data
+        assertEquals(1, mergedPacks.size)
+        assertEquals("Combined Pack", mergedPacks[0].name)
+        assertEquals(4, mergedPacks[0].stickers.size)
+
+        // Verify old packs were deleted
+        assertNull(packDao.getPackByIdentifier("merge-pack-1"))
+        assertNull(packDao.getPackByIdentifier("merge-pack-2"))
+    }
+
     private class FakeSevenTvRepository : SevenTvRepository {
         var downloadHandler: (suspend (SevenTvEmote) -> StickerResult<DownloadedEmoteAsset>)? = null
 

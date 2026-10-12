@@ -28,6 +28,8 @@ data class PacksUiState(
     val isSelectionMode: Boolean = false,
     val selectedPackIds: Set<String> = emptySet(),
     val isBulkDeleteConfirmDialogOpen: Boolean = false,
+    val isMergeDialogOpen: Boolean = false,
+    val isMergingPacks: Boolean = false,
     val exportQueue: List<StickerPack> = emptyList(),
     // Rename
     val isRenameDialogOpen: Boolean = false,

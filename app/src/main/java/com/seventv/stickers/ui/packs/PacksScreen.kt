@@ -134,6 +134,13 @@ fun PacksScreen(
         }
     }
 
+    // Handle user feedback messages
+    LaunchedEffect(state.userFeedbackMessage) {
+        val msg = state.userFeedbackMessage ?: return@LaunchedEffect
+        snackbarHostState.showSnackbar(msg)
+        viewModel.onClearFeedbackMessage()
+    }
+
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -318,6 +325,24 @@ fun PacksScreen(
                         )
                     }
 
+                    if (state.selectedPackIds.size >= 2) {
+                        Button(
+                            onClick = { viewModel.onOpenMergeDialog() },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = SevenTvCyan,
+                                contentColor = Color.Black
+                            ),
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Text(
+                                "Combinar (${state.selectedPackIds.size})",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp
+                            )
+                        }
+                    }
+
                     Button(
                         onClick = { viewModel.onStartBatchWhatsAppExport(context) },
                         enabled = state.selectedPackIds.isNotEmpty(),
@@ -342,6 +367,98 @@ fun PacksScreen(
         SnackbarHost(
             hostState = snackbarHostState,
             modifier = Modifier.align(Alignment.BottomCenter)
+        )
+    }
+
+    // Merge Confirmation Dialog
+    if (state.isMergeDialogOpen && state.selectedPackIds.size >= 2) {
+        val currentPacksList = (state.loadState as? PacksLoadState.Success)?.packs.orEmpty()
+        val selectedPacks = currentPacksList.filter { it.identifier in state.selectedPackIds }
+        val totalStickers = selectedPacks.sumOf { it.stickers.size }
+        val expectedPacksCount = (totalStickers + 29) / 30
+        var baseName by remember(state.selectedPackIds) {
+            mutableStateOf(selectedPacks.firstOrNull()?.name ?: "Pack Combinado")
+        }
+
+        AlertDialog(
+            onDismissRequest = {
+                if (!state.isMergingPacks) viewModel.onDismissMergeDialog()
+            },
+            title = {
+                Text(
+                    "Combinar Paquetes",
+                    color = OnSurfaceText,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Column {
+                    Text(
+                        text = "Se combinarán los ${selectedPacks.size} paquetes seleccionados ($totalStickers stickers en total).\n\n" +
+                                if (expectedPacksCount == 1) {
+                                    "Caben todos en 1 único paquete consolidado."
+                                } else {
+                                    "Se auto-reempaquetarán en $expectedPacksCount paquetes (hasta 30 stickers por paquete)."
+                                },
+                        color = OnSurfaceSubtext,
+                        fontSize = 13.sp
+                    )
+                    Spacer(modifier = Modifier.height(14.dp))
+                    Text(
+                        text = "Nombre del nuevo paquete:",
+                        color = OnSurfaceText,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    androidx.compose.material3.OutlinedTextField(
+                        value = baseName,
+                        onValueChange = { baseName = it },
+                        singleLine = true,
+                        enabled = !state.isMergingPacks,
+                        colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = OnSurfaceText,
+                            unfocusedTextColor = OnSurfaceText,
+                            focusedBorderColor = SevenTvCyan,
+                            unfocusedBorderColor = DarkSurfaceVariant
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    if (state.isMergingPacks) {
+                        Spacer(modifier = Modifier.height(14.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            CircularProgressIndicator(color = SevenTvCyan, modifier = Modifier.size(20.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Combinando y reempaquetando...", color = SevenTvCyan, fontSize = 12.sp)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (baseName.isNotBlank() && !state.isMergingPacks) {
+                            viewModel.onConfirmMergePacks(baseName)
+                        }
+                    },
+                    enabled = baseName.isNotBlank() && !state.isMergingPacks,
+                    colors = ButtonDefaults.buttonColors(containerColor = SevenTvCyan, contentColor = Color.Black)
+                ) {
+                    Text("Combinar", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                if (!state.isMergingPacks) {
+                    TextButton(onClick = { viewModel.onDismissMergeDialog() }) {
+                        Text("Cancelar", color = OnSurfaceSubtext)
+                    }
+                }
+            },
+            containerColor = DarkSurface
         )
     }
 

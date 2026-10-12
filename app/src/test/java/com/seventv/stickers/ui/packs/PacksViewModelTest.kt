@@ -297,10 +297,66 @@ class PacksViewModelTest {
         assertEquals("Sticker eliminado", viewModel.uiState.value.userFeedbackMessage)
     }
 
+    @Test
+    fun openMergeDialog_whenLessThanTwoPacksSelected_showsFeedbackMessage() = runTest(testDispatcher) {
+        val pack1 = createSamplePack("pack_1", "Uno")
+        fakeStickerPackRepository.packsFlow.value = listOf(pack1)
+        advanceUntilIdle()
+
+        viewModel.onToggleSelectionMode()
+        viewModel.onTogglePackSelection("pack_1")
+
+        viewModel.onOpenMergeDialog()
+        assertFalse(viewModel.uiState.value.isMergeDialogOpen)
+        assertEquals("Selecciona al menos 2 paquetes para combinarlos.", viewModel.uiState.value.userFeedbackMessage)
+    }
+
+    @Test
+    fun openMergeDialog_whenMixedStaticAndAnimated_showsFeedbackMessage() = runTest(testDispatcher) {
+        val pack1 = createSamplePack("pack_1", "Estático", isAnimated = false)
+        val pack2 = createSamplePack("pack_2", "Animado", isAnimated = true)
+        fakeStickerPackRepository.packsFlow.value = listOf(pack1, pack2)
+        advanceUntilIdle()
+
+        viewModel.onToggleSelectionMode()
+        viewModel.onTogglePackSelection("pack_1")
+        viewModel.onTogglePackSelection("pack_2")
+
+        viewModel.onOpenMergeDialog()
+        assertFalse(viewModel.uiState.value.isMergeDialogOpen)
+        assertEquals("No se pueden combinar paquetes animados y estáticos juntos.", viewModel.uiState.value.userFeedbackMessage)
+    }
+
+    @Test
+    fun mergePacksFlow_whenValid_callsRepositoryAndClearsSelection() = runTest(testDispatcher) {
+        val pack1 = createSamplePack("pack_1", "Uno")
+        val pack2 = createSamplePack("pack_2", "Dos")
+        fakeStickerPackRepository.packsFlow.value = listOf(pack1, pack2)
+        advanceUntilIdle()
+
+        viewModel.onToggleSelectionMode()
+        viewModel.onTogglePackSelection("pack_1")
+        viewModel.onTogglePackSelection("pack_2")
+
+        viewModel.onOpenMergeDialog()
+        assertTrue(viewModel.uiState.value.isMergeDialogOpen)
+
+        viewModel.onConfirmMergePacks("Pack Combinado")
+        advanceUntilIdle()
+
+        assertEquals(listOf("pack_1", "pack_2"), fakeStickerPackRepository.lastMergedSourceIdentifiers)
+        assertEquals("Pack Combinado", fakeStickerPackRepository.lastMergedBaseName)
+        assertFalse(viewModel.uiState.value.isMergeDialogOpen)
+        assertFalse(viewModel.uiState.value.isSelectionMode)
+        assertTrue(viewModel.uiState.value.selectedPackIds.isEmpty())
+        assertTrue(viewModel.uiState.value.userFeedbackMessage?.contains("Paquetes combinados con éxito") == true)
+    }
+
     private fun createSamplePack(
         id: String,
         name: String,
-        isWhitelisted: Boolean = false
+        isWhitelisted: Boolean = false,
+        isAnimated: Boolean = false
     ): StickerPack {
         val sticker = PackSticker(
             id = "s_1",
@@ -317,7 +373,7 @@ class PacksViewModelTest {
             name = name,
             publisher = "7TV Stickers",
             trayImagePath = "/data/pack/$id/tray.webp",
-            isAnimated = false,
+            isAnimated = isAnimated,
             isWhitelisted = isWhitelisted,
             stickers = listOf(sticker)
         )
@@ -361,6 +417,28 @@ class PacksViewModelTest {
                 if (it.identifier == identifier) it.copy(name = newName) else it
             }
             return StickerResult.Success(Unit)
+        }
+
+        var lastMergedSourceIdentifiers: List<String>? = null
+        var lastMergedBaseName: String? = null
+        override suspend fun mergePacks(
+            sourcePackIdentifiers: List<String>,
+            basePackName: String
+        ): StickerResult<List<StickerPack>> {
+            lastMergedSourceIdentifiers = sourcePackIdentifiers
+            lastMergedBaseName = basePackName
+            val remaining = packsFlow.value.filter { it.identifier !in sourcePackIdentifiers }
+            val newPack = StickerPack(
+                identifier = "merged_1",
+                name = basePackName,
+                publisher = "7TV Stickers",
+                trayImagePath = "/data/pack/merged_1/tray.webp",
+                isAnimated = false,
+                isWhitelisted = false,
+                stickers = emptyList()
+            )
+            packsFlow.value = remaining + listOf(newPack)
+            return StickerResult.Success(listOf(newPack))
         }
 
         override suspend fun deleteStickerFromPack(packIdentifier: String, stickerId: String): StickerResult<Unit> {

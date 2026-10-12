@@ -18,6 +18,7 @@ interface StickerPackRepository {
     suspend fun deletePack(identifier: String): StickerResult<Unit>
     suspend fun deletePacks(identifiers: List<String>): StickerResult<Unit>
     suspend fun renamePack(identifier: String, newName: String): StickerResult<Unit>
+    suspend fun mergePacks(sourcePackIdentifiers: List<String>, basePackName: String): StickerResult<List<StickerPack>>
     suspend fun deleteStickerFromPack(packIdentifier: String, stickerId: String): StickerResult<Unit>
     suspend fun addEmotesToPack(packIdentifier: String, emotes: List<SevenTvEmote>): StickerResult<Unit>
     suspend fun updateStickerEmojis(stickerId: String, emojis: List<String>): StickerResult<Unit>
