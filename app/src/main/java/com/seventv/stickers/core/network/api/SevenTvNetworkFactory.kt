@@ -52,4 +52,6 @@ object SevenTvNetworkFactory {
             .build()
             .create(SevenTvApi::class.java)
     }
+
+    fun createSevenTvApi(): SevenTvApi = createApi()
 }

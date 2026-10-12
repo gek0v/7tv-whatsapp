@@ -383,3 +383,6 @@ class StickerMediaPipeline(
         data object EncodingFailed : TryEncodeResult
     }
 }
+
+typealias DefaultStickerMediaPipeline = StickerMediaPipeline
+

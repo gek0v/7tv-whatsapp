@@ -13,6 +13,7 @@ import com.seventv.stickers.core.media.StickerMediaPipeline
 import com.seventv.stickers.core.media.model.AnimationFrame
 import com.seventv.stickers.core.media.animated.DefaultFrameExtractor
 import com.seventv.stickers.core.network.model.SevenTvEmote
+import com.seventv.stickers.data.local.AppDatabase
 import com.seventv.stickers.data.local.dao.StickerDao
 import com.seventv.stickers.data.local.dao.StickerPackDao
 import com.seventv.stickers.data.local.entity.PackWithStickers
@@ -38,6 +39,23 @@ class DefaultStickerPackRepository(
     private val splittingEngine: PackSplittingEngine = PackSplittingEngine,
     private val dispatcher: CoroutineDispatcher = Dispatchers.IO
 ) : StickerPackRepository {
+
+    constructor(
+        database: AppDatabase,
+        storageManager: StickerStorageManager,
+        mediaPipeline: StickerMediaPipeline,
+        sevenTvRepository: SevenTvRepository,
+        splittingEngine: PackSplittingEngine = PackSplittingEngine,
+        dispatcher: CoroutineDispatcher = Dispatchers.IO
+    ) : this(
+        stickerPackDao = database.stickerPackDao(),
+        stickerDao = database.stickerDao(),
+        storageManager = storageManager,
+        emoteBridge = EmoteStickerBridge(sevenTvRepository, mediaPipeline),
+        mediaPipeline = mediaPipeline,
+        splittingEngine = splittingEngine,
+        dispatcher = dispatcher
+    )
 
     override fun observeAllPacks(): Flow<List<StickerPack>> {
         return stickerPackDao.observeAllPacks()
