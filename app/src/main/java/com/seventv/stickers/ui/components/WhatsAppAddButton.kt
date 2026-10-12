@@ -59,18 +59,18 @@ fun WhatsAppAddButton(
         onClick = onClick,
         enabled = state.isClickable,
         modifier = modifier,
-        shape = RoundedCornerShape(24.dp),
+        shape = MaterialTheme.shapes.large,
         colors = ButtonDefaults.buttonColors(
-            containerColor = WhatsAppGreen,
-            contentColor = Color.White,
-            disabledContainerColor = WhatsAppGreen.copy(alpha = 0.6f),
-            disabledContentColor = Color.White.copy(alpha = 0.8f)
+            containerColor = MaterialTheme.colorScheme.tertiary,
+            contentColor = MaterialTheme.colorScheme.onTertiary,
+            disabledContainerColor = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.6f),
+            disabledContentColor = MaterialTheme.colorScheme.onTertiary.copy(alpha = 0.8f)
         )
     ) {
         if (state.showProgress) {
             CircularProgressIndicator(
                 modifier = Modifier.size(20.dp),
-                color = Color.White,
+                color = MaterialTheme.colorScheme.onTertiary,
                 strokeWidth = 2.dp
             )
         } else {
@@ -78,7 +78,7 @@ fun WhatsAppAddButton(
                 Icon(
                     imageVector = Icons.Default.Check,
                     contentDescription = null,
-                    tint = Color.White,
+                    tint = MaterialTheme.colorScheme.onTertiary,
                     modifier = Modifier.size(20.dp)
                 )
                 Spacer(modifier = Modifier.width(8.dp))
@@ -86,7 +86,7 @@ fun WhatsAppAddButton(
             Text(
                 text = state.buttonText,
                 style = MaterialTheme.typography.labelLarge,
-                color = Color.White
+                color = MaterialTheme.colorScheme.onTertiary
             )
         }
     }

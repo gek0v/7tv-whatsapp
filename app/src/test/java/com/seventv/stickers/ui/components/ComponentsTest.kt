@@ -226,5 +226,91 @@ class ComponentsTest {
         org.junit.Assert.assertNull(DraftBottomSheetDefaults.helperText(30))
         assertEquals("El límite máximo es de 30 stickers por paquete", DraftBottomSheetDefaults.helperText(31))
     }
+
+    @Test
+    fun packHeroCardDefaults_validatesSyncStatusAndLabels() {
+        // Sync status determination
+        assertEquals(
+            PackSyncStatus.SYNCED,
+            PackHeroCardDefaults.syncStatus(isWhitelisted = true, hasPendingChanges = false)
+        )
+        assertEquals(
+            PackSyncStatus.PENDING,
+            PackHeroCardDefaults.syncStatus(isWhitelisted = true, hasPendingChanges = true)
+        )
+        assertEquals(
+            PackSyncStatus.PENDING,
+            PackHeroCardDefaults.syncStatus(isWhitelisted = false, hasPendingChanges = true)
+        )
+        assertEquals(
+            PackSyncStatus.NOT_EXPORTED,
+            PackHeroCardDefaults.syncStatus(isWhitelisted = false, hasPendingChanges = false)
+        )
+
+        // Labels
+        assertEquals("Sincronizado", PackHeroCardDefaults.statusLabel(PackSyncStatus.SYNCED))
+        assertEquals("Pendiente", PackHeroCardDefaults.statusLabel(PackSyncStatus.PENDING))
+        assertEquals("No exportado", PackHeroCardDefaults.statusLabel(PackSyncStatus.NOT_EXPORTED))
+
+        // Emojis / Chips
+        assertEquals("🟢", PackHeroCardDefaults.statusEmoji(PackSyncStatus.SYNCED))
+        assertEquals("🟡", PackHeroCardDefaults.statusEmoji(PackSyncStatus.PENDING))
+        assertEquals("⚪", PackHeroCardDefaults.statusEmoji(PackSyncStatus.NOT_EXPORTED))
+
+        assertEquals("🟢 Sincronizado", PackHeroCardDefaults.statusChipText(PackSyncStatus.SYNCED))
+        assertEquals("🟡 Pendiente", PackHeroCardDefaults.statusChipText(PackSyncStatus.PENDING))
+        assertEquals("⚪ No exportado", PackHeroCardDefaults.statusChipText(PackSyncStatus.NOT_EXPORTED))
+
+        // Counter text format
+        assertEquals("5 / 30", PackHeroCardDefaults.counterText(5))
+        assertEquals("30 / 30", PackHeroCardDefaults.counterText(30))
+        assertEquals("12 / 20", PackHeroCardDefaults.counterText(12, maxCount = 20))
+    }
+
+    @Test
+    fun chatSimulatorDefaults_providesExactSpecTokensAndHelpers() {
+        val modes = ChatSimulatorMode.values()
+        assertTrue(modes.contains(ChatSimulatorMode.WHATSAPP_DARK))
+        assertTrue(modes.contains(ChatSimulatorMode.WHATSAPP_LIGHT))
+        assertTrue(modes.contains(ChatSimulatorMode.CHECKERBOARD))
+
+        // Exact spec tokens
+        assertEquals(androidx.compose.ui.graphics.Color(0xFF0B141A), ChatSimulatorDefaults.DarkChat)
+        assertEquals(androidx.compose.ui.graphics.Color(0xFF005C4B), ChatSimulatorDefaults.DarkBubble)
+        assertEquals(androidx.compose.ui.graphics.Color(0xFFEFEAE2), ChatSimulatorDefaults.LightChat)
+        assertEquals(androidx.compose.ui.graphics.Color(0xFFD9FDD3), ChatSimulatorDefaults.LightBubble)
+
+        // Background color helper
+        assertEquals(ChatSimulatorDefaults.DarkChat, ChatSimulatorDefaults.backgroundColor(ChatSimulatorMode.WHATSAPP_DARK))
+        assertEquals(ChatSimulatorDefaults.LightChat, ChatSimulatorDefaults.backgroundColor(ChatSimulatorMode.WHATSAPP_LIGHT))
+
+        // Bubble color helper
+        assertEquals(ChatSimulatorDefaults.DarkBubble, ChatSimulatorDefaults.bubbleColor(ChatSimulatorMode.WHATSAPP_DARK))
+        assertEquals(ChatSimulatorDefaults.LightBubble, ChatSimulatorDefaults.bubbleColor(ChatSimulatorMode.WHATSAPP_LIGHT))
+        assertEquals(androidx.compose.ui.graphics.Color.Transparent, ChatSimulatorDefaults.bubbleColor(ChatSimulatorMode.CHECKERBOARD))
+    }
+
+    @Test
+    fun stickerInspectorSheetDefaults_calculatesMetricsAndValidations() {
+        // Size limits: Static <= 100KB (102400 bytes), Animated <= 500KB (512000 bytes)
+        assertFalse(StickerInspectorSheetDefaults.isFileSizeExceeded(100 * 1024L, isAnimated = false))
+        assertTrue(StickerInspectorSheetDefaults.isFileSizeExceeded(100 * 1024L + 1, isAnimated = false))
+
+        assertFalse(StickerInspectorSheetDefaults.isFileSizeExceeded(500 * 1024L, isAnimated = true))
+        assertTrue(StickerInspectorSheetDefaults.isFileSizeExceeded(500 * 1024L + 1, isAnimated = true))
+
+        // Formatted file size string
+        assertEquals("50.0 KB", StickerInspectorSheetDefaults.formatFileSize(50 * 1024L))
+        assertEquals("500.0 KB", StickerInspectorSheetDefaults.formatFileSize(500 * 1024L))
+
+        // Emoji capacity limit: max 3 emojis
+        assertTrue(StickerInspectorSheetDefaults.canAddEmoji(emptyList()))
+        assertTrue(StickerInspectorSheetDefaults.canAddEmoji(listOf("👍", "🔥")))
+        assertFalse(StickerInspectorSheetDefaults.canAddEmoji(listOf("👍", "🔥", "❤️")))
+
+        // Metric string formats
+        assertEquals("2.5s", StickerInspectorSheetDefaults.formatDuration(2.5f))
+        assertEquals("30 FPS", StickerInspectorSheetDefaults.formatFps(30))
+    }
 }
 
