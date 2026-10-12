@@ -93,8 +93,13 @@ fun PackDetailScreen(
     ) { result ->
         val validationError = result.data?.getStringExtra("validation_error")
         if (!validationError.isNullOrBlank()) {
+            val userMsg = when {
+                validationError.contains("handleStickerPackPreviewResult", ignoreCase = true) ->
+                    "WhatsApp no pudo validar la vista previa del pack. Comprueba que tenga entre 3 y 30 stickers y formato homogéneo."
+                else -> "Error de WhatsApp: $validationError"
+            }
             coroutineScope.launch {
-                snackbarHostState.showSnackbar("Error de WhatsApp: $validationError")
+                snackbarHostState.showSnackbar(userMsg)
             }
         }
         viewModel.syncWhitelist(context, packId)

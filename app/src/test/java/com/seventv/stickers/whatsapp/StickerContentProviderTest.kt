@@ -221,6 +221,11 @@ class StickerContentProviderTest {
         runBlocking {
             db.stickerPackDao().insertPackWithStickers(pack, stickers)
         }
+        val packDir = storageManager.getPackDirectory("pack-stickers")
+        packDir.mkdirs()
+        File(packDir, "sticker_stk-1.webp").writeBytes(byteArrayOf(1, 2, 3))
+        File(packDir, "sticker_stk-2.webp").writeBytes(byteArrayOf(1, 2, 3))
+        File(packDir, "sticker_stk-3.webp").writeBytes(byteArrayOf(1, 2, 3))
 
         val uri = Uri.parse("content://$authority/stickers/pack-stickers")
         val cursor = provider.query(uri, null, null, null, null)
@@ -404,5 +409,56 @@ class StickerContentProviderTest {
         val cursor = freshProvider.query(uri, null, null, null, null)
         assertNotNull(cursor)
         cursor?.close()
+    }
+
+    @Test
+    fun queryStickers_skipsMissingStickerFilesOnDisk() {
+        val pack = StickerPackEntity(
+            identifier = "pack-missing",
+            name = "Missing Files Pack",
+            publisher = "7TV",
+            trayImageRelativePath = "sticker_packs/pack-missing/tray_icon.png",
+            isAnimated = false,
+            createdAt = 1000L
+        )
+        val stickers = listOf(
+            StickerEntity(
+                id = "stk-exist",
+                packIdentifier = "pack-missing",
+                emoteId = "e1",
+                emoteName = "emote1",
+                relativeFilePath = "sticker_packs/pack-missing/sticker_stk-exist.webp",
+                emojis = listOf("😀"),
+                fileLength = 1000L,
+                sortOrder = 0
+            ),
+            StickerEntity(
+                id = "stk-ghost",
+                packIdentifier = "pack-missing",
+                emoteId = "e2",
+                emoteName = "emote2",
+                relativeFilePath = "sticker_packs/pack-missing/sticker_stk-ghost.webp",
+                emojis = listOf("👻"),
+                fileLength = 2000L,
+                sortOrder = 1
+            )
+        )
+        runBlocking {
+            db.stickerPackDao().insertPackWithStickers(pack, stickers)
+        }
+        val packDir = storageManager.getPackDirectory("pack-missing")
+        packDir.mkdirs()
+        // Only write stk-exist to disk; stk-ghost is missing
+        File(packDir, "sticker_stk-exist.webp").writeBytes(byteArrayOf(1, 2, 3))
+
+        val uri = Uri.parse("content://$authority/stickers/pack-missing")
+        val cursor = provider.query(uri, null, null, null, null)
+
+        assertNotNull(cursor)
+        cursor!!.use { c ->
+            assertEquals("Only the existing file on disk should be returned", 1, c.count)
+            assertTrue(c.moveToNext())
+            assertEquals("sticker_stk-exist.webp", c.getString(c.getColumnIndexOrThrow(WhatsAppConstants.STICKER_FILE_NAME_IN_QUERY)))
+        }
     }
 }

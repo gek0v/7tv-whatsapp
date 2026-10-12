@@ -339,6 +339,10 @@ class StickerMediaPipeline(
                     }
                 }
                 val clonedBitmap = firstFrame.bitmap.copy(Bitmap.Config.ARGB_8888, true) ?: firstFrame.bitmap
+                if (clonedBitmap.width > 0 && clonedBitmap.height > 0) {
+                    val p = clonedBitmap.getPixel(0, 0)
+                    clonedBitmap.setPixel(0, 0, p xor 0x00000001)
+                }
                 val failSafeFrames = listOf(
                     firstFrame.copy(durationMs = 500, timestampMs = 500),
                     AnimationFrame(bitmap = clonedBitmap, durationMs = 500, timestampMs = 1000)
@@ -388,6 +392,12 @@ class StickerMediaPipeline(
         if (frames.size == 1) {
             val single = frames.first()
             val clonedBitmap = single.bitmap.copy(Bitmap.Config.ARGB_8888, true) ?: single.bitmap
+            // To prevent libwebp from collapsing identical frames into a single frame,
+            // subtly differentiate a single pixel in clonedBitmap:
+            if (clonedBitmap.width > 0 && clonedBitmap.height > 0) {
+                val p = clonedBitmap.getPixel(0, 0)
+                clonedBitmap.setPixel(0, 0, p xor 0x00000001)
+            }
             return listOf(
                 single.copy(durationMs = 500, timestampMs = 500),
                 AnimationFrame(bitmap = clonedBitmap, durationMs = 500, timestampMs = 1000)
@@ -408,9 +418,13 @@ class StickerMediaPipeline(
             }
 
             val bitmapsArray = normalizedBitmaps.toTypedArray()
-            val timestampsArray = frames.map { it.timestampMs }.toIntArray()
-            val totalDurationMs = frames.lastOrNull()?.timestampMs?.takeIf { it > 0 }
-                ?: frames.sumOf { it.durationMs }
+            val timestampsArray = IntArray(frames.size)
+            var accum = 0
+            for (idx in frames.indices) {
+                accum += frames[idx].durationMs.coerceAtLeast(10)
+                timestampsArray[idx] = accum
+            }
+            val totalDurationMs = accum
             var lastExceededSize = 0L
 
             val qualitySteps = customQualitySteps ?: when {

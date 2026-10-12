@@ -103,8 +103,8 @@ class StickerContentProvider : ContentProvider() {
                     c.addRow(
                         arrayOf(
                             pack.pack.identifier,
-                            pack.pack.name,
-                            pack.pack.publisher,
+                            pack.pack.name.take(128).ifBlank { "Sticker Pack" },
+                            pack.pack.publisher.take(128).ifBlank { "7TV" },
                             "tray_icon.png",
                             null,
                             null,
@@ -128,8 +128,8 @@ class StickerContentProvider : ContentProvider() {
                     c.addRow(
                         arrayOf(
                             pack.pack.identifier,
-                            pack.pack.name,
-                            pack.pack.publisher,
+                            pack.pack.name.take(128).ifBlank { "Sticker Pack" },
+                            pack.pack.publisher.take(128).ifBlank { "7TV" },
                             "tray_icon.png",
                             null,
                             null,
@@ -150,8 +150,14 @@ class StickerContentProvider : ContentProvider() {
                 val packId = uri.lastPathSegment ?: ""
                 val pack = database.stickerPackDao().getPackByIdentifierDirect(packId)
                 if (pack != null) {
+                    val packDir = storageManager.getPackDirectory(packId)
                     val sortedStickers = pack.stickers.sortedBy { it.sortOrder }
                     for (sticker in sortedStickers) {
+                        val fileName = File(sticker.relativeFilePath).name
+                        val stickerFile = File(packDir, fileName)
+                        if (!stickerFile.exists() || stickerFile.length() <= 0L) {
+                            continue
+                        }
                         val validEmojis = sticker.emojis.filter { it.isNotBlank() }
                         val emojisString = if (validEmojis.isNotEmpty()) {
                             validEmojis.take(3).joinToString(",")
@@ -162,7 +168,7 @@ class StickerContentProvider : ContentProvider() {
                         val a11yText = sticker.emoteName.take(maxA11y)
                         c.addRow(
                             arrayOf(
-                                File(sticker.relativeFilePath).name,
+                                fileName,
                                 emojisString,
                                 a11yText
                             )
@@ -187,7 +193,7 @@ class StickerContentProvider : ContentProvider() {
         ensureInitialized()
         val file = resolveAssetFile(uri, mode)
         val pfd = ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
-        return AssetFileDescriptor(pfd, 0, AssetFileDescriptor.UNKNOWN_LENGTH)
+        return AssetFileDescriptor(pfd, 0, file.length())
     }
 
     private fun resolveAssetFile(uri: Uri, mode: String): File {
@@ -212,7 +218,8 @@ class StickerContentProvider : ContentProvider() {
         if (!file.exists()) {
             if (fileName == "tray_icon.png") {
                 val legacyWebp = File(packDir, "tray_icon.webp")
-                if (legacyWebp.exists()) {
+                var trayGenerated = false
+                if (legacyWebp.exists() && legacyWebp.length() > 0) {
                     val bitmap = android.graphics.BitmapFactory.decodeFile(legacyWebp.absolutePath)
                     if (bitmap != null) {
                         val scaled = if (bitmap.width != 96 || bitmap.height != 96) {
@@ -223,6 +230,25 @@ class StickerContentProvider : ContentProvider() {
                         }
                         if (scaled != bitmap) scaled.recycle()
                         bitmap.recycle()
+                        trayGenerated = file.exists() && file.length() > 0
+                    }
+                }
+                if (!trayGenerated) {
+                    val stickerFiles = packDir.listFiles { _, name -> name.startsWith("sticker_") && name.endsWith(".webp") }
+                    val firstSticker = stickerFiles?.firstOrNull { it.length() > 0 }
+                    if (firstSticker != null) {
+                        val extractor = com.seventv.stickers.core.media.animated.DefaultFrameExtractor()
+                        val framesResult = extractor.extractFrames(firstSticker.readBytes())
+                        if (framesResult is com.seventv.stickers.core.common.result.StickerResult.Success && framesResult.data.isNotEmpty()) {
+                            val bmp = framesResult.data.first().bitmap
+                            val normalizer = com.seventv.stickers.core.media.normalizer.CanvasStickerNormalizer()
+                            val trayBmp = normalizer.normalizeToTrayIcon(bmp)
+                            java.io.FileOutputStream(file).use { out ->
+                                trayBmp.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, out)
+                            }
+                            if (trayBmp !== bmp) trayBmp.recycle()
+                            bmp.recycle()
+                        }
                     }
                 }
             }

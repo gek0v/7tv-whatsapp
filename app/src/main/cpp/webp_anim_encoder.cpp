@@ -157,11 +157,12 @@ Java_com_seventv_stickers_core_media_animated_NativeWebPAnimEncoder_encode(
             break;
         }
 
-        int frame_timestamp = timestamps[i];
-        if (i > 0 && frame_timestamp <= prev_timestamp) {
-            frame_timestamp = prev_timestamp + 100;
-        } else if (i == 0 && frame_timestamp < 0) {
+        int frame_timestamp;
+        if (i == 0) {
             frame_timestamp = 0;
+        } else {
+            int desired = timestamps[i] - timestamps[0];
+            frame_timestamp = std::max(desired, prev_timestamp + 10);
         }
 
         const int add_ok = WebPAnimEncoderAdd(enc, &pic, frame_timestamp, &config);
@@ -186,11 +187,12 @@ Java_com_seventv_stickers_core_media_animated_NativeWebPAnimEncoder_encode(
     }
 
     // Finalize animation sequence: mark end timestamp with frame = nullptr
+    // WhatsApp strictly requires every frame duration to be >= 8 ms. We enforce >= 10 ms.
     int last_duration = (num_frames > 1 && second_last_timestamp >= 0)
         ? (last_timestamp - second_last_timestamp)
         : 100;
-    if (last_duration <= 0) {
-        last_duration = 100;
+    if (last_duration < 10) {
+        last_duration = 10;
     }
     const int end_time = last_timestamp + last_duration;
 
@@ -342,7 +344,7 @@ Java_com_seventv_stickers_core_media_animated_NativeWebPAnimDecoder_decode(
         }
 
         int duration = (timestamp > prev_timestamp) ? (timestamp - prev_timestamp) : 100;
-        if (duration < 8) duration = 8;
+        if (duration < 10) duration = 10;
         durations_ptr[frame_index] = duration;
         timestamps_ptr[frame_index] = timestamp;
         prev_timestamp = timestamp;

@@ -567,6 +567,13 @@ class DefaultStickerPackRepository(
             val pack = stickerPackDao.getPackByIdentifier(packIdentifier)
                 ?: return@withContext StickerResult.Failure(StickerError.PackNotFound(packIdentifier))
 
+            val packIsAnimated = pack.pack.isAnimated
+            if (emotes.any { it.isAnimated != packIsAnimated }) {
+                return@withContext StickerResult.Failure(
+                    StickerError.UnsupportedFormat("No puedes mezclar stickers animados y estáticos en el mismo pack")
+                )
+            }
+
             val currentCount = pack.stickers.size
             if (currentCount + emotes.size > 30) {
                 return@withContext StickerResult.Failure(StickerError.ExceedsPackLimit(currentCount + emotes.size, 30))
@@ -581,7 +588,7 @@ class DefaultStickerPackRepository(
                     val processResult = emoteBridge.convertEmoteToSticker(
                         emote = emote,
                         outputDir = stagingDir,
-                        allowStaticFallback = !pack.pack.isAnimated
+                        allowStaticFallback = false
                     )
 
                     val processedSticker = when (processResult) {

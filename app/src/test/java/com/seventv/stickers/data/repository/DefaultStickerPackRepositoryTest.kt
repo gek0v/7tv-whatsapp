@@ -764,6 +764,43 @@ class DefaultStickerPackRepositoryTest {
         assertNull(packDao.getPackByIdentifier("dup-pack-2"))
     }
 
+    @Test
+    fun addEmotesToPackRejectsMixedAnimatedAndStaticEmotes() = runTest(testDispatcher) {
+        val staticPackEntity = StickerPackEntity(
+            identifier = "static-pack",
+            name = "Static Pack",
+            publisher = "Tester",
+            trayImageRelativePath = "tray.png",
+            isAnimated = false,
+            isWhitelisted = false,
+            createdAt = 1000L
+        )
+        val animPackEntity = StickerPackEntity(
+            identifier = "anim-pack",
+            name = "Anim Pack",
+            publisher = "Tester",
+            trayImageRelativePath = "tray.png",
+            isAnimated = true,
+            isWhitelisted = false,
+            createdAt = 1000L
+        )
+        packDao.insertPackWithStickers(staticPackEntity, emptyList())
+        packDao.insertPackWithStickers(animPackEntity, emptyList())
+
+        val animEmote = createSampleEmote("anim_1", "AnimEmote", isAnimated = true)
+        val staticEmote = createSampleEmote("static_1", "StaticEmote", isAnimated = false)
+
+        // Try adding animated emote to static pack
+        val result1 = repository.addEmotesToPack("static-pack", listOf(animEmote))
+        assertTrue("Should reject animated emote in static pack", result1 is StickerResult.Failure)
+        assertTrue("Error should be UnsupportedFormat", (result1 as StickerResult.Failure).error is StickerError.UnsupportedFormat)
+
+        // Try adding static emote to animated pack
+        val result2 = repository.addEmotesToPack("anim-pack", listOf(staticEmote))
+        assertTrue("Should reject static emote in animated pack", result2 is StickerResult.Failure)
+        assertTrue("Error should be UnsupportedFormat", (result2 as StickerResult.Failure).error is StickerError.UnsupportedFormat)
+    }
+
     private class FakeSevenTvRepository : SevenTvRepository {
         var downloadHandler: (suspend (SevenTvEmote) -> StickerResult<DownloadedEmoteAsset>)? = null
 

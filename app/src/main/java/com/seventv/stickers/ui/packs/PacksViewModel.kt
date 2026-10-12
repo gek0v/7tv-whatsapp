@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.io.File
 
 class PacksViewModel(
     private val stickerPackRepository: StickerPackRepository,
@@ -84,6 +85,20 @@ class PacksViewModel(
         }
         if (pack.stickers.size > 30) {
             _uiState.update { it.copy(userFeedbackMessage = "WhatsApp permite un máximo de 30 stickers por paquete.") }
+            return
+        }
+
+        val maxStickerBytes = if (pack.isAnimated) 500 * 1024L else 100 * 1024L
+        val oversized = pack.stickers.find {
+            val f = File(it.filePath)
+            f.exists() && f.length() > maxStickerBytes
+        }
+        if (oversized != null) {
+            val sizeKb = File(oversized.filePath).length() / 1024
+            val limitKb = maxStickerBytes / 1024
+            _uiState.update {
+                it.copy(userFeedbackMessage = "El sticker '${oversized.emoteName}' supera el límite de WhatsApp (${sizeKb} KB > ${limitKb} KB).")
+            }
             return
         }
 

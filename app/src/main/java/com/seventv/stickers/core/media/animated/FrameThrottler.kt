@@ -43,14 +43,15 @@ class FrameThrottler {
         var currentTimestamp = 0
 
         for (frame in frames) {
-            if (currentTimestamp >= maxDurationMs) {
+            val frameDur = frame.durationMs.coerceAtLeast(10)
+            val remaining = maxDurationMs - currentTimestamp
+            if (remaining < 10) {
                 dropped.add(frame)
                 continue
             }
-            val remaining = maxDurationMs - currentTimestamp
-            if (frame.durationMs <= remaining) {
-                currentTimestamp += frame.durationMs
-                result.add(frame.copy(timestampMs = currentTimestamp))
+            if (frameDur <= remaining) {
+                currentTimestamp += frameDur
+                result.add(frame.copy(durationMs = frameDur, timestampMs = currentTimestamp))
             } else {
                 val clampedDuration = remaining
                 currentTimestamp += clampedDuration
@@ -96,7 +97,7 @@ class FrameThrottler {
 
         for (chunk in chunks) {
             val kept = chunk.first()
-            val totalChunkDuration = chunk.sumOf { it.durationMs }
+            val totalChunkDuration = chunk.sumOf { it.durationMs }.coerceAtLeast(10)
             currentTimestamp += totalChunkDuration
             result.add(kept.copy(durationMs = totalChunkDuration, timestampMs = currentTimestamp))
             for (i in 1 until chunk.size) {
