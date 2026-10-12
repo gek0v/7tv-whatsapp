@@ -23,6 +23,7 @@ import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -72,6 +73,7 @@ fun DraftBottomSheet(
     onPackNameChanged: (String) -> Unit,
     onRemoveEmote: (SevenTvEmote) -> Unit,
     onCreatePack: () -> Unit,
+    onAddToExistingPack: () -> Unit = {},
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -252,6 +254,22 @@ fun DraftBottomSheet(
             ) {
                 Text(
                     text = "Crear Paquete",
+                    style = MaterialTheme.typography.labelLarge
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            OutlinedButton(
+                onClick = onAddToExistingPack,
+                enabled = draftEmotes.isNotEmpty(),
+                shape = MaterialTheme.shapes.large,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp)
+            ) {
+                Text(
+                    text = "Añadir a un pack existente...",
                     style = MaterialTheme.typography.labelLarge
                 )
             }

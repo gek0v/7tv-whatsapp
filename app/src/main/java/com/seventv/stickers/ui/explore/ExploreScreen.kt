@@ -39,6 +39,7 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.seventv.stickers.ui.components.AddToExistingPackDialog
 import com.seventv.stickers.ui.components.DockedDraftPill
 import com.seventv.stickers.ui.components.DraftBottomSheet
 import com.seventv.stickers.ui.components.EmoteCard
@@ -79,6 +80,27 @@ fun ExploreScreen(
                 viewModel.onDismissPackCreationState()
             }
             else -> Unit
+        }
+    }
+
+    LaunchedEffect(uiState.addToPackSuccessMessage, uiState.addToPackErrorMessage) {
+        uiState.addToPackSuccessMessage?.let { msg ->
+            val result = snackbarHostState.showSnackbar(
+                message = msg,
+                actionLabel = "Ver packs",
+                duration = SnackbarDuration.Long
+            )
+            if (result == SnackbarResult.ActionPerformed) {
+                onNavigateToPacks()
+            }
+            viewModel.onClearAddToPackMessages()
+        }
+        uiState.addToPackErrorMessage?.let { err ->
+            snackbarHostState.showSnackbar(
+                message = err,
+                duration = SnackbarDuration.Short
+            )
+            viewModel.onClearAddToPackMessages()
         }
     }
 
@@ -258,7 +280,10 @@ fun ExploreScreen(
                                         EmoteCard(
                                             emote = emote,
                                             isInDraft = isInDraft,
-                                            onToggleDraft = { viewModel.onToggleDraftEmote(emote) }
+                                            onToggleDraft = { viewModel.onToggleDraftEmote(emote) },
+                                            onClick = {
+                                                viewModel.onOpenAddToExistingPackDialog(listOf(emote))
+                                            }
                                         )
                                     }
                                 }
@@ -288,7 +313,23 @@ fun ExploreScreen(
                         viewModel.onCreatePackFromDraft(packName)
                         showDraftSheet = false
                     },
+                    onAddToExistingPack = {
+                        showDraftSheet = false
+                        viewModel.onOpenAddToExistingPackDialog(uiState.draftEmotes)
+                    },
                     onDismiss = { showDraftSheet = false }
+                )
+            }
+
+            // Add to Existing Pack Dialog
+            if (uiState.isAddToExistingPackDialogOpen) {
+                AddToExistingPackDialog(
+                    packs = uiState.existingPacks,
+                    emotesToAdd = uiState.emotesToAddToPack,
+                    onSelectPack = { pack ->
+                        viewModel.onAddEmotesToPack(pack.identifier)
+                    },
+                    onDismiss = viewModel::onDismissAddToExistingPackDialog
                 )
             }
 
@@ -322,6 +363,45 @@ fun ExploreScreen(
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Text(
                                     text = "Convirtiendo emotes a WebP para WhatsApp",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Adding to Pack Progress Overlay
+            if (uiState.isAddingToPack) {
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.scrim.copy(alpha = 0.6f)
+                ) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Surface(
+                            shape = MaterialTheme.shapes.extraLarge,
+                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            tonalElevation = 6.dp,
+                            modifier = Modifier.padding(32.dp)
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(24.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                                Spacer(modifier = Modifier.height(16.dp))
+                                Text(
+                                    text = "Añadiendo stickers al paquete...",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "Convirtiendo y optimizando WebP para WhatsApp",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )

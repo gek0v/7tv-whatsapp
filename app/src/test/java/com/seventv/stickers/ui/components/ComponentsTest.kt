@@ -4,6 +4,8 @@ import android.content.Context
 import android.os.Build
 import coil.decode.GifDecoder
 import coil.decode.ImageDecoderDecoder
+import com.seventv.stickers.core.domain.model.PackSticker
+import com.seventv.stickers.core.domain.model.StickerPack
 import com.seventv.stickers.core.network.model.SevenTvEmote
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -311,6 +313,104 @@ class ComponentsTest {
         // Metric string formats
         assertEquals("2.5s", StickerInspectorSheetDefaults.formatDuration(2.5f))
         assertEquals("30 FPS", StickerInspectorSheetDefaults.formatFps(30))
+    }
+
+    @Test
+    fun addToExistingPackDialogDefaults_validatesCompatibilityAndReasons() {
+        val staticEmote1 = SevenTvEmote(
+            id = "1",
+            name = "kekw",
+            isAnimated = false,
+            isZeroWidth = false,
+            isNsfw = false,
+            bestAssetUrl = "",
+            availableScales = emptyList()
+        )
+        val staticEmote2 = SevenTvEmote(
+            id = "2",
+            name = "lul",
+            isAnimated = false,
+            isZeroWidth = false,
+            isNsfw = false,
+            bestAssetUrl = "",
+            availableScales = emptyList()
+        )
+        val animEmote = SevenTvEmote(
+            id = "3",
+            name = "catJAM",
+            isAnimated = true,
+            isZeroWidth = false,
+            isNsfw = false,
+            bestAssetUrl = "",
+            availableScales = emptyList()
+        )
+
+        val staticPack = StickerPack(
+            identifier = "static_1",
+            name = "Static Pack",
+            publisher = "7TV",
+            trayImagePath = "tray.webp",
+            isAnimated = false,
+            stickers = List(25) {
+                PackSticker("s_$it", "static_1", "e_$it", "name_$it", "path_$it", emptyList(), 1000L, it)
+            }
+        )
+
+        val animPack = StickerPack(
+            identifier = "anim_1",
+            name = "Anim Pack",
+            publisher = "7TV",
+            trayImagePath = "tray.webp",
+            isAnimated = true,
+            stickers = List(29) {
+                PackSticker("a_$it", "anim_1", "e_$it", "name_$it", "path_$it", emptyList(), 1000L, it)
+            }
+        )
+
+        // 1. Static emotes to static pack with room (25 + 2 = 27 <= 30) -> compatible
+        assertTrue(AddToExistingPackDialogDefaults.isPackCompatible(staticPack, listOf(staticEmote1, staticEmote2)))
+        org.junit.Assert.assertNull(AddToExistingPackDialogDefaults.incompatibilityReason(staticPack, listOf(staticEmote1, staticEmote2)))
+
+        // 2. Animated emote to static pack -> incompatible format
+        assertFalse(AddToExistingPackDialogDefaults.isPackCompatible(staticPack, listOf(animEmote)))
+        assertEquals(
+            "Incompatible (el pack es estático)",
+            AddToExistingPackDialogDefaults.incompatibilityReason(staticPack, listOf(animEmote))
+        )
+
+        // 3. Static emote to animated pack -> incompatible format
+        assertFalse(AddToExistingPackDialogDefaults.isPackCompatible(animPack, listOf(staticEmote1)))
+        assertEquals(
+            "Incompatible (el pack es animado)",
+            AddToExistingPackDialogDefaults.incompatibilityReason(animPack, listOf(staticEmote1))
+        )
+
+        // 4. Mixed emotes (both animated & static) -> incompatible
+        assertFalse(AddToExistingPackDialogDefaults.isPackCompatible(staticPack, listOf(staticEmote1, animEmote)))
+        assertEquals(
+            "Selección mixta: contiene emotes animados y estáticos",
+            AddToExistingPackDialogDefaults.incompatibilityReason(staticPack, listOf(staticEmote1, animEmote))
+        )
+
+        // 5. Exceeding capacity: animPack has 29 stickers, adding 2 animated emotes -> 31 > 30
+        val animEmote2 = SevenTvEmote(
+            id = "4",
+            name = "pepeD",
+            isAnimated = true,
+            isZeroWidth = false,
+            isNsfw = false,
+            bestAssetUrl = "",
+            availableScales = emptyList()
+        )
+        assertFalse(AddToExistingPackDialogDefaults.isPackCompatible(animPack, listOf(animEmote, animEmote2)))
+        assertEquals(
+            "Supera el límite de 30 (quedan 1 espacios)",
+            AddToExistingPackDialogDefaults.incompatibilityReason(animPack, listOf(animEmote, animEmote2))
+        )
+
+        // 6. Empty emotes list -> not compatible
+        assertFalse(AddToExistingPackDialogDefaults.isPackCompatible(staticPack, emptyList()))
+        org.junit.Assert.assertNull(AddToExistingPackDialogDefaults.incompatibilityReason(staticPack, emptyList()))
     }
 }
 

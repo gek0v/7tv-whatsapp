@@ -31,7 +31,13 @@ data class ExploreUiState(
     val draftEmotes: List<SevenTvEmote> = emptyList(),
     val packCreationState: PackCreationState = PackCreationState.Idle,
     val isSavePackDialogOpen: Boolean = false,
-    val draftPackName: String = ""
+    val draftPackName: String = "",
+    val existingPacks: List<StickerPack> = emptyList(),
+    val isAddToExistingPackDialogOpen: Boolean = false,
+    val emotesToAddToPack: List<SevenTvEmote> = emptyList(),
+    val isAddingToPack: Boolean = false,
+    val addToPackSuccessMessage: String? = null,
+    val addToPackErrorMessage: String? = null
 ) {
     val filteredEmotes: List<SevenTvEmote>
         get() {

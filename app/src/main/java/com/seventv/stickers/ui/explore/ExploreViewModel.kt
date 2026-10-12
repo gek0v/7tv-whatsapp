@@ -29,6 +29,14 @@ class ExploreViewModel(
 
     private var searchJob: Job? = null
 
+    init {
+        viewModelScope.launch {
+            stickerPackRepository.observeAllPacks().collect { packs ->
+                _uiState.update { it.copy(existingPacks = packs) }
+            }
+        }
+    }
+
     companion object {
         const val SEARCH_DEBOUNCE_MS = 400L
         const val MAX_DRAFT_STICKERS = 30
@@ -207,6 +215,90 @@ class ExploreViewModel(
         _uiState.update { it.copy(packCreationState = PackCreationState.Idle) }
     }
 
+    /**
+     * Opens the dialog to add emotes to an existing pack.
+     * Defaults to the current active draft emotes if not specified.
+     */
+    fun onOpenAddToExistingPackDialog(emotes: List<SevenTvEmote> = _uiState.value.draftEmotes) {
+        if (emotes.isEmpty()) return
+        _uiState.update {
+            it.copy(
+                isAddToExistingPackDialogOpen = true,
+                emotesToAddToPack = emotes
+            )
+        }
+    }
+
+    /**
+     * Dismisses the dialog to add emotes to an existing pack.
+     */
+    fun onDismissAddToExistingPackDialog() {
+        _uiState.update {
+            it.copy(
+                isAddToExistingPackDialogOpen = false,
+                emotesToAddToPack = emptyList()
+            )
+        }
+    }
+
+    /**
+     * Adds the selected emotes ([ExploreUiState.emotesToAddToPack]) to the specified existing pack.
+     * On success, removes any successfully added emotes from the active draft, closes dialog,
+     * and sets a success message.
+     */
+    fun onAddEmotesToPack(packIdentifier: String) {
+        val emotesToAdd = _uiState.value.emotesToAddToPack
+        if (emotesToAdd.isEmpty()) return
+
+        val targetPack = _uiState.value.existingPacks.find { it.identifier == packIdentifier }
+        val packName = targetPack?.name ?: "Pack"
+
+        _uiState.update {
+            it.copy(
+                isAddingToPack = true,
+                isAddToExistingPackDialogOpen = false
+            )
+        }
+
+        viewModelScope.launch {
+            when (val result = stickerPackRepository.addEmotesToPack(packIdentifier, emotesToAdd)) {
+                is StickerResult.Success -> {
+                    val addedIds = emotesToAdd.map { it.id }.toSet()
+                    _uiState.update { state ->
+                        state.copy(
+                            isAddingToPack = false,
+                            draftEmotes = state.draftEmotes.filterNot { it.id in addedIds },
+                            emotesToAddToPack = emptyList(),
+                            addToPackSuccessMessage = "¡${emotesToAdd.size} sticker${if (emotesToAdd.size > 1) "s" else ""} añadido${if (emotesToAdd.size > 1) "s" else ""} a \"$packName\"!",
+                            addToPackErrorMessage = null
+                        )
+                    }
+                }
+                is StickerResult.Failure -> {
+                    _uiState.update { state ->
+                        state.copy(
+                            isAddingToPack = false,
+                            addToPackErrorMessage = result.error.toUserFriendlyMessage(),
+                            addToPackSuccessMessage = null
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Clears snackbar / notification messages related to adding stickers to packs.
+     */
+    fun onClearAddToPackMessages() {
+        _uiState.update {
+            it.copy(
+                addToPackSuccessMessage = null,
+                addToPackErrorMessage = null
+            )
+        }
+    }
+
     private fun StickerError.toSearchErrorMessage(): String = when (this) {
         is StickerError.NetworkError -> message
         StickerError.RateLimited -> "Límite de peticiones de 7TV alcanzado"
@@ -222,7 +314,7 @@ class ExploreViewModel(
         is StickerError.NativeEncodingFailed -> "Fallo en la codificación WebP: $details"
         is StickerError.ExceedsSizeLimit -> "El sticker supera el tamaño máximo permitido para WhatsApp"
         StickerError.CorruptedSourceData -> "Datos de imagen no válidos o dañados"
-        is StickerError.UnsupportedFormat -> "Formato no compatible: $mimeType"
+        is StickerError.UnsupportedFormat -> if (mimeType.contains(" ")) mimeType else "Formato no compatible: $mimeType"
         StickerError.ResourceNotFound -> "No se encontró el emote requerido"
         StickerError.RateLimited -> "Límite de peticiones de 7TV alcanzado"
         is StickerError.PackNotFound -> "Paquete no encontrado: $identifier"

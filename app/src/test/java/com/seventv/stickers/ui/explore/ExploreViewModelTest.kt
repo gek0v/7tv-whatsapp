@@ -12,6 +12,7 @@ import com.seventv.stickers.data.repository.StickerPackRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
@@ -429,11 +430,123 @@ class ExploreViewModelTest {
             StickerResult.Failure(StickerError.ResourceNotFound)
     }
 
+    @Test
+    fun existingPacksIsObservedFromRepository() = runTest(testDispatcher) {
+        val pack1 = StickerPack(
+            identifier = "pack_1",
+            name = "Pack 1",
+            publisher = "7TV",
+            trayImagePath = "tray1.png",
+            isAnimated = false
+        )
+        val pack2 = StickerPack(
+            identifier = "pack_2",
+            name = "Pack 2",
+            publisher = "7TV",
+            trayImagePath = "tray2.png",
+            isAnimated = true
+        )
+
+        fakeStickerPackRepository.packsFlow.value = listOf(pack1, pack2)
+        runCurrent()
+
+        assertEquals(listOf(pack1, pack2), viewModel.uiState.value.existingPacks)
+    }
+
+    @Test
+    fun openAndDismissAddToExistingPackDialog() {
+        val emote = createSampleEmote("1", "pepe")
+
+        // Open with explicit emotes
+        viewModel.onOpenAddToExistingPackDialog(listOf(emote))
+        assertTrue(viewModel.uiState.value.isAddToExistingPackDialogOpen)
+        assertEquals(listOf(emote), viewModel.uiState.value.emotesToAddToPack)
+
+        // Dismiss dialog
+        viewModel.onDismissAddToExistingPackDialog()
+        assertFalse(viewModel.uiState.value.isAddToExistingPackDialogOpen)
+        assertTrue(viewModel.uiState.value.emotesToAddToPack.isEmpty())
+
+        // Default open uses draft emotes if non-empty
+        viewModel.onToggleDraftEmote(emote)
+        viewModel.onOpenAddToExistingPackDialog()
+        assertTrue(viewModel.uiState.value.isAddToExistingPackDialogOpen)
+        assertEquals(listOf(emote), viewModel.uiState.value.emotesToAddToPack)
+
+        // Open with empty list does nothing
+        viewModel.onDismissAddToExistingPackDialog()
+        viewModel.onOpenAddToExistingPackDialog(emptyList())
+        assertFalse(viewModel.uiState.value.isAddToExistingPackDialogOpen)
+    }
+
+    @Test
+    fun addEmotesToPackSuccessRemovesEmotesFromDraftAndSetsSuccessMessage() = runTest(testDispatcher) {
+        val pack = StickerPack(
+            identifier = "pack_target",
+            name = "Target Pack",
+            publisher = "7TV",
+            trayImagePath = "tray.png",
+            isAnimated = false
+        )
+        fakeStickerPackRepository.packsFlow.value = listOf(pack)
+        runCurrent()
+
+        val emote1 = createSampleEmote("1", "emote1")
+        val emote2 = createSampleEmote("2", "emote2")
+        val emote3 = createSampleEmote("3", "emote3")
+        viewModel.onToggleDraftEmote(emote1)
+        viewModel.onToggleDraftEmote(emote2)
+        viewModel.onToggleDraftEmote(emote3)
+
+        fakeStickerPackRepository.addEmotesToPackHandler = { packId, emotes ->
+            assertEquals("pack_target", packId)
+            assertEquals(listOf(emote1, emote2), emotes)
+            StickerResult.Success(Unit)
+        }
+
+        viewModel.onOpenAddToExistingPackDialog(listOf(emote1, emote2))
+        viewModel.onAddEmotesToPack("pack_target")
+        advanceUntilIdle()
+
+        assertEquals(1, fakeStickerPackRepository.addEmotesCallCount)
+        assertFalse(viewModel.uiState.value.isAddToExistingPackDialogOpen)
+        assertFalse(viewModel.uiState.value.isAddingToPack)
+        assertEquals(listOf(emote3), viewModel.uiState.value.draftEmotes)
+        assertEquals("¡2 stickers añadidos a \"Target Pack\"!", viewModel.uiState.value.addToPackSuccessMessage)
+        org.junit.Assert.assertNull(viewModel.uiState.value.addToPackErrorMessage)
+
+        viewModel.onClearAddToPackMessages()
+        org.junit.Assert.assertNull(viewModel.uiState.value.addToPackSuccessMessage)
+    }
+
+    @Test
+    fun addEmotesToPackFailureSetsErrorMessageAndKeepsDraft() = runTest(testDispatcher) {
+        val emote1 = createSampleEmote("1", "emote1")
+        viewModel.onToggleDraftEmote(emote1)
+
+        fakeStickerPackRepository.addEmotesToPackHandler = { _, _ ->
+            StickerResult.Failure(StickerError.ExceedsPackLimit(31, 30))
+        }
+
+        viewModel.onOpenAddToExistingPackDialog(listOf(emote1))
+        viewModel.onAddEmotesToPack("pack_full")
+        advanceUntilIdle()
+
+        assertFalse(viewModel.uiState.value.isAddingToPack)
+        assertEquals(listOf(emote1), viewModel.uiState.value.draftEmotes)
+        assertEquals("El paquete supera el límite de 30 stickers (actual: 31)", viewModel.uiState.value.addToPackErrorMessage)
+        org.junit.Assert.assertNull(viewModel.uiState.value.addToPackSuccessMessage)
+    }
+
     private class FakeStickerPackRepository : StickerPackRepository {
         var createPacksFromEmotesHandler: (suspend (String, String, List<SevenTvEmote>) -> StickerResult<List<StickerPack>>)? = null
         var createCallCount: Int = 0
 
-        override fun observeAllPacks(): Flow<List<StickerPack>> = flowOf(emptyList())
+        val packsFlow = MutableStateFlow<List<StickerPack>>(emptyList())
+        override fun observeAllPacks(): Flow<List<StickerPack>> = packsFlow
+
+        var addEmotesToPackHandler: (suspend (String, List<SevenTvEmote>) -> StickerResult<Unit>)? = null
+        var addEmotesCallCount: Int = 0
 
         override suspend fun getPack(identifier: String): StickerResult<StickerPack> =
             StickerResult.Failure(StickerError.PackNotFound(identifier))
@@ -455,7 +568,10 @@ class ExploreViewModelTest {
         override suspend fun mergePacks(sourcePackIdentifiers: List<String>, basePackName: String): StickerResult<List<StickerPack>> =
             StickerResult.Success(emptyList())
         override suspend fun deleteStickerFromPack(packIdentifier: String, stickerId: String): StickerResult<Unit> = StickerResult.Success(Unit)
-        override suspend fun addEmotesToPack(packIdentifier: String, emotes: List<SevenTvEmote>): StickerResult<Unit> = StickerResult.Success(Unit)
+        override suspend fun addEmotesToPack(packIdentifier: String, emotes: List<SevenTvEmote>): StickerResult<Unit> {
+            addEmotesCallCount++
+            return addEmotesToPackHandler?.invoke(packIdentifier, emotes) ?: StickerResult.Success(Unit)
+        }
         override suspend fun updateStickerEmojis(stickerId: String, emojis: List<String>): StickerResult<Unit> = StickerResult.Success(Unit)
         override suspend fun updatePackWhitelisted(identifier: String, isWhitelisted: Boolean): StickerResult<Unit> = StickerResult.Success(Unit)
         override suspend fun syncWhitelistStatus(context: Context, packIdentifier: String): StickerResult<Boolean> = StickerResult.Success(false)
