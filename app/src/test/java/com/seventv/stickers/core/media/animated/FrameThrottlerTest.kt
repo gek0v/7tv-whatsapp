@@ -173,4 +173,16 @@ class FrameThrottlerTest {
         assertEquals(1000, totalDurationMs)
         assertTrue("Effective FPS ($effectiveFps) must not exceed target FPS (30)", effectiveFps <= 30.0)
     }
+
+    @Test
+    fun truncateDurationEnforcesMinimum10MsFrameDuration() {
+        val frames = listOf(
+            AnimationFrame(mockBitmap(), 2995, 2995),
+            AnimationFrame(mockBitmap(), 100, 3095)
+        )
+        // Max is 3000ms. Remaining for second frame is 5ms (< 10ms), so it should be dropped
+        val truncated = throttler.truncateDuration(frames, 3000)
+        assertEquals(1, truncated.size)
+        assertTrue(truncated.all { it.durationMs >= 10 })
+    }
 }

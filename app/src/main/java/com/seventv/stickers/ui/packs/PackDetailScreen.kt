@@ -2,6 +2,8 @@ package com.seventv.stickers.ui.packs
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -12,18 +14,24 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Warning
+import com.seventv.stickers.core.domain.validator.StickerIssue
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -63,6 +71,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.seventv.stickers.core.domain.model.PackSticker
@@ -95,8 +104,15 @@ fun PackDetailScreen(
     ) { result ->
         val validationError = result.data?.getStringExtra("validation_error")
         if (!validationError.isNullOrBlank()) {
-            coroutineScope.launch {
-                snackbarHostState.showSnackbar("Error de WhatsApp: $validationError")
+            if (validationError.contains("handleStickerPackPreviewResult", ignoreCase = true)) {
+                viewModel.onWhatsAppPreviewValidationFailed(packId)
+                coroutineScope.launch {
+                    snackbarHostState.showSnackbar("WhatsApp rechazó la vista previa del paquete. Revisa los stickers marcados.")
+                }
+            } else {
+                coroutineScope.launch {
+                    snackbarHostState.showSnackbar("Error de WhatsApp: $validationError")
+                }
             }
         }
         viewModel.syncWhitelist(context, packId)
@@ -348,6 +364,62 @@ fun PackDetailScreen(
 
                 Spacer(modifier = Modifier.height(6.dp))
 
+                // Diagnostic Warning Banner
+                if (state.stickerIssues.isNotEmpty() || (state.packDiagnosticReport != null && !state.packDiagnosticReport!!.isValid)) {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 10.dp)
+                            .clickable { viewModel.onOpenDiagnosticDialog() },
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.25f)),
+                        shape = MaterialTheme.shapes.medium,
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Warning,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = if (state.stickerIssues.isNotEmpty())
+                                        "⚠️ ${state.stickerIssues.size} sticker(s) con problemas para WhatsApp"
+                                    else
+                                        "⚠️ Incompatibilidad con WhatsApp",
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = "Toca para ver los detalles y corregirlos.",
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontSize = 11.sp
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Button(
+                                onClick = { viewModel.onOpenDiagnosticDialog() },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.error,
+                                    contentColor = MaterialTheme.colorScheme.onError
+                                ),
+                                shape = MaterialTheme.shapes.small,
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                            ) {
+                                Text("Revisar", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+
                 // Sticker Grid wrapped in Chat Simulator Background
                 ChatSimulatorBackground(
                     mode = state.chatSimulatorMode,
@@ -368,8 +440,10 @@ fun PackDetailScreen(
                             PackStickerCell(
                                 sticker = sticker,
                                 isTrayIcon = index == 0,
+                                issue = state.stickerIssues[sticker.id],
                                 onClick = { inspectedSticker = sticker },
-                                onDeleteClick = { viewModel.onOpenDeleteStickerDialog(sticker) }
+                                onDeleteClick = { viewModel.onOpenDeleteStickerDialog(sticker) },
+                                onIssueClick = { viewModel.onOpenDiagnosticDialog() }
                             )
                         }
                     }
@@ -563,14 +637,168 @@ fun PackDetailScreen(
             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
         )
     }
+
+    // WhatsApp Diagnostic Dialog
+    if (state.isDiagnosticDialogOpen && pack != null) {
+        AlertDialog(
+            onDismissRequest = { viewModel.onDismissDiagnosticDialog() },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Warning,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Diagnóstico de WhatsApp",
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp
+                    )
+                }
+            },
+            text = {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    if (state.packDiagnosticReport?.packIssues?.isNotEmpty() == true) {
+                        for (packIssue in state.packDiagnosticReport!!.packIssues) {
+                            Text(
+                                text = "• $packIssue",
+                                color = MaterialTheme.colorScheme.error,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+
+                    if (state.stickerIssues.isNotEmpty()) {
+                        Text(
+                            text = "Los siguientes stickers impiden exportar el paquete a WhatsApp:",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 13.sp
+                        )
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        LazyColumn(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 280.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            items(state.stickerIssues.values.toList(), key = { it.stickerId }) { issue ->
+                                val sticker = pack.stickers.find { it.id == issue.stickerId }
+                                Card(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                                    ),
+                                    shape = MaterialTheme.shapes.small
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(8.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        if (sticker != null) {
+                                            val file = remember(sticker.filePath) {
+                                                val f = File(sticker.filePath)
+                                                if (f.isAbsolute && f.exists()) f else File(context.filesDir, sticker.filePath)
+                                            }
+                                            AsyncImage(
+                                                model = file,
+                                                contentDescription = issue.emoteName,
+                                                modifier = Modifier
+                                                    .size(44.dp)
+                                                    .clip(RoundedCornerShape(4.dp))
+                                            )
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                        }
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = issue.emoteName,
+                                                color = MaterialTheme.colorScheme.onSurface,
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 13.sp
+                                            )
+                                            Text(
+                                                text = issue.reason,
+                                                color = MaterialTheme.colorScheme.error,
+                                                fontSize = 11.sp,
+                                                lineHeight = 14.sp
+                                            )
+                                        }
+                                        if (sticker != null) {
+                                            IconButton(
+                                                onClick = {
+                                                    viewModel.onOpenDeleteStickerDialog(sticker)
+                                                },
+                                                modifier = Modifier.size(32.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Delete,
+                                                    contentDescription = "Eliminar",
+                                                    tint = MaterialTheme.colorScheme.error,
+                                                    modifier = Modifier.size(18.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    } else if (state.packDiagnosticReport?.packIssues?.isEmpty() == true) {
+                        Text(
+                            text = "No se detectaron problemas técnicos en los stickers de este paquete.",
+                            color = MaterialTheme.colorScheme.onSurface,
+                            fontSize = 13.sp
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                if (state.stickerIssues.isNotEmpty()) {
+                    Button(
+                        onClick = { viewModel.onDeleteInvalidStickers(pack.identifier) },
+                        enabled = !state.isDeletingInvalidStickers,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.error,
+                            contentColor = MaterialTheme.colorScheme.onError
+                        )
+                    ) {
+                        if (state.isDeletingInvalidStickers) {
+                            CircularProgressIndicator(
+                                color = MaterialTheme.colorScheme.onError,
+                                modifier = Modifier.size(16.dp),
+                                strokeWidth = 2.dp
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                        }
+                        Text("Eliminar stickers con error", fontWeight = FontWeight.Bold)
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.onDismissDiagnosticDialog() }) {
+                    Text("Cerrar", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            },
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+        )
+    }
 }
 
 @Composable
 private fun PackStickerCell(
     sticker: PackSticker,
-    isTrayIcon: Boolean,
-    onClick: () -> Unit,
-    onDeleteClick: () -> Unit
+    isTrayIcon: Boolean = false,
+    issue: StickerIssue? = null,
+    onClick: () -> Unit = {},
+    onDeleteClick: () -> Unit = {},
+    onIssueClick: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val file = remember(sticker.filePath) {
@@ -581,11 +809,18 @@ private fun PackStickerCell(
     Card(
         shape = MaterialTheme.shapes.medium,
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.85f)
+            containerColor = if (issue != null) {
+                MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.25f)
+            } else {
+                MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.85f)
+            }
         ),
+        border = if (issue != null) BorderStroke(1.5.dp, MaterialTheme.colorScheme.error) else null,
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .clickable {
+                if (issue != null) onIssueClick() else onClick()
+            }
     ) {
         Box(modifier = Modifier.fillMaxWidth()) {
             Column(
@@ -611,7 +846,17 @@ private fun PackStickerCell(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                if (sticker.emojis.isNotEmpty()) {
+                if (issue != null) {
+                    Text(
+                        text = issue.reason,
+                        color = MaterialTheme.colorScheme.error,
+                        fontSize = 8.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        lineHeight = 10.sp
+                    )
+                } else if (sticker.emojis.isNotEmpty()) {
                     Text(
                         text = sticker.emojis.joinToString(" "),
                         style = MaterialTheme.typography.labelSmall
@@ -619,7 +864,21 @@ private fun PackStickerCell(
                 }
             }
 
-            if (isTrayIcon) {
+            if (issue != null) {
+                Surface(
+                    color = MaterialTheme.colorScheme.error,
+                    shape = RoundedCornerShape(topStart = 8.dp, bottomEnd = 6.dp),
+                    modifier = Modifier.align(Alignment.TopStart)
+                ) {
+                    Text(
+                        text = "⚠️ ERROR",
+                        color = MaterialTheme.colorScheme.onError,
+                        fontSize = 8.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                    )
+                }
+            } else if (isTrayIcon) {
                 Surface(
                     shape = MaterialTheme.shapes.extraSmall,
                     color = MaterialTheme.colorScheme.primaryContainer,

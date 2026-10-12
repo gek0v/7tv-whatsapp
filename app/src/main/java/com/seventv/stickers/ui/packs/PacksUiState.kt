@@ -44,5 +44,10 @@ data class PacksUiState(
     val searchResults: List<SevenTvEmote> = emptyList(),
     val isSearching: Boolean = false,
     val isAddingStickers: Boolean = false,
-    val userFeedbackMessage: String? = null
+    val userFeedbackMessage: String? = null,
+    // Diagnostics & WhatsApp Validation
+    val stickerIssues: Map<String, com.seventv.stickers.core.domain.validator.StickerIssue> = emptyMap(),
+    val isDiagnosticDialogOpen: Boolean = false,
+    val packDiagnosticReport: com.seventv.stickers.core.domain.validator.StickerPackInspectionReport? = null,
+    val isDeletingInvalidStickers: Boolean = false
 )

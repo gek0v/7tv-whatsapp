@@ -710,6 +710,97 @@ class DefaultStickerPackRepositoryTest {
         assertNull(packDao.getPackByIdentifier("merge-pack-2"))
     }
 
+    @Test
+    fun mergePacksDeduplicatesIdenticalEmotesAcrossPacks() = runTest(testDispatcher) {
+        val pack1Entity = StickerPackEntity(
+            identifier = "dup-pack-1",
+            name = "Pack 1",
+            publisher = "Author",
+            trayImageRelativePath = "sticker_packs/dup-pack-1/tray_icon.webp",
+            isAnimated = false,
+            isWhitelisted = false,
+            createdAt = 1000L
+        )
+        val s1 = StickerEntity("s1", "dup-pack-1", "e1", "Emote1", "sticker_packs/dup-pack-1/sticker_s1.webp", listOf("😄"), 100L, 0)
+        val s2 = StickerEntity("s2", "dup-pack-1", "e2", "Emote2", "sticker_packs/dup-pack-1/sticker_s2.webp", listOf("😆"), 100L, 1)
+
+        val pack2Entity = StickerPackEntity(
+            identifier = "dup-pack-2",
+            name = "Pack 2",
+            publisher = "Author",
+            trayImageRelativePath = "sticker_packs/dup-pack-2/tray_icon.webp",
+            isAnimated = false,
+            isWhitelisted = false,
+            createdAt = 2000L
+        )
+        val s3 = StickerEntity("s3", "dup-pack-2", "e1", "Emote1", "sticker_packs/dup-pack-2/sticker_s3.webp", listOf("😄"), 100L, 0)
+        val s4 = StickerEntity("s4", "dup-pack-2", "e3", "Emote3", "sticker_packs/dup-pack-2/sticker_s4.webp", listOf("😎"), 100L, 1)
+        val s5 = StickerEntity("s5", "dup-pack-2", "e4", "emote2", "sticker_packs/dup-pack-2/sticker_s5.webp", listOf("🔥"), 100L, 2)
+
+        packDao.insertPackWithStickers(pack1Entity, listOf(s1, s2))
+        packDao.insertPackWithStickers(pack2Entity, listOf(s3, s4, s5))
+
+        val dummyBytes = byteArrayOf(1, 2, 3, 4)
+        storageManager.saveStickerFile("dup-pack-1", "s1", dummyBytes)
+        storageManager.saveStickerFile("dup-pack-1", "s2", dummyBytes)
+        storageManager.saveStickerFile("dup-pack-2", "s3", dummyBytes)
+        storageManager.saveStickerFile("dup-pack-2", "s4", dummyBytes)
+        storageManager.saveStickerFile("dup-pack-2", "s5", dummyBytes)
+
+        val result = repository.mergePacks(listOf("dup-pack-1", "dup-pack-2"), "Deduplicated Pack")
+        assertTrue("Expected merge success, got $result", result is StickerResult.Success)
+
+        val mergedPacks = (result as StickerResult.Success).data
+        assertEquals(1, mergedPacks.size)
+        assertEquals("Deduplicated Pack", mergedPacks[0].name)
+        // Originally 5 stickers total across the 2 packs.
+        // s3 is a duplicate by emoteId ("e1") and s5 is a duplicate by emoteName ("emote2").
+        // Exactly 3 unique stickers remain: Emote1, Emote2, Emote3
+        assertEquals(3, mergedPacks[0].stickers.size)
+        val emoteNames = mergedPacks[0].stickers.map { it.emoteName }
+        assertEquals(listOf("Emote1", "Emote2", "Emote3"), emoteNames)
+
+        assertNull(packDao.getPackByIdentifier("dup-pack-1"))
+        assertNull(packDao.getPackByIdentifier("dup-pack-2"))
+    }
+
+    @Test
+    fun addEmotesToPackRejectsMixedAnimatedAndStaticEmotes() = runTest(testDispatcher) {
+        val staticPackEntity = StickerPackEntity(
+            identifier = "static-pack",
+            name = "Static Pack",
+            publisher = "Tester",
+            trayImageRelativePath = "tray.png",
+            isAnimated = false,
+            isWhitelisted = false,
+            createdAt = 1000L
+        )
+        val animPackEntity = StickerPackEntity(
+            identifier = "anim-pack",
+            name = "Anim Pack",
+            publisher = "Tester",
+            trayImageRelativePath = "tray.png",
+            isAnimated = true,
+            isWhitelisted = false,
+            createdAt = 1000L
+        )
+        packDao.insertPackWithStickers(staticPackEntity, emptyList())
+        packDao.insertPackWithStickers(animPackEntity, emptyList())
+
+        val animEmote = createSampleEmote("anim_1", "AnimEmote", isAnimated = true)
+        val staticEmote = createSampleEmote("static_1", "StaticEmote", isAnimated = false)
+
+        // Try adding animated emote to static pack
+        val result1 = repository.addEmotesToPack("static-pack", listOf(animEmote))
+        assertTrue("Should reject animated emote in static pack", result1 is StickerResult.Failure)
+        assertTrue("Error should be UnsupportedFormat", (result1 as StickerResult.Failure).error is StickerError.UnsupportedFormat)
+
+        // Try adding static emote to animated pack
+        val result2 = repository.addEmotesToPack("anim-pack", listOf(staticEmote))
+        assertTrue("Should reject static emote in animated pack", result2 is StickerResult.Failure)
+        assertTrue("Error should be UnsupportedFormat", (result2 as StickerResult.Failure).error is StickerError.UnsupportedFormat)
+    }
+
     private class FakeSevenTvRepository : SevenTvRepository {
         var downloadHandler: (suspend (SevenTvEmote) -> StickerResult<DownloadedEmoteAsset>)? = null
 

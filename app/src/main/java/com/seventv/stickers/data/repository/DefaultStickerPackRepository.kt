@@ -371,7 +371,22 @@ class DefaultStickerPackRepository(
                 )
             }
 
+            val seenEmoteIds = mutableSetOf<String>()
+            val seenEmoteNames = mutableSetOf<String>()
             val allStickers = sourcePacks.flatMap { it.stickers }
+                .filter { sticker ->
+                    val id = sticker.emoteId.trim()
+                    val name = sticker.emoteName.trim().lowercase()
+                    val isDuplicate = (id.isNotEmpty() && seenEmoteIds.contains(id)) ||
+                        (name.isNotEmpty() && seenEmoteNames.contains(name))
+                    if (!isDuplicate) {
+                        if (id.isNotEmpty()) seenEmoteIds.add(id)
+                        if (name.isNotEmpty()) seenEmoteNames.add(name)
+                        true
+                    } else {
+                        false
+                    }
+                }
             if (allStickers.size < 3) {
                 return@withContext StickerResult.Failure(
                     StickerError.InsufficientStickers(allStickers.size, 3)
@@ -552,6 +567,13 @@ class DefaultStickerPackRepository(
             val pack = stickerPackDao.getPackByIdentifier(packIdentifier)
                 ?: return@withContext StickerResult.Failure(StickerError.PackNotFound(packIdentifier))
 
+            val packIsAnimated = pack.pack.isAnimated
+            if (emotes.any { it.isAnimated != packIsAnimated }) {
+                return@withContext StickerResult.Failure(
+                    StickerError.UnsupportedFormat("No puedes mezclar stickers animados y estáticos en el mismo pack")
+                )
+            }
+
             val currentCount = pack.stickers.size
             if (currentCount + emotes.size > 30) {
                 return@withContext StickerResult.Failure(StickerError.ExceedsPackLimit(currentCount + emotes.size, 30))
@@ -566,7 +588,7 @@ class DefaultStickerPackRepository(
                     val processResult = emoteBridge.convertEmoteToSticker(
                         emote = emote,
                         outputDir = stagingDir,
-                        allowStaticFallback = !pack.pack.isAnimated
+                        allowStaticFallback = false
                     )
 
                     val processedSticker = when (processResult) {

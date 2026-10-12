@@ -14,6 +14,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import com.seventv.stickers.core.domain.validator.StickerPackInspector
+import java.io.File
 
 class PacksViewModel(
     private val stickerPackRepository: StickerPackRepository,
@@ -38,9 +40,13 @@ class PacksViewModel(
                         val updatedDetail = if (current.selectedPackDetail != null) {
                             packs.find { it.identifier == current.selectedPackDetail.identifier }
                         } else null
+                        val report = if (updatedDetail != null) StickerPackInspector.inspect(updatedDetail) else current.packDiagnosticReport
+                        val issues = if (updatedDetail != null && report != null) report.issues.associateBy { it.stickerId } else current.stickerIssues
                         current.copy(
                             loadState = PacksLoadState.Success(packs),
-                            selectedPackDetail = updatedDetail ?: current.selectedPackDetail
+                            selectedPackDetail = updatedDetail ?: current.selectedPackDetail,
+                            packDiagnosticReport = report,
+                            stickerIssues = issues
                         )
                     }
                 }
@@ -51,23 +57,123 @@ class PacksViewModel(
         val currentPacks = (_uiState.value.loadState as? PacksLoadState.Success)?.packs
         val pack = currentPacks?.find { it.identifier == packIdentifier }
         if (pack != null) {
-            _uiState.update { it.copy(selectedPackDetail = pack) }
+            val report = StickerPackInspector.inspect(pack)
+            _uiState.update {
+                it.copy(
+                    selectedPackDetail = pack,
+                    packDiagnosticReport = report,
+                    stickerIssues = report.issues.associateBy { issue -> issue.stickerId }
+                )
+            }
         } else {
             viewModelScope.launch {
                 val result = stickerPackRepository.getPack(packIdentifier)
                 if (result is com.seventv.stickers.core.common.result.StickerResult.Success) {
-                    _uiState.update { it.copy(selectedPackDetail = result.data) }
+                    val loaded = result.data
+                    val report = StickerPackInspector.inspect(loaded)
+                    _uiState.update {
+                        it.copy(
+                            selectedPackDetail = loaded,
+                            packDiagnosticReport = report,
+                            stickerIssues = report.issues.associateBy { issue -> issue.stickerId }
+                        )
+                    }
                 }
             }
         }
     }
 
     fun onClearSelectedPackDetail() {
-        _uiState.update { it.copy(selectedPackDetail = null) }
+        _uiState.update {
+            it.copy(
+                selectedPackDetail = null,
+                packDiagnosticReport = null,
+                stickerIssues = emptyMap(),
+                isDiagnosticDialogOpen = false
+            )
+        }
     }
 
     fun onSetChatSimulatorMode(mode: ChatSimulatorMode) {
         _uiState.update { it.copy(chatSimulatorMode = mode) }
+    }
+
+    // --- Diagnostics & WhatsApp Validation ---
+    fun onOpenDiagnosticDialog() {
+        val detail = _uiState.value.selectedPackDetail
+        if (detail != null) {
+            val report = StickerPackInspector.inspect(detail)
+            _uiState.update {
+                it.copy(
+                    packDiagnosticReport = report,
+                    stickerIssues = report.issues.associateBy { issue -> issue.stickerId },
+                    isDiagnosticDialogOpen = true
+                )
+            }
+        } else {
+            _uiState.update { it.copy(isDiagnosticDialogOpen = true) }
+        }
+    }
+
+    fun onDismissDiagnosticDialog() {
+        _uiState.update { it.copy(isDiagnosticDialogOpen = false) }
+    }
+
+    fun onWhatsAppPreviewValidationFailed(packId: String) {
+        val pack = _uiState.value.selectedPackDetail
+        if (pack != null && pack.identifier == packId) {
+            val report = StickerPackInspector.inspect(pack)
+            _uiState.update {
+                it.copy(
+                    packDiagnosticReport = report,
+                    stickerIssues = report.issues.associateBy { issue -> issue.stickerId },
+                    isDiagnosticDialogOpen = true
+                )
+            }
+        } else {
+            viewModelScope.launch {
+                val res = stickerPackRepository.getPack(packId)
+                if (res is com.seventv.stickers.core.common.result.StickerResult.Success) {
+                    val report = StickerPackInspector.inspect(res.data)
+                    _uiState.update {
+                        it.copy(
+                            selectedPackDetail = res.data,
+                            packDiagnosticReport = report,
+                            stickerIssues = report.issues.associateBy { issue -> issue.stickerId },
+                            isDiagnosticDialogOpen = true
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    fun onDeleteInvalidStickers(packIdentifier: String) {
+        val report = _uiState.value.packDiagnosticReport ?: return
+        val invalidStickerIds = report.issues.map { it.stickerId }.distinct()
+        if (invalidStickerIds.isEmpty()) {
+            _uiState.update { it.copy(isDiagnosticDialogOpen = false) }
+            return
+        }
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isDeletingInvalidStickers = true) }
+            var deletedCount = 0
+            for (stickerId in invalidStickerIds) {
+                val res = stickerPackRepository.deleteStickerFromPack(packIdentifier, stickerId)
+                if (res is com.seventv.stickers.core.common.result.StickerResult.Success) {
+                    deletedCount++
+                }
+            }
+            _uiState.update {
+                it.copy(
+                    isDeletingInvalidStickers = false,
+                    isDiagnosticDialogOpen = false,
+                    userFeedbackMessage = "Se eliminaron $deletedCount sticker(s) con errores."
+                )
+            }
+            onSelectPackDetail(packIdentifier)
+        }
     }
 
     // --- Single Pack Export ---
@@ -84,6 +190,18 @@ class PacksViewModel(
         }
         if (pack.stickers.size > 30) {
             _uiState.update { it.copy(userFeedbackMessage = "WhatsApp permite un máximo de 30 stickers por paquete.") }
+            return
+        }
+
+        val report = StickerPackInspector.inspect(pack)
+        if (!report.isValid) {
+            _uiState.update {
+                it.copy(
+                    packDiagnosticReport = report,
+                    stickerIssues = report.issues.associateBy { issue -> issue.stickerId },
+                    isDiagnosticDialogOpen = true
+                )
+            }
             return
         }
 
