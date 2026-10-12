@@ -12,7 +12,8 @@ interface StickerPackRepository {
     suspend fun createPacksFromEmotes(
         basePackName: String,
         publisher: String,
-        emotes: List<SevenTvEmote>
+        emotes: List<SevenTvEmote>,
+        onProgress: ((current: Int, total: Int) -> Unit)? = null
     ): StickerResult<List<StickerPack>>
     suspend fun deletePack(identifier: String): StickerResult<Unit>
     suspend fun updateStickerEmojis(stickerId: String, emojis: List<String>): StickerResult<Unit>

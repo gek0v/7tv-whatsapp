@@ -23,12 +23,18 @@ import com.seventv.stickers.data.local.storage.StickerStorageManager
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicInteger
 
 class DefaultStickerPackRepository(
     private val stickerPackDao: StickerPackDao,
@@ -83,7 +89,8 @@ class DefaultStickerPackRepository(
     override suspend fun createPacksFromEmotes(
         basePackName: String,
         publisher: String,
-        emotes: List<SevenTvEmote>
+        emotes: List<SevenTvEmote>,
+        onProgress: ((current: Int, total: Int) -> Unit)?
     ): StickerResult<List<StickerPack>> = withContext(dispatcher) {
         try {
             val splitResult = splittingEngine.splitEmotes(basePackName, emotes)
@@ -103,27 +110,46 @@ class DefaultStickerPackRepository(
                 var firstProcessedFile: File? = null
 
                 try {
-                    for ((index, emote) in plan.emotes.withIndex()) {
-                        val stickerId = UUID.randomUUID().toString()
-                        val processResult = emoteBridge.convertEmoteToSticker(
-                            emote = emote,
-                            outputDir = stagingDir,
-                            allowStaticFallback = true
-                        )
+                    val semaphore = Semaphore(4)
+                    val totalInPlan = plan.emotes.size
+                    val completedCounter = AtomicInteger(0)
 
-                        val processedSticker = when (processResult) {
-                            is StickerResult.Success -> processResult.data
-                            is StickerResult.Failure -> {
-                                stagingDir.deleteRecursively()
-                                storageManager.deletePackDirectory(packIdentifier)
-                                for (p in createdPacks) {
-                                    stickerPackDao.deletePack(p.identifier)
-                                    storageManager.deletePackDirectory(p.identifier)
+                    val processedResults = coroutineScope {
+                        plan.emotes.mapIndexed { index, emote ->
+                            async(Dispatchers.Default) {
+                                semaphore.withPermit {
+                                    val stickerId = UUID.randomUUID().toString()
+                                    val processResult = emoteBridge.convertEmoteToSticker(
+                                        emote = emote,
+                                        outputDir = stagingDir,
+                                        allowStaticFallback = true
+                                    )
+                                    val done = completedCounter.incrementAndGet()
+                                    onProgress?.invoke(done, totalInPlan)
+                                    ProcessItem(
+                                        index = index,
+                                        emote = emote,
+                                        stickerId = stickerId,
+                                        result = processResult
+                                    )
                                 }
-                                return@withContext processResult
                             }
-                        }
+                        }.awaitAll()
+                    }
 
+                    val firstFailure = processedResults.firstOrNull { it.result is StickerResult.Failure }
+                    if (firstFailure != null) {
+                        stagingDir.deleteRecursively()
+                        storageManager.deletePackDirectory(packIdentifier)
+                        for (p in createdPacks) {
+                            stickerPackDao.deletePack(p.identifier)
+                            storageManager.deletePackDirectory(p.identifier)
+                        }
+                        return@withContext firstFailure.result as StickerResult.Failure
+                    }
+
+                    for (item in processedResults.sortedBy { it.index }) {
+                        val processedSticker = (item.result as StickerResult.Success).data
                         if (firstProcessedFile == null) {
                             firstProcessedFile = processedSticker.file
                         }
@@ -131,21 +157,21 @@ class DefaultStickerPackRepository(
                         val stickerBytes = processedSticker.file.readBytes()
                         val savedFile = storageManager.saveStickerFile(
                             packIdentifier = packIdentifier,
-                            stickerId = stickerId,
+                            stickerId = item.stickerId,
                             bytes = stickerBytes
                         )
 
-                        val relativePath = "sticker_packs/$packIdentifier/sticker_$stickerId.webp"
+                        val relativePath = "sticker_packs/$packIdentifier/sticker_${item.stickerId}.webp"
                         stickerEntities.add(
                             StickerEntity(
-                                id = stickerId,
+                                id = item.stickerId,
                                 packIdentifier = packIdentifier,
-                                emoteId = emote.id,
-                                emoteName = emote.name,
+                                emoteId = item.emote.id,
+                                emoteName = item.emote.name,
                                 relativeFilePath = relativePath,
                                 emojis = listOf("💬"),
                                 fileLength = savedFile.length(),
-                                sortOrder = index
+                                sortOrder = item.index
                             )
                         )
                     }
@@ -363,4 +389,11 @@ class DefaultStickerPackRepository(
             createdAt = packWithStickers.pack.createdAt
         )
     }
+
+    private data class ProcessItem(
+        val index: Int,
+        val emote: SevenTvEmote,
+        val stickerId: String,
+        val result: StickerResult<com.seventv.stickers.core.media.model.ProcessedSticker>
+    )
 }

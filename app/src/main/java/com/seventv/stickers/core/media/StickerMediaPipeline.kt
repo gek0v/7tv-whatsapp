@@ -315,7 +315,13 @@ class StickerMediaPipeline(
                 ?: frames.sumOf { it.durationMs }
             var lastExceededSize = 0L
 
-            for (quality in ANIMATED_QUALITY_STEPS) {
+            val qualitySteps = when {
+                frames.size > 25 -> floatArrayOf(55f, 40f)
+                frames.size > 12 -> floatArrayOf(65f, 50f, 40f)
+                else -> ANIMATED_QUALITY_STEPS
+            }
+
+            for (quality in qualitySteps) {
                 val tempFile = File.createTempFile("anim_opt_", ".webp", outputDir)
                 try {
                     val encoded = animatedWebPEncoder.encode(

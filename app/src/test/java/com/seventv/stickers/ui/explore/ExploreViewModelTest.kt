@@ -378,7 +378,8 @@ class ExploreViewModelTest {
         override suspend fun createPacksFromEmotes(
             basePackName: String,
             publisher: String,
-            emotes: List<SevenTvEmote>
+            emotes: List<SevenTvEmote>,
+            onProgress: ((current: Int, total: Int) -> Unit)?
         ): StickerResult<List<StickerPack>> {
             createCallCount++
             return createPacksFromEmotesHandler?.invoke(basePackName, publisher, emotes)

@@ -158,13 +158,32 @@ class ChannelViewModel(
 
             plans.forEachIndexed { index, plan ->
                 _uiState.update {
-                    it.copy(importState = ChannelImportState.Importing(currentPack = index + 1, totalPacks = plans.size))
+                    it.copy(
+                        importState = ChannelImportState.Importing(
+                            currentPack = index + 1,
+                            totalPacks = plans.size,
+                            currentSticker = 0,
+                            totalStickers = plan.emotes.size
+                        )
+                    )
                 }
 
                 val result = stickerPackRepository.createPacksFromEmotes(
                     basePackName = plan.packName,
                     publisher = streamerName,
-                    emotes = plan.emotes
+                    emotes = plan.emotes,
+                    onProgress = { current, total ->
+                        _uiState.update {
+                            it.copy(
+                                importState = ChannelImportState.Importing(
+                                    currentPack = index + 1,
+                                    totalPacks = plans.size,
+                                    currentSticker = current,
+                                    totalStickers = total
+                                )
+                            )
+                        }
+                    }
                 )
 
                 when (result) {

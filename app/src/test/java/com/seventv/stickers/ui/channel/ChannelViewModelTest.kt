@@ -239,8 +239,10 @@ class ChannelViewModelTest {
         override suspend fun createPacksFromEmotes(
             basePackName: String,
             publisher: String,
-            emotes: List<SevenTvEmote>
+            emotes: List<SevenTvEmote>,
+            onProgress: ((current: Int, total: Int) -> Unit)?
         ): StickerResult<List<StickerPack>> {
+            onProgress?.invoke(emotes.size, emotes.size)
             val pack = StickerPack(
                 identifier = "pack_${basePackName.hashCode()}",
                 name = basePackName,

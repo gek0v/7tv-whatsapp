@@ -30,7 +30,9 @@ sealed interface ChannelImportState {
     ) : ChannelImportState
     data class Importing(
         val currentPack: Int,
-        val totalPacks: Int
+        val totalPacks: Int,
+        val currentSticker: Int = 0,
+        val totalStickers: Int = 0
     ) : ChannelImportState
     data class Success(
         val createdPacks: List<StickerPack>

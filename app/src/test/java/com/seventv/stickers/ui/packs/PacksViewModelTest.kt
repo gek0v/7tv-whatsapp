@@ -200,7 +200,8 @@ class PacksViewModelTest {
         override suspend fun createPacksFromEmotes(
             basePackName: String,
             publisher: String,
-            emotes: List<SevenTvEmote>
+            emotes: List<SevenTvEmote>,
+            onProgress: ((current: Int, total: Int) -> Unit)?
         ): StickerResult<List<StickerPack>> = StickerResult.Success(emptyList())
 
         override suspend fun deletePack(identifier: String): StickerResult<Unit> {
