@@ -345,6 +345,49 @@ class ExploreViewModelTest {
     }
 
     @Test
+    fun createPackFromDraftSetsNameAndInvokesRepository() = runTest(testDispatcher) {
+        val emotes = (1..4).map { createSampleEmote("id_$it", "emote_$it") }
+        emotes.forEach { viewModel.onToggleDraftEmote(it) }
+
+        val createdPack = StickerPack(
+            identifier = "pack_draft",
+            name = "Borrador M3",
+            publisher = "7TV",
+            trayImagePath = "tray.png",
+            isAnimated = false
+        )
+        fakeStickerPackRepository.createPacksFromEmotesHandler = { name, publisher, draftEmotes ->
+            assertEquals("Borrador M3", name)
+            assertEquals("7TV", publisher)
+            assertEquals(emotes, draftEmotes)
+            StickerResult.Success(listOf(createdPack))
+        }
+
+        viewModel.onCreatePackFromDraft("Borrador M3")
+        advanceUntilIdle()
+
+        assertEquals("Borrador M3", viewModel.uiState.value.draftPackName)
+        assertTrue(viewModel.uiState.value.draftEmotes.isEmpty())
+        val creationState = viewModel.uiState.value.packCreationState
+        assertTrue(creationState is PackCreationState.Success)
+    }
+
+    @Test
+    fun emotesPropertyExposesFilteredEmotes() = runTest(testDispatcher) {
+        val emote = createSampleEmote("id_1", "kekw")
+        fakeSevenTvRepository.searchEmotesHandler = { _, _, _ ->
+            StickerResult.Success(listOf(emote))
+        }
+
+        viewModel.onQueryChanged("kekw")
+        advanceTimeBy(400)
+        runCurrent()
+
+        assertEquals(viewModel.uiState.value.filteredEmotes, viewModel.uiState.value.emotes)
+        assertEquals(listOf(emote), viewModel.uiState.value.emotes)
+    }
+
+    @Test
     fun factoryCreatesExploreViewModel() {
         val factory = ExploreViewModel.Factory(fakeSevenTvRepository, fakeStickerPackRepository)
         val vm = factory.create(ExploreViewModel::class.java)

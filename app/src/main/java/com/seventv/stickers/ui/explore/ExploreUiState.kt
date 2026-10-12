@@ -45,4 +45,7 @@ data class ExploreUiState(
                 EmoteFilter.STATIC -> all.filter { !it.isAnimated }
             }
         }
+
+    val emotes: List<SevenTvEmote>
+        get() = filteredEmotes
 }

@@ -242,6 +242,52 @@ class ChannelViewModelTest {
         assertEquals(1, (progress as PackImportProgress.Completed).packsCount)
     }
 
+    @Test
+    fun toggleDraftEmoteAddsAndRemovesFromChannelDraft() {
+        val emote1 = createSampleEmote("d_1", "emote1")
+        val emote2 = createSampleEmote("d_2", "emote2")
+
+        assertTrue(viewModel.uiState.value.draftEmotes.isEmpty())
+
+        viewModel.onToggleDraftEmote(emote1)
+        assertEquals(listOf(emote1), viewModel.uiState.value.draftEmotes)
+
+        viewModel.onToggleDraftEmote(emote2)
+        assertEquals(listOf(emote1, emote2), viewModel.uiState.value.draftEmotes)
+
+        viewModel.onToggleDraftEmote(emote1)
+        assertEquals(listOf(emote2), viewModel.uiState.value.draftEmotes)
+
+        viewModel.onClearDraft()
+        assertTrue(viewModel.uiState.value.draftEmotes.isEmpty())
+    }
+
+    @Test
+    fun createPackFromDraftCreatesPackAndClearsDraftOnSuccess() = runTest(testDispatcher) {
+        val emotes = (1..5).map { createSampleEmote("d_$it", "name_$it") }
+        emotes.forEach { viewModel.onToggleDraftEmote(it) }
+
+        viewModel.onCreatePackFromDraft("Canal Pack")
+        advanceUntilIdle()
+
+        assertTrue(viewModel.uiState.value.draftEmotes.isEmpty())
+        val importState = viewModel.uiState.value.importState
+        assertTrue("Expected Success, got $importState", importState is ChannelImportState.Success)
+    }
+
+    @Test
+    fun createPackFromDraftFailsWhenUnder3Emotes() = runTest(testDispatcher) {
+        val emote = createSampleEmote("d_1", "name_1")
+        viewModel.onToggleDraftEmote(emote)
+
+        viewModel.onCreatePackFromDraft("Insuficiente")
+        advanceUntilIdle()
+
+        assertEquals(1, viewModel.uiState.value.draftEmotes.size)
+        val importState = viewModel.uiState.value.importState
+        assertTrue("Expected Error or Idle, got $importState", importState is ChannelImportState.Error || importState is ChannelImportState.Idle)
+    }
+
     private fun createSampleEmote(
         id: String,
         name: String,

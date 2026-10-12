@@ -45,5 +45,6 @@ data class ChannelUiState(
     val activeFilter: ChannelFilter = ChannelFilter.ALL,
     val loadState: ChannelLoadState = ChannelLoadState.Idle,
     val importState: ChannelImportState = ChannelImportState.Idle,
-    val selectedEmoteIds: Set<String> = emptySet()
+    val selectedEmoteIds: Set<String> = emptySet(),
+    val draftEmotes: List<SevenTvEmote> = emptyList()
 )
