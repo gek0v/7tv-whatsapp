@@ -8,6 +8,8 @@ import com.seventv.stickers.core.domain.engine.SplitPlan
 import com.seventv.stickers.core.domain.manager.PackImportManager
 import com.seventv.stickers.core.domain.manager.PackImportProgress
 import com.seventv.stickers.core.domain.model.StickerPack
+import com.seventv.stickers.core.network.model.ChannelEmoteSetSummary
+import com.seventv.stickers.core.network.model.ChannelSearchResult
 import com.seventv.stickers.core.network.model.DownloadedEmoteAsset
 import com.seventv.stickers.core.network.model.SevenTvEmote
 import com.seventv.stickers.core.network.model.SevenTvEmoteSet
@@ -399,6 +401,75 @@ class ChannelViewModelTest {
         assertNull(viewModel.uiState.value.addToPackSuccessMessage)
     }
 
+    @Test
+    fun searchStreamerWithMultipleEmoteSetsLoadsAllPacks() = runTest(testDispatcher) {
+        val emotes1 = listOf(createSampleEmote("1", "e1"))
+        val set1 = SevenTvEmoteSet("set_1", "Main Set", "streamer", emotes1)
+        val summary1 = ChannelEmoteSetSummary("set_1", "Main Set", 1, isActive = true)
+        val summary2 = ChannelEmoteSetSummary("set_2", "Holiday Set", 50, isActive = false)
+
+        fakeSevenTvRepository.channelDataHandler = { query ->
+            StickerResult.Success(
+                ChannelSearchResult(
+                    streamerName = "Streamer",
+                    username = query,
+                    availableSets = listOf(summary1, summary2),
+                    activeSet = set1
+                )
+            )
+        }
+
+        viewModel.onSearchStreamer("streamer")
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertTrue("Expected Success, got ${state.loadState}", state.loadState is ChannelLoadState.Success)
+        val success = state.loadState as ChannelLoadState.Success
+        assertEquals(2, success.availableSets.size)
+        assertEquals("set_1", success.currentSetId)
+        assertEquals("Main Set", success.emoteSet.name)
+        assertEquals(1, success.allEmotes.size)
+    }
+
+    @Test
+    fun selectEmoteSetLoadsNewEmotePack() = runTest(testDispatcher) {
+        val emotes1 = listOf(createSampleEmote("1", "e1"))
+        val set1 = SevenTvEmoteSet("set_1", "Main Set", "streamer", emotes1)
+        val summary1 = ChannelEmoteSetSummary("set_1", "Main Set", 1, isActive = true)
+        val summary2 = ChannelEmoteSetSummary("set_2", "Holiday Set", 2, isActive = false)
+
+        fakeSevenTvRepository.channelDataHandler = { query ->
+            StickerResult.Success(
+                ChannelSearchResult(
+                    streamerName = "Streamer",
+                    username = query,
+                    availableSets = listOf(summary1, summary2),
+                    activeSet = set1
+                )
+            )
+        }
+
+        val emotes2 = listOf(createSampleEmote("2", "e2"), createSampleEmote("3", "e3"))
+        val set2 = SevenTvEmoteSet("set_2", "Holiday Set", "streamer", emotes2)
+        fakeSevenTvRepository.emoteSetHandler = { setId ->
+            if (setId == "set_2") StickerResult.Success(set2) else StickerResult.Failure(StickerError.ResourceNotFound)
+        }
+
+        viewModel.onSearchStreamer("streamer")
+        advanceUntilIdle()
+
+        // Select the holiday pack
+        viewModel.onSelectEmoteSet("set_2")
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        val success = state.loadState as ChannelLoadState.Success
+        assertEquals("set_2", success.currentSetId)
+        assertEquals("Holiday Set", success.emoteSet.name)
+        assertEquals(2, success.allEmotes.size)
+        assertFalse(success.isLoadingSet)
+    }
+
     private fun createSampleEmote(
         id: String,
         name: String,
@@ -415,11 +486,39 @@ class ChannelViewModelTest {
 
     private class FakeChannelSevenTvRepository : SevenTvRepository {
         var streamerEmoteSetHandler: (suspend (String) -> StickerResult<SevenTvEmoteSet>)? = null
+        var channelDataHandler: (suspend (String) -> StickerResult<ChannelSearchResult>)? = null
         var emoteSetHandler: suspend (String) -> StickerResult<SevenTvEmoteSet> = {
             StickerResult.Failure(StickerError.ResourceNotFound)
         }
         var searchEmotesHandler: suspend (String, Int, Int) -> StickerResult<List<SevenTvEmote>> = { _, _, _ ->
             StickerResult.Success(emptyList())
+        }
+
+        override suspend fun getChannelData(query: String): StickerResult<ChannelSearchResult> {
+            if (channelDataHandler != null) {
+                return channelDataHandler!!.invoke(query)
+            }
+            val setResult = streamerEmoteSetHandler?.invoke(query) ?: emoteSetHandler(query)
+            return when (setResult) {
+                is StickerResult.Success -> {
+                    val set = setResult.data
+                    val summary = ChannelEmoteSetSummary(
+                        id = set.id,
+                        name = set.name,
+                        emoteCount = set.emotes.size,
+                        isActive = true
+                    )
+                    StickerResult.Success(
+                        ChannelSearchResult(
+                            streamerName = set.name,
+                            username = query,
+                            availableSets = listOf(summary),
+                            activeSet = set
+                        )
+                    )
+                }
+                is StickerResult.Failure -> StickerResult.Failure(setResult.error)
+            }
         }
 
         override suspend fun getStreamerEmoteSet(query: String): StickerResult<SevenTvEmoteSet> {

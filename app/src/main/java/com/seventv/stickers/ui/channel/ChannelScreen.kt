@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -25,6 +26,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Info
@@ -36,6 +38,8 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -60,10 +64,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import coil.compose.AsyncImage
+import com.seventv.stickers.core.network.model.ChannelEmoteSetSummary
 import com.seventv.stickers.core.network.model.SevenTvEmote
 import com.seventv.stickers.ui.components.AddToExistingPackDialog
 import com.seventv.stickers.ui.components.DockedDraftPill
@@ -298,12 +305,18 @@ fun ChannelScreen(
                     is ChannelLoadState.Success -> {
                         ChannelContent(
                             streamerName = load.streamerName,
+                            avatarUrl = load.avatarUrl,
+                            availableSets = load.availableSets,
+                            currentSetId = load.currentSetId,
+                            currentSetName = load.emoteSet.name,
+                            isLoadingSet = load.isLoadingSet,
                             totalEmotes = load.allEmotes.size,
                             filteredEmotes = viewModel.getFilteredEmotes(),
                             selectedEmoteIds = state.selectedEmoteIds,
                             activeFilter = state.activeFilter,
                             draftEmotes = state.draftEmotes,
                             onFilterSelected = viewModel::onFilterSelected,
+                            onSelectEmoteSet = viewModel::onSelectEmoteSet,
                             onToggleSelectEmote = viewModel::onToggleSelectEmote,
                             onToggleDraftEmote = viewModel::onToggleDraftEmote,
                             onSelectAll = viewModel::onSelectAllEmotes,
@@ -469,12 +482,18 @@ fun ChannelScreen(
 @Composable
 private fun ChannelContent(
     streamerName: String,
+    avatarUrl: String?,
+    availableSets: List<ChannelEmoteSetSummary>,
+    currentSetId: String,
+    currentSetName: String,
+    isLoadingSet: Boolean,
     totalEmotes: Int,
     filteredEmotes: List<SevenTvEmote>,
     selectedEmoteIds: Set<String>,
     activeFilter: ChannelFilter,
     draftEmotes: List<SevenTvEmote>,
     onFilterSelected: (ChannelFilter) -> Unit,
+    onSelectEmoteSet: (String) -> Unit,
     onToggleSelectEmote: (String) -> Unit,
     onToggleDraftEmote: (SevenTvEmote) -> Unit,
     onSelectAll: () -> Unit,
@@ -504,12 +523,21 @@ private fun ChannelContent(
                     color = MaterialTheme.colorScheme.primaryContainer,
                     border = BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
                 ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Text(
-                            text = streamerName.take(1).uppercase(),
-                            style = MaterialTheme.typography.titleLarge,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                    if (!avatarUrl.isNullOrBlank()) {
+                        AsyncImage(
+                            model = avatarUrl,
+                            contentDescription = streamerName,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
                         )
+                    } else {
+                        Box(contentAlignment = Alignment.Center) {
+                            Text(
+                                text = streamerName.take(1).uppercase(),
+                                style = MaterialTheme.typography.titleLarge,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        }
                     }
                 }
 
@@ -527,7 +555,11 @@ private fun ChannelContent(
                         color = MaterialTheme.colorScheme.surfaceContainerHighest
                     ) {
                         Text(
-                            text = "$totalEmotes emotes",
+                            text = if (availableSets.size > 1) {
+                                "${availableSets.size} paquetes de emotes disponibles • $totalEmotes en este pack"
+                            } else {
+                                "$totalEmotes emotes"
+                            },
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
@@ -537,9 +569,61 @@ private fun ChannelContent(
             }
         }
 
+        // Available Emote Sets (Packs) Selector
+        if (availableSets.size > 1) {
+            Spacer(modifier = Modifier.height(10.dp))
+            Text(
+                text = "Paquetes del canal (${availableSets.size})",
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                contentPadding = PaddingValues(vertical = 2.dp)
+            ) {
+                items(availableSets, key = { it.id }) { packSummary ->
+                    val isSelected = packSummary.id == currentSetId
+                    FilterChip(
+                        selected = isSelected,
+                        onClick = { onSelectEmoteSet(packSummary.id) },
+                        label = {
+                            Text(
+                                text = "${packSummary.name} (${packSummary.emoteCount})",
+                                style = MaterialTheme.typography.labelMedium
+                            )
+                        },
+                        leadingIcon = if (packSummary.isActive) {
+                            {
+                                Icon(
+                                    imageVector = Icons.Default.Check,
+                                    contentDescription = "Activo en canal",
+                                    modifier = Modifier.size(16.dp),
+                                    tint = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        } else null,
+                        shape = MaterialTheme.shapes.medium,
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            labelColor = MaterialTheme.colorScheme.onSurface
+                        )
+                    )
+                }
+            }
+        }
+
         Spacer(modifier = Modifier.height(8.dp))
 
-        // Primary Button "Importar Canal Completo" (using WhatsApp green tertiary)
+        // Primary Button "Importar Canal Completo" / "Importar Pack"
+        val importButtonLabel = if (availableSets.size > 1) {
+            "Importar pack '$currentSetName' a WhatsApp ($totalEmotes)"
+        } else {
+            "Importar Canal Completo a WhatsApp ($totalEmotes)"
+        }
+
         Button(
             onClick = onImportFullChannel,
             modifier = Modifier.fillMaxWidth(),
@@ -557,7 +641,7 @@ private fun ChannelContent(
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(
-                text = "Importar Canal Completo a WhatsApp ($totalEmotes)",
+                text = importButtonLabel,
                 style = MaterialTheme.typography.labelLarge
             )
         }
@@ -597,88 +681,107 @@ private fun ChannelContent(
             }
         }
 
-        // Selection Actions Row
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 4.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = if (selectedEmoteIds.isEmpty()) "Mostrando ${filteredEmotes.size} emotes"
-                else "${selectedEmoteIds.size} seleccionados",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Row {
-                TextButton(onClick = onSelectAll) {
-                    Text(
-                        text = "Todos",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
-                if (selectedEmoteIds.isNotEmpty()) {
-                    TextButton(onClick = onDeselectAll) {
-                        Text(
-                            text = "Limpiar",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    TextButton(onClick = onImportSelected) {
-                        Text(
-                            text = "Importar (${selectedEmoteIds.size})",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.tertiary
-                        )
-                    }
-                }
-            }
-        }
-
-        // Emotes Grid using EmoteCard
-        if (filteredEmotes.isEmpty()) {
+        if (isLoadingSet) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f),
                 contentAlignment = Alignment.Center
             ) {
-                Text(
-                    text = "No hay emotes que coincidan con el filtro seleccionado",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = "Cargando paquete '$currentSetName'...",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
         } else {
-            LazyVerticalGrid(
-                columns = GridCells.Adaptive(minSize = 100.dp),
-                contentPadding = PaddingValues(
-                    top = 4.dp,
-                    bottom = if (draftEmotes.isNotEmpty()) 100.dp else 16.dp
-                ),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+            // Selection Actions Row
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .weight(1f)
+                    .padding(vertical = 4.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                items(filteredEmotes, key = { it.id }) { emote ->
-                    val isSelected = selectedEmoteIds.contains(emote.id)
-                    val isInDraft = draftEmotes.any { it.id == emote.id }
-                    EmoteCard(
-                        emote = emote,
-                        isInDraft = isInDraft,
-                        onToggleDraft = { onToggleDraftEmote(emote) },
-                        modifier = if (isSelected) {
-                            Modifier.border(2.dp, MaterialTheme.colorScheme.tertiary, MaterialTheme.shapes.medium)
-                        } else {
-                            Modifier
-                        },
-                        onClick = { onToggleSelectEmote(emote.id) }
+                Text(
+                    text = if (selectedEmoteIds.isEmpty()) "Mostrando ${filteredEmotes.size} emotes"
+                    else "${selectedEmoteIds.size} seleccionados",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Row {
+                    TextButton(onClick = onSelectAll) {
+                        Text(
+                            text = "Todos",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                    if (selectedEmoteIds.isNotEmpty()) {
+                        TextButton(onClick = onDeselectAll) {
+                            Text(
+                                text = "Limpiar",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        TextButton(onClick = onImportSelected) {
+                            Text(
+                                text = "Importar (${selectedEmoteIds.size})",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.tertiary
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Emotes Grid using EmoteCard
+            if (filteredEmotes.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "No hay emotes que coincidan con el filtro seleccionado",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                }
+            } else {
+                LazyVerticalGrid(
+                    columns = GridCells.Adaptive(minSize = 100.dp),
+                    contentPadding = PaddingValues(
+                        top = 4.dp,
+                        bottom = if (draftEmotes.isNotEmpty()) 100.dp else 16.dp
+                    ),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                ) {
+                    items(filteredEmotes, key = { it.id }) { emote ->
+                        val isSelected = selectedEmoteIds.contains(emote.id)
+                        val isInDraft = draftEmotes.any { it.id == emote.id }
+                        EmoteCard(
+                            emote = emote,
+                            isInDraft = isInDraft,
+                            onToggleDraft = { onToggleDraftEmote(emote) },
+                            modifier = if (isSelected) {
+                                Modifier.border(2.dp, MaterialTheme.colorScheme.tertiary, MaterialTheme.shapes.medium)
+                            } else {
+                                Modifier
+                            },
+                            onClick = { onToggleSelectEmote(emote.id) }
+                        )
+                    }
                 }
             }
         }

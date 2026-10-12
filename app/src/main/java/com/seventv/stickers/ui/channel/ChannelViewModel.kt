@@ -54,13 +54,18 @@ class ChannelViewModel(
         }
 
         viewModelScope.launch {
-            when (val streamerResult = sevenTvRepository.getStreamerEmoteSet(targetQuery)) {
+            when (val channelResult = sevenTvRepository.getChannelData(targetQuery)) {
                 is StickerResult.Success -> {
-                    val set = streamerResult.data
+                    val channel = channelResult.data
+                    val set = channel.activeSet
                     _uiState.update {
                         it.copy(
                             loadState = ChannelLoadState.Success(
-                                streamerName = set.name.ifBlank { targetQuery },
+                                streamerName = channel.streamerName,
+                                username = channel.username,
+                                avatarUrl = channel.avatarUrl,
+                                availableSets = channel.availableSets,
+                                currentSetId = set.id,
                                 emoteSet = set,
                                 allEmotes = set.emotes.distinctBy { emote -> emote.id }
                             )
@@ -70,6 +75,53 @@ class ChannelViewModel(
                 is StickerResult.Failure -> {
                     _uiState.update {
                         it.copy(loadState = ChannelLoadState.Error("No se encontraron emotes para '$targetQuery'"))
+                    }
+                }
+            }
+        }
+    }
+
+    fun onSelectEmoteSet(setId: String) {
+        val currentState = _uiState.value
+        val currentSuccess = currentState.loadState as? ChannelLoadState.Success ?: return
+        if (currentSuccess.currentSetId == setId || currentSuccess.isLoadingSet) return
+
+        val targetSummary = currentSuccess.availableSets.find { it.id == setId }
+        val setName = targetSummary?.name ?: "Pack"
+
+        _uiState.update { state ->
+            state.copy(
+                loadState = currentSuccess.copy(isLoadingSet = true),
+                selectedEmoteIds = emptySet()
+            )
+        }
+
+        viewModelScope.launch {
+            when (val setResult = sevenTvRepository.getEmoteSet(setId)) {
+                is StickerResult.Success -> {
+                    val newSet = setResult.data.copy(
+                        name = setName,
+                        ownerName = currentSuccess.streamerName
+                    )
+                    _uiState.update { state ->
+                        val success = state.loadState as? ChannelLoadState.Success ?: return@update state
+                        state.copy(
+                            loadState = success.copy(
+                                currentSetId = setId,
+                                emoteSet = newSet,
+                                allEmotes = newSet.emotes.distinctBy { it.id },
+                                isLoadingSet = false
+                            )
+                        )
+                    }
+                }
+                is StickerResult.Failure -> {
+                    _uiState.update { state ->
+                        val success = state.loadState as? ChannelLoadState.Success ?: return@update state
+                        state.copy(
+                            loadState = success.copy(isLoadingSet = false),
+                            addToPackErrorMessage = "Error al cargar el paquete: ${setResult.error.toUserFriendlyMessage()}"
+                        )
                     }
                 }
             }

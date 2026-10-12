@@ -45,14 +45,31 @@ data class SevenTvGqlUserDto(
     val username: String,
     @SerialName("display_name")
     val displayName: String? = null,
+    @SerialName("avatar_url")
+    val avatarUrl: String? = null,
+    val connections: List<SevenTvGqlUserConnectionDto> = emptyList(),
     @SerialName("emote_sets")
     val emoteSets: List<SevenTvGqlEmoteSetRefDto> = emptyList()
 )
 
 @Serializable
+data class SevenTvGqlUserConnectionDto(
+    val id: String? = null,
+    val platform: String? = null,
+    val username: String? = null,
+    @SerialName("display_name")
+    val displayName: String? = null,
+    @SerialName("emote_set_id")
+    val emoteSetId: String? = null
+)
+
+@Serializable
 data class SevenTvGqlEmoteSetRefDto(
     val id: String,
-    val name: String
+    val name: String,
+    val capacity: Int? = null,
+    @SerialName("emote_count")
+    val emoteCount: Int = 0
 )
 
 object SevenTvGqlQueries {
@@ -84,9 +101,19 @@ object SevenTvGqlQueries {
             id
             username
             display_name
+            avatar_url
+            connections {
+              id
+              platform
+              username
+              display_name
+              emote_set_id
+            }
             emote_sets {
               id
               name
+              capacity
+              emote_count
             }
           }
         }

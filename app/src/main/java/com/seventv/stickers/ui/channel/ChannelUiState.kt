@@ -2,6 +2,7 @@ package com.seventv.stickers.ui.channel
 
 import com.seventv.stickers.core.domain.engine.SplitPlan
 import com.seventv.stickers.core.domain.model.StickerPack
+import com.seventv.stickers.core.network.model.ChannelEmoteSetSummary
 import com.seventv.stickers.core.network.model.SevenTvEmote
 import com.seventv.stickers.core.network.model.SevenTvEmoteSet
 
@@ -16,8 +17,13 @@ sealed interface ChannelLoadState {
     data class Loading(val query: String) : ChannelLoadState
     data class Success(
         val streamerName: String,
+        val username: String = "",
+        val avatarUrl: String? = null,
+        val availableSets: List<ChannelEmoteSetSummary> = emptyList(),
+        val currentSetId: String = emoteSet.id,
         val emoteSet: SevenTvEmoteSet,
-        val allEmotes: List<SevenTvEmote>
+        val allEmotes: List<SevenTvEmote>,
+        val isLoadingSet: Boolean = false
     ) : ChannelLoadState
     data class Error(val message: String) : ChannelLoadState
 }

@@ -12,9 +12,11 @@ import com.seventv.stickers.core.network.dto.SevenTvGqlEmotesConnection
 import com.seventv.stickers.core.network.dto.SevenTvGqlEmotesData
 import com.seventv.stickers.core.network.dto.SevenTvGqlRequest
 import com.seventv.stickers.core.network.dto.SevenTvGqlResponse
+import com.seventv.stickers.core.network.dto.SevenTvGqlUserConnectionDto
 import com.seventv.stickers.core.network.dto.SevenTvGqlUserDto
 import com.seventv.stickers.core.network.dto.SevenTvGqlUsersData
 import com.seventv.stickers.core.network.dto.SevenTvHostDto
+import com.seventv.stickers.core.network.model.ChannelSearchResult
 import com.seventv.stickers.core.network.model.DownloadedEmoteAsset
 import com.seventv.stickers.core.network.model.SevenTvEmote
 import com.seventv.stickers.core.network.model.SevenTvEmoteSet
@@ -188,6 +190,118 @@ class DefaultSevenTvRepositoryTest {
         assertEquals("cat", set.id)
         assertEquals("cat", set.name)
         assertEquals(1, set.emotes.size)
+    }
+
+    @Test
+    fun getChannelDataMultipleEmoteSetsSelectsConnectionActiveSet() = runTest(testDispatcher) {
+        fakeApi.getEmoteSetHandler = { errorResponse(404, "Set not found") }
+
+        fakeApi.searchUsersHandler = { _ ->
+            Response.success(
+                SevenTvGqlResponse(
+                    data = SevenTvGqlUsersData(
+                        users = listOf(
+                            SevenTvGqlUserDto(
+                                id = "u_streamer",
+                                username = "streamer",
+                                displayName = "StreamerChannel",
+                                connections = listOf(
+                                    SevenTvGqlUserConnectionDto(
+                                        platform = "TWITCH",
+                                        username = "streamer",
+                                        emoteSetId = "set_stream_active"
+                                    )
+                                ),
+                                emoteSets = listOf(
+                                    SevenTvGqlEmoteSetRefDto(id = "set_other", name = "Other Emotes", emoteCount = 30),
+                                    SevenTvGqlEmoteSetRefDto(id = "set_stream_active", name = "Main Stream Set", emoteCount = 800),
+                                    SevenTvGqlEmoteSetRefDto(id = "set_empty", name = "Empty Set", emoteCount = 0)
+                                )
+                            )
+                        )
+                    )
+                )
+            )
+        }
+
+        fakeApi.getEmoteSetHandler = { setId ->
+            if (setId == "set_stream_active") {
+                Response.success(
+                    SevenTvEmoteSetDto(
+                        id = "set_stream_active",
+                        name = "Main Stream Set",
+                        ownerName = "StreamerChannel",
+                        emotes = listOf(SevenTvEmoteDto(id = "e1", name = "PogU"))
+                    )
+                )
+            } else {
+                errorResponse(404, "Not found")
+            }
+        }
+
+        val result = repository.getChannelData("streamer")
+
+        assertTrue("Expected Success, got $result", result is StickerResult.Success<*>)
+        val channel = (result as StickerResult.Success<ChannelSearchResult>).data
+        assertEquals("StreamerChannel", channel.streamerName)
+        assertEquals("streamer", channel.username)
+        // Empty set filtered out, leaving 2 sets
+        assertEquals(2, channel.availableSets.size)
+        assertEquals("set_stream_active", channel.activeSet.id)
+
+        val activeSummary = channel.availableSets.first { it.id == "set_stream_active" }
+        assertTrue(activeSummary.isActive)
+        val otherSummary = channel.availableSets.first { it.id == "set_other" }
+        assertFalse(otherSummary.isActive)
+    }
+
+    @Test
+    fun getChannelDataMultipleEmoteSetsFallsBackToHighestCountWhenNoConnection() = runTest(testDispatcher) {
+        fakeApi.getEmoteSetHandler = { errorResponse(404, "Set not found") }
+
+        fakeApi.searchUsersHandler = { _ ->
+            Response.success(
+                SevenTvGqlResponse(
+                    data = SevenTvGqlUsersData(
+                        users = listOf(
+                            SevenTvGqlUserDto(
+                                id = "u_streamer",
+                                username = "streamer",
+                                displayName = "StreamerChannel",
+                                connections = emptyList(),
+                                emoteSets = listOf(
+                                    SevenTvGqlEmoteSetRefDto(id = "set_small", name = "Small Set", emoteCount = 10),
+                                    SevenTvGqlEmoteSetRefDto(id = "set_huge", name = "Huge Set", emoteCount = 950)
+                                )
+                            )
+                        )
+                    )
+                )
+            )
+        }
+
+        fakeApi.getEmoteSetHandler = { setId ->
+            if (setId == "set_huge") {
+                Response.success(
+                    SevenTvEmoteSetDto(
+                        id = "set_huge",
+                        name = "Huge Set",
+                        ownerName = "StreamerChannel",
+                        emotes = listOf(SevenTvEmoteDto(id = "e_huge", name = "HugeEmote"))
+                    )
+                )
+            } else {
+                errorResponse(404, "Not found")
+            }
+        }
+
+        val result = repository.getChannelData("streamer")
+
+        assertTrue("Expected Success, got $result", result is StickerResult.Success<*>)
+        val channel = (result as StickerResult.Success<ChannelSearchResult>).data
+        assertEquals("set_huge", channel.activeSet.id)
+        val hugeSummary = channel.availableSets.first { it.id == "set_huge" }
+        assertTrue(hugeSummary.isActive)
     }
 
     @Test
