@@ -208,6 +208,7 @@ class ExploreViewModel(
 
     private fun StickerError.toUserFriendlyMessage(): String = when (this) {
         is StickerError.InsufficientStickers -> "Se necesitan al menos $min stickers (actual: $actual)"
+        is StickerError.ExceedsPackLimit -> "El paquete supera el límite de $max stickers (actual: $count)"
         is StickerError.NetworkError -> message
         is StickerError.StorageIoError -> cause.message ?: "Error de almacenamiento al guardar los stickers"
         is StickerError.NativeEncodingFailed -> "Fallo en la codificación WebP: $details"

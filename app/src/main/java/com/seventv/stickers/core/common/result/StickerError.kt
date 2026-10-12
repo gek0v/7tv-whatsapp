@@ -23,5 +23,6 @@ sealed interface StickerError {
 
     // Pack & Persistence error cases
     data class InsufficientStickers(val actual: Int, val min: Int = 3) : StickerError
+    data class ExceedsPackLimit(val count: Int, val max: Int = 30) : StickerError
     data class PackNotFound(val identifier: String) : StickerError
 }

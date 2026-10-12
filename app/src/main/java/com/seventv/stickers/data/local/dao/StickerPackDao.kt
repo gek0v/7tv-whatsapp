@@ -43,6 +43,12 @@ interface StickerPackDao {
     @Query("UPDATE sticker_packs SET isWhitelisted = :isWhitelisted WHERE identifier = :identifier")
     suspend fun updateWhitelisted(identifier: String, isWhitelisted: Boolean)
 
+    @Query("UPDATE sticker_packs SET name = :newName WHERE identifier = :identifier")
+    suspend fun updatePackName(identifier: String, newName: String)
+
     @Query("DELETE FROM sticker_packs WHERE identifier = :identifier")
     suspend fun deletePack(identifier: String)
+
+    @Query("DELETE FROM sticker_packs WHERE identifier IN (:identifiers)")
+    suspend fun deletePacks(identifiers: List<String>)
 }

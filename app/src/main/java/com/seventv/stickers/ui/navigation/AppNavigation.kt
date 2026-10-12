@@ -154,7 +154,8 @@ fun AppNavigation(
             composable(Screen.Packs.route) {
                 val packsViewModel: PacksViewModel = viewModel(
                     factory = PacksViewModel.Factory(
-                        stickerPackRepository = container.stickerPackRepository
+                        stickerPackRepository = container.stickerPackRepository,
+                        sevenTvRepository = container.sevenTvRepository
                     )
                 )
                 PacksScreen(
@@ -174,7 +175,8 @@ fun AppNavigation(
                 val packId = backStackEntry.arguments?.getString("packId") ?: ""
                 val packsViewModel: PacksViewModel = viewModel(
                     factory = PacksViewModel.Factory(
-                        stickerPackRepository = container.stickerPackRepository
+                        stickerPackRepository = container.stickerPackRepository,
+                        sevenTvRepository = container.sevenTvRepository
                     )
                 )
                 PackDetailScreen(

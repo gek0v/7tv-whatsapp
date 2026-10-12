@@ -21,6 +21,9 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -32,16 +35,21 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -60,6 +68,7 @@ import com.seventv.stickers.ui.components.WhatsAppAddButton
 import com.seventv.stickers.ui.theme.DarkBackground
 import com.seventv.stickers.ui.theme.DarkSurface
 import com.seventv.stickers.ui.theme.DarkSurfaceVariant
+import com.seventv.stickers.ui.theme.ErrorRed
 import com.seventv.stickers.ui.theme.OnSurfaceSubtext
 import com.seventv.stickers.ui.theme.OnSurfaceText
 import com.seventv.stickers.ui.theme.SevenTvCyan
@@ -94,6 +103,13 @@ fun PackDetailScreen(
     LaunchedEffect(packId) {
         viewModel.onSelectPackDetail(packId)
         viewModel.syncWhitelist(context, packId)
+    }
+
+    // Handle user feedback message
+    LaunchedEffect(state.userFeedbackMessage) {
+        val msg = state.userFeedbackMessage ?: return@LaunchedEffect
+        snackbarHostState.showSnackbar(msg)
+        viewModel.onClearFeedbackMessage()
     }
 
     // Handle WhatsApp Export Events
@@ -143,7 +159,7 @@ fun PackDetailScreen(
             ) {
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // Top bar with back navigation
+                // Top bar with back navigation, rename and add sticker actions
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
@@ -155,21 +171,48 @@ fun PackDetailScreen(
                             tint = OnSurfaceText
                         )
                     }
-                    Spacer(modifier = Modifier.width(8.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
                     Column(modifier = Modifier.weight(1f)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = pack.name,
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = OnSurfaceText,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f, fill = false)
+                            )
+                            IconButton(
+                                onClick = { viewModel.onOpenRenameDialog(pack) },
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Edit,
+                                    contentDescription = "Renombrar",
+                                    tint = SevenTvCyan,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        }
                         Text(
-                            text = pack.name,
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = OnSurfaceText,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Text(
-                            text = "${pack.stickers.size} stickers • Por ${pack.publisher}",
+                            text = "${pack.stickers.size}/30 stickers • Por ${pack.publisher}",
                             fontSize = 12.sp,
                             color = OnSurfaceSubtext
                         )
+                    }
+
+                    Spacer(modifier = Modifier.width(8.dp))
+
+                    Button(
+                        onClick = { viewModel.onOpenAddStickersDialog() },
+                        colors = ButtonDefaults.buttonColors(containerColor = SevenTvCyan, contentColor = Color.Black),
+                        shape = RoundedCornerShape(10.dp),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Añadir", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     }
                 }
 
@@ -236,7 +279,10 @@ fun PackDetailScreen(
                         modifier = Modifier.fillMaxSize()
                     ) {
                         items(pack.stickers, key = { it.id }) { sticker ->
-                            PackStickerCell(sticker = sticker)
+                            PackStickerCell(
+                                sticker = sticker,
+                                onDeleteClick = { viewModel.onOpenDeleteStickerDialog(sticker) }
+                            )
                         }
                     }
                 }
@@ -257,6 +303,109 @@ fun PackDetailScreen(
         SnackbarHost(
             hostState = snackbarHostState,
             modifier = Modifier.align(Alignment.BottomCenter)
+        )
+    }
+
+    // Delete Sticker Confirmation Dialog
+    if (state.isDeleteStickerConfirmDialogOpen && state.stickerToDelete != null && pack != null) {
+        val sticker = state.stickerToDelete!!
+        val willBeBelowMinimum = pack.stickers.size <= 3
+        AlertDialog(
+            onDismissRequest = { viewModel.onDismissDeleteStickerDialog() },
+            title = {
+                Text(
+                    if (willBeBelowMinimum) "⚠️ Advertencia de WhatsApp" else "Eliminar Sticker",
+                    color = OnSurfaceText,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                if (willBeBelowMinimum) {
+                    Text(
+                        "Al eliminar '${sticker.emoteName}', el pack quedará con ${pack.stickers.size - 1} stickers.\n\nWhatsApp exige un mínimo de 3 stickers por paquete. No podrás añadir o actualizar este paquete en WhatsApp hasta que contenga al menos 3 stickers.\n\n¿Deseas eliminarlo de todas formas?",
+                        color = OnSurfaceSubtext
+                    )
+                } else {
+                    Text(
+                        "¿Estás seguro de que deseas eliminar el sticker '${sticker.emoteName}' de este paquete?",
+                        color = OnSurfaceSubtext
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = { viewModel.onConfirmDeleteSticker(pack.identifier) },
+                    colors = ButtonDefaults.buttonColors(containerColor = ErrorRed, contentColor = Color.White)
+                ) {
+                    Text("Eliminar", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.onDismissDeleteStickerDialog() }) {
+                    Text("Cancelar", color = OnSurfaceSubtext)
+                }
+            },
+            containerColor = DarkSurface
+        )
+    }
+
+    // Rename Pack Dialog
+    if (state.isRenameDialogOpen && state.packToRename != null) {
+        val p = state.packToRename!!
+        var newName by remember(p.identifier) { mutableStateOf(p.name) }
+        AlertDialog(
+            onDismissRequest = { viewModel.onDismissRenameDialog() },
+            title = { Text("Editar Nombre del Pack", color = OnSurfaceText, fontWeight = FontWeight.Bold) },
+            text = {
+                Column {
+                    Text(
+                        "Introduce el nuevo nombre para este paquete de stickers:",
+                        color = OnSurfaceSubtext,
+                        fontSize = 13.sp
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = newName,
+                        onValueChange = { newName = it },
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = OnSurfaceText,
+                            unfocusedTextColor = OnSurfaceText,
+                            focusedBorderColor = SevenTvCyan,
+                            unfocusedBorderColor = DarkSurfaceVariant
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (newName.isNotBlank()) {
+                            viewModel.onConfirmRename(newName)
+                        }
+                    },
+                    enabled = newName.isNotBlank(),
+                    colors = ButtonDefaults.buttonColors(containerColor = SevenTvCyan, contentColor = Color.Black)
+                ) {
+                    Text("Guardar", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.onDismissRenameDialog() }) {
+                    Text("Cancelar", color = OnSurfaceSubtext)
+                }
+            },
+            containerColor = DarkSurface
+        )
+    }
+
+    // Add Stickers Modal
+    if (state.isAddStickersDialogOpen && pack != null) {
+        AddStickersModal(
+            pack = pack,
+            viewModel = viewModel,
+            onDismiss = { viewModel.onDismissAddStickersDialog() }
         )
     }
 
@@ -291,7 +440,10 @@ fun PackDetailScreen(
 }
 
 @Composable
-private fun PackStickerCell(sticker: PackSticker) {
+private fun PackStickerCell(
+    sticker: PackSticker,
+    onDeleteClick: () -> Unit
+) {
     val context = LocalContext.current
     val file = remember(sticker.filePath) {
         val f = File(sticker.filePath)
@@ -302,29 +454,45 @@ private fun PackStickerCell(sticker: PackSticker) {
         colors = CardDefaults.cardColors(containerColor = Color.Transparent),
         shape = RoundedCornerShape(8.dp)
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(4.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            AsyncImage(
-                model = file,
-                contentDescription = sticker.emoteName,
-                modifier = Modifier.size(76.dp)
-            )
-            Spacer(modifier = Modifier.height(2.dp))
-            Text(
-                text = sticker.emoteName,
-                color = OnSurfaceText,
-                fontSize = 10.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            if (sticker.emojis.isNotEmpty()) {
+        Box(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(4.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                AsyncImage(
+                    model = file,
+                    contentDescription = sticker.emoteName,
+                    modifier = Modifier.size(76.dp)
+                )
+                Spacer(modifier = Modifier.height(2.dp))
                 Text(
-                    text = sticker.emojis.joinToString(" "),
-                    fontSize = 11.sp
+                    text = sticker.emoteName,
+                    color = OnSurfaceText,
+                    fontSize = 10.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                if (sticker.emojis.isNotEmpty()) {
+                    Text(
+                        text = sticker.emojis.joinToString(" "),
+                        fontSize = 12.sp
+                    )
+                }
+            }
+
+            IconButton(
+                onClick = onDeleteClick,
+                modifier = Modifier
+                    .size(24.dp)
+                    .align(Alignment.TopEnd)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Delete,
+                    contentDescription = "Eliminar sticker",
+                    tint = ErrorRed,
+                    modifier = Modifier.size(14.dp)
                 )
             }
         }

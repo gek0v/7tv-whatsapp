@@ -169,7 +169,7 @@ class DefaultStickerPackRepository(
                                 emoteId = item.emote.id,
                                 emoteName = item.emote.name,
                                 relativeFilePath = relativePath,
-                                emojis = listOf("💬"),
+                                emojis = com.seventv.stickers.core.domain.mapper.EmoteEmojiMapper.mapEmoteNameToEmojis(item.emote.name),
                                 fileLength = savedFile.length(),
                                 sortOrder = item.index
                             )
@@ -317,6 +317,111 @@ class DefaultStickerPackRepository(
             stickerPackDao.deletePack(identifier)
             storageManager.deletePackDirectory(identifier)
             StickerResult.Success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            StickerResult.Failure(StickerError.StorageIoError(e))
+        }
+    }
+
+    override suspend fun deletePacks(identifiers: List<String>): StickerResult<Unit> = withContext(dispatcher) {
+        try {
+            stickerPackDao.deletePacks(identifiers)
+            for (id in identifiers) {
+                storageManager.deletePackDirectory(id)
+            }
+            StickerResult.Success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            StickerResult.Failure(StickerError.StorageIoError(e))
+        }
+    }
+
+    override suspend fun renamePack(identifier: String, newName: String): StickerResult<Unit> = withContext(dispatcher) {
+        try {
+            stickerPackDao.updatePackName(identifier, newName)
+            stickerPackDao.updateWhitelisted(identifier, false)
+            StickerResult.Success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            StickerResult.Failure(StickerError.StorageIoError(e))
+        }
+    }
+
+    override suspend fun deleteStickerFromPack(packIdentifier: String, stickerId: String): StickerResult<Unit> = withContext(dispatcher) {
+        try {
+            stickerDao.deleteSticker(stickerId)
+            storageManager.deleteStickerFile(packIdentifier, stickerId)
+            stickerPackDao.updateWhitelisted(packIdentifier, false)
+            StickerResult.Success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            StickerResult.Failure(StickerError.StorageIoError(e))
+        }
+    }
+
+    override suspend fun addEmotesToPack(packIdentifier: String, emotes: List<SevenTvEmote>): StickerResult<Unit> = withContext(dispatcher) {
+        try {
+            val pack = stickerPackDao.getPackByIdentifier(packIdentifier)
+                ?: return@withContext StickerResult.Failure(StickerError.PackNotFound(packIdentifier))
+
+            val currentCount = pack.stickers.size
+            if (currentCount + emotes.size > 30) {
+                return@withContext StickerResult.Failure(StickerError.ExceedsPackLimit(currentCount + emotes.size, 30))
+            }
+
+            val packDir = storageManager.getPackDirectory(packIdentifier)
+            val stagingDir = File(packDir, "staging").apply { mkdirs() }
+
+            try {
+                for ((index, emote) in emotes.withIndex()) {
+                    val stickerId = UUID.randomUUID().toString()
+                    val processResult = emoteBridge.convertEmoteToSticker(
+                        emote = emote,
+                        outputDir = stagingDir,
+                        allowStaticFallback = !pack.pack.isAnimated
+                    )
+
+                    val processedSticker = when (processResult) {
+                        is StickerResult.Success -> processResult.data
+                        is StickerResult.Failure -> {
+                            stagingDir.deleteRecursively()
+                            return@withContext processResult
+                        }
+                    }
+
+                    val stickerBytes = processedSticker.file.readBytes()
+                    val savedFile = storageManager.saveStickerFile(
+                        packIdentifier = packIdentifier,
+                        stickerId = stickerId,
+                        bytes = stickerBytes
+                    )
+
+                    val relativePath = "sticker_packs/$packIdentifier/sticker_${stickerId}.webp"
+                    val entity = StickerEntity(
+                        id = stickerId,
+                        packIdentifier = packIdentifier,
+                        emoteId = emote.id,
+                        emoteName = emote.name,
+                        relativeFilePath = relativePath,
+                        emojis = com.seventv.stickers.core.domain.mapper.EmoteEmojiMapper.mapEmoteNameToEmojis(emote.name),
+                        fileLength = savedFile.length(),
+                        sortOrder = currentCount + index
+                    )
+                    stickerDao.insertSticker(entity)
+                }
+
+                stagingDir.deleteRecursively()
+                stickerPackDao.updateWhitelisted(packIdentifier, false)
+                StickerResult.Success(Unit)
+            } catch (e: Exception) {
+                stagingDir.deleteRecursively()
+                if (e is CancellationException) throw e
+                StickerResult.Failure(StickerError.StorageIoError(e))
+            }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {

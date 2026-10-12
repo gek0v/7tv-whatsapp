@@ -294,6 +294,10 @@ class ChannelViewModelTest {
         }
 
         override suspend fun deletePack(identifier: String): StickerResult<Unit> = StickerResult.Success(Unit)
+        override suspend fun deletePacks(identifiers: List<String>): StickerResult<Unit> = StickerResult.Success(Unit)
+        override suspend fun renamePack(identifier: String, newName: String): StickerResult<Unit> = StickerResult.Success(Unit)
+        override suspend fun deleteStickerFromPack(packIdentifier: String, stickerId: String): StickerResult<Unit> = StickerResult.Success(Unit)
+        override suspend fun addEmotesToPack(packIdentifier: String, emotes: List<SevenTvEmote>): StickerResult<Unit> = StickerResult.Success(Unit)
 
         override suspend fun updateStickerEmojis(stickerId: String, emojis: List<String>): StickerResult<Unit> =
             StickerResult.Success(Unit)

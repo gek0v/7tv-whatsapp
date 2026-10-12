@@ -411,6 +411,70 @@ class DefaultStickerPackRepositoryTest {
     }
 
     @Test
+    fun renamePackUpdatesNameAndResetsWhitelist() = runTest(testDispatcher) {
+        val packIdentifier = "pack-rename-test"
+        val packEntity = StickerPackEntity(
+            identifier = packIdentifier,
+            name = "Old Name",
+            publisher = "Tester",
+            trayImageRelativePath = "tray.webp",
+            isAnimated = false,
+            isWhitelisted = true,
+            createdAt = 1000L
+        )
+        packDao.insertPackWithStickers(packEntity, emptyList())
+
+        val renameResult = repository.renamePack(packIdentifier, "New Brand Name")
+        assertTrue(renameResult is StickerResult.Success<*>)
+
+        val updated = packDao.getPackByIdentifier(packIdentifier)
+        assertNotNull(updated)
+        assertEquals("New Brand Name", updated!!.pack.name)
+        assertFalse("Whitelist should be reset on edit", updated.pack.isWhitelisted)
+    }
+
+    @Test
+    fun deletePacksDeletesMultiplePacksAndDiskFolders() = runTest(testDispatcher) {
+        val p1 = "bulk-del-1"
+        val p2 = "bulk-del-2"
+        val d1 = storageManager.getPackDirectory(p1).apply { mkdirs() }
+        val d2 = storageManager.getPackDirectory(p2).apply { mkdirs() }
+        assertTrue(d1.exists() && d2.exists())
+
+        packDao.insertPack(StickerPackEntity(p1, "P1", "Pub", "t.webp", false, false, 1L))
+        packDao.insertPack(StickerPackEntity(p2, "P2", "Pub", "t.webp", false, false, 2L))
+
+        val result = repository.deletePacks(listOf(p1, p2))
+        assertTrue(result is StickerResult.Success<*>)
+
+        assertNull(packDao.getPackByIdentifier(p1))
+        assertNull(packDao.getPackByIdentifier(p2))
+        assertFalse(d1.exists())
+        assertFalse(d2.exists())
+    }
+
+    @Test
+    fun deleteStickerFromPackRemovesEntityAndFile() = runTest(testDispatcher) {
+        val packId = "pack-del-sticker"
+        val packDir = storageManager.getPackDirectory(packId).apply { mkdirs() }
+        val stickerId = "stk-to-del"
+        val sFile = File(packDir, "sticker_${stickerId}.webp").apply { writeBytes(byteArrayOf(1, 2, 3)) }
+        assertTrue(sFile.exists())
+
+        packDao.insertPack(StickerPackEntity(packId, "P", "Pub", "t.webp", false, true, 1L))
+        stickerDao.insertSticker(StickerEntity(stickerId, packId, "e1", "Emote", "path.webp", listOf("💬"), 3L, 0))
+
+        val result = repository.deleteStickerFromPack(packId, stickerId)
+        assertTrue(result is StickerResult.Success<*>)
+
+        val updated = packDao.getPackByIdentifier(packId)
+        assertNotNull(updated)
+        assertEquals(0, updated!!.stickers.size)
+        assertFalse("File must be deleted", sFile.exists())
+        assertFalse("Whitelist should be reset", updated.pack.isWhitelisted)
+    }
+
+    @Test
     fun createPacksFromEmotesFailsWhenInsufficientEmotes() = runTest(testDispatcher) {
         val emotes = listOf(
             createSampleEmote("e1", "one"),

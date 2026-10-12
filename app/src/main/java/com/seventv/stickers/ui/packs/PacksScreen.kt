@@ -21,12 +21,15 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -91,6 +94,7 @@ fun PacksScreen(
         pendingExportPackId?.let { packId ->
             viewModel.syncWhitelist(context, packId)
             pendingExportPackId = null
+            viewModel.onAdvanceExportQueue(context)
         }
     }
 
@@ -141,17 +145,69 @@ fun PacksScreen(
                 .padding(horizontal = 16.dp)
         ) {
             Spacer(modifier = Modifier.height(16.dp))
-            Text(
-                text = "Mis Packs de Stickers",
-                fontSize = 22.sp,
-                fontWeight = FontWeight.Bold,
-                color = OnSurfaceText
-            )
-            Text(
-                text = "Gestiona y exporta tus paquetes guardados a WhatsApp",
-                fontSize = 13.sp,
-                color = OnSurfaceSubtext
-            )
+
+            // Top Header Bar
+            val currentPacks = (state.loadState as? PacksLoadState.Success)?.packs.orEmpty()
+            if (state.isSelectionMode) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = "${state.selectedPackIds.size} seleccionados",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = OnSurfaceText
+                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        TextButton(
+                            onClick = {
+                                if (state.selectedPackIds.size == currentPacks.size) {
+                                    viewModel.onClearSelection()
+                                } else {
+                                    viewModel.onSelectAllPacks()
+                                }
+                            }
+                        ) {
+                            Text(
+                                text = if (state.selectedPackIds.size == currentPacks.size) "Deseleccionar" else "Todos",
+                                color = SevenTvCyan,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(4.dp))
+                        TextButton(onClick = { viewModel.onToggleSelectionMode() }) {
+                            Text("Cancelar", color = OnSurfaceSubtext)
+                        }
+                    }
+                }
+            } else {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Mis Packs de Stickers",
+                            fontSize = 22.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = OnSurfaceText
+                        )
+                        Text(
+                            text = "Gestiona y exporta tus paquetes guardados a WhatsApp",
+                            fontSize = 13.sp,
+                            color = OnSurfaceSubtext
+                        )
+                    }
+                    if (currentPacks.isNotEmpty()) {
+                        TextButton(onClick = { viewModel.onToggleSelectionMode() }) {
+                            Text("Seleccionar", color = SevenTvCyan, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                }
+            }
 
             Spacer(modifier = Modifier.height(16.dp))
 
@@ -196,19 +252,88 @@ fun PacksScreen(
                         }
                     } else {
                         LazyColumn(
-                            contentPadding = PaddingValues(bottom = 24.dp),
+                            contentPadding = PaddingValues(bottom = if (state.isSelectionMode) 90.dp else 24.dp),
                             verticalArrangement = Arrangement.spacedBy(12.dp),
                             modifier = Modifier.weight(1f)
                         ) {
                             items(load.packs, key = { it.identifier }) { pack ->
                                 PackCard(
                                     pack = pack,
-                                    onClick = { onNavigateToPackDetail(pack.identifier) },
+                                    isSelectionMode = state.isSelectionMode,
+                                    isSelected = pack.identifier in state.selectedPackIds,
+                                    onToggleSelect = { viewModel.onTogglePackSelection(pack.identifier) },
+                                    onClick = {
+                                        if (state.isSelectionMode) {
+                                            viewModel.onTogglePackSelection(pack.identifier)
+                                        } else {
+                                            onNavigateToPackDetail(pack.identifier)
+                                        }
+                                    },
+                                    onRenameClick = { viewModel.onOpenRenameDialog(pack) },
                                     onAddWhatsAppClick = { viewModel.onAddPackToWhatsApp(context, pack) },
                                     onDeleteClick = { viewModel.onOpenDeleteDialog(pack) }
                                 )
                             }
                         }
+                    }
+                }
+            }
+        }
+
+        // Bottom Bar for Batch Actions in Selection Mode
+        if (state.isSelectionMode) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.BottomCenter)
+                    .padding(16.dp),
+                shape = RoundedCornerShape(16.dp),
+                color = DarkSurfaceVariant,
+                shadowElevation = 8.dp
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Button(
+                        onClick = { viewModel.onOpenBulkDeleteDialog() },
+                        enabled = state.selectedPackIds.isNotEmpty(),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = ErrorRed,
+                            contentColor = Color.White,
+                            disabledContainerColor = DarkSurface
+                        ),
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            "Eliminar (${state.selectedPackIds.size})",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp
+                        )
+                    }
+
+                    Button(
+                        onClick = { viewModel.onStartBatchWhatsAppExport(context) },
+                        enabled = state.selectedPackIds.isNotEmpty(),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF25D366),
+                            contentColor = Color.White,
+                            disabledContainerColor = DarkSurface
+                        ),
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Text(
+                            "Añadir a WA (${state.selectedPackIds.size})",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp
+                        )
                     }
                 }
             }
@@ -220,7 +345,7 @@ fun PacksScreen(
         )
     }
 
-    // Delete Confirmation Dialog
+    // Single Delete Confirmation Dialog
     if (state.isDeleteConfirmDialogOpen && state.packToDelete != null) {
         val pack = state.packToDelete!!
         AlertDialog(
@@ -242,6 +367,85 @@ fun PacksScreen(
             },
             dismissButton = {
                 TextButton(onClick = { viewModel.onDismissDeleteDialog() }) {
+                    Text("Cancelar", color = OnSurfaceSubtext)
+                }
+            },
+            containerColor = DarkSurface
+        )
+    }
+
+    // Bulk Delete Confirmation Dialog
+    if (state.isBulkDeleteConfirmDialogOpen && state.selectedPackIds.isNotEmpty()) {
+        AlertDialog(
+            onDismissRequest = { viewModel.onDismissBulkDeleteDialog() },
+            title = { Text("Eliminar Paquetes", color = OnSurfaceText, fontWeight = FontWeight.Bold) },
+            text = {
+                Text(
+                    "¿Estás seguro de que deseas eliminar los ${state.selectedPackIds.size} paquetes seleccionados? Se borrarán todos sus stickers del almacenamiento.",
+                    color = OnSurfaceSubtext
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = { viewModel.onConfirmBulkDelete() },
+                    colors = ButtonDefaults.buttonColors(containerColor = ErrorRed, contentColor = Color.White)
+                ) {
+                    Text("Eliminar Todos", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.onDismissBulkDeleteDialog() }) {
+                    Text("Cancelar", color = OnSurfaceSubtext)
+                }
+            },
+            containerColor = DarkSurface
+        )
+    }
+
+    // Rename Pack Dialog
+    if (state.isRenameDialogOpen && state.packToRename != null) {
+        val pack = state.packToRename!!
+        var newName by remember(pack.identifier) { mutableStateOf(pack.name) }
+        AlertDialog(
+            onDismissRequest = { viewModel.onDismissRenameDialog() },
+            title = { Text("Editar Nombre del Pack", color = OnSurfaceText, fontWeight = FontWeight.Bold) },
+            text = {
+                Column {
+                    Text(
+                        "Introduce el nuevo nombre para este paquete de stickers:",
+                        color = OnSurfaceSubtext,
+                        fontSize = 13.sp
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    androidx.compose.material3.OutlinedTextField(
+                        value = newName,
+                        onValueChange = { newName = it },
+                        singleLine = true,
+                        colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = OnSurfaceText,
+                            unfocusedTextColor = OnSurfaceText,
+                            focusedBorderColor = SevenTvCyan,
+                            unfocusedBorderColor = DarkSurfaceVariant
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (newName.isNotBlank()) {
+                            viewModel.onConfirmRename(newName)
+                        }
+                    },
+                    enabled = newName.isNotBlank(),
+                    colors = ButtonDefaults.buttonColors(containerColor = SevenTvCyan, contentColor = Color.Black)
+                ) {
+                    Text("Guardar", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.onDismissRenameDialog() }) {
                     Text("Cancelar", color = OnSurfaceSubtext)
                 }
             },
@@ -282,14 +486,24 @@ fun PacksScreen(
 @Composable
 private fun PackCard(
     pack: StickerPack,
+    isSelectionMode: Boolean,
+    isSelected: Boolean,
+    onToggleSelect: () -> Unit,
     onClick: () -> Unit,
+    onRenameClick: () -> Unit,
     onAddWhatsAppClick: () -> Unit,
     onDeleteClick: () -> Unit
 ) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onClick() },
+            .clickable {
+                if (isSelectionMode) {
+                    onToggleSelect()
+                } else {
+                    onClick()
+                }
+            },
         colors = CardDefaults.cardColors(containerColor = DarkSurface),
         shape = RoundedCornerShape(14.dp)
     ) {
@@ -298,6 +512,19 @@ private fun PackCard(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                if (isSelectionMode) {
+                    Checkbox(
+                        checked = isSelected,
+                        onCheckedChange = { onToggleSelect() },
+                        colors = CheckboxDefaults.colors(
+                            checkedColor = SevenTvCyan,
+                            checkmarkColor = Color.Black,
+                            uncheckedColor = OnSurfaceSubtext
+                        )
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                }
+
                 // Tray Icon or First sticker
                 val context = LocalContext.current
                 val trayFile = remember(pack.trayImagePath) {
@@ -351,23 +578,34 @@ private fun PackCard(
                     )
                 }
 
-                IconButton(onClick = onDeleteClick) {
-                    Icon(
-                        imageVector = Icons.Default.Delete,
-                        contentDescription = "Eliminar pack",
-                        tint = OnSurfaceSubtext
-                    )
+                if (!isSelectionMode) {
+                    IconButton(onClick = onRenameClick) {
+                        Icon(
+                            imageVector = Icons.Default.Edit,
+                            contentDescription = "Editar nombre",
+                            tint = OnSurfaceSubtext
+                        )
+                    }
+                    IconButton(onClick = onDeleteClick) {
+                        Icon(
+                            imageVector = Icons.Default.Delete,
+                            contentDescription = "Eliminar pack",
+                            tint = OnSurfaceSubtext
+                        )
+                    }
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            if (!isSelectionMode) {
+                Spacer(modifier = Modifier.height(12.dp))
 
-            // Action Button
-            WhatsAppAddButton(
-                isWhitelisted = pack.isWhitelisted,
-                onClick = onAddWhatsAppClick,
-                modifier = Modifier.fillMaxWidth()
-            )
+                // Action Button
+                WhatsAppAddButton(
+                    isWhitelisted = pack.isWhitelisted,
+                    onClick = onAddWhatsAppClick,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
         }
     }
 }
