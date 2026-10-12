@@ -7,6 +7,7 @@ import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
@@ -15,7 +16,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -35,10 +35,6 @@ import com.seventv.stickers.ui.explore.ExploreViewModel
 import com.seventv.stickers.ui.packs.PackDetailScreen
 import com.seventv.stickers.ui.packs.PacksScreen
 import com.seventv.stickers.ui.packs.PacksViewModel
-import com.seventv.stickers.ui.theme.DarkSurface
-import com.seventv.stickers.ui.theme.OnSurfaceSubtext
-import com.seventv.stickers.ui.theme.OnSurfaceText
-import com.seventv.stickers.ui.theme.SevenTvCyan
 
 sealed class Screen(val route: String, val title: String, val icon: ImageVector) {
     data object Explore : Screen("explore", "Explorar", Icons.Default.Search)
@@ -71,7 +67,7 @@ fun AppNavigation(
                 ImportProgressBanner(importManager = container.packImportManager)
                 if (isBottomBarVisible) {
                     NavigationBar(
-                        containerColor = DarkSurface
+                        containerColor = MaterialTheme.colorScheme.surfaceContainer
                     ) {
                         bottomNavItems.forEach { screen ->
                             val isSelected = currentRoute == screen.route
@@ -80,11 +76,11 @@ fun AppNavigation(
                                 label = { Text(screen.title) },
                                 selected = isSelected,
                                 colors = NavigationBarItemDefaults.colors(
-                                    selectedIconColor = Color.Black,
-                                    selectedTextColor = SevenTvCyan,
-                                    indicatorColor = SevenTvCyan,
-                                    unselectedIconColor = OnSurfaceSubtext,
-                                    unselectedTextColor = OnSurfaceSubtext
+                                    indicatorColor = MaterialTheme.colorScheme.primaryContainer,
+                                    selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    selectedTextColor = MaterialTheme.colorScheme.primary,
+                                    unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
                                 ),
                                 onClick = {
                                     if (currentRoute != screen.route) {
@@ -162,6 +158,14 @@ fun AppNavigation(
                     viewModel = packsViewModel,
                     onNavigateToPackDetail = { packId ->
                         navController.navigate(Screen.PackDetail.createRoute(packId))
+                    },
+                    onCreatePackClick = {
+                        navController.navigate(Screen.Explore.route) {
+                            popUpTo(navController.graph.findStartDestination().id) {
+                                saveState = true
+                            }
+                            launchSingleTop = true
+                        }
                     }
                 )
             }

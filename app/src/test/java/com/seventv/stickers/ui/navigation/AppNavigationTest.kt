@@ -29,4 +29,18 @@ class AppNavigationTest {
         assertTrue(bottomNavItems.contains(Screen.Channel))
         assertTrue(bottomNavItems.contains(Screen.Packs))
     }
+
+    @Test
+    fun bottomNavItemsHaveUniqueRoutesAndTitles() {
+        val routes = bottomNavItems.map { it.route }
+        val titles = bottomNavItems.map { it.title }
+        assertEquals(routes.distinct().size, bottomNavItems.size)
+        assertEquals(titles.distinct().size, bottomNavItems.size)
+    }
+
+    @Test
+    fun packDetailRouteMatchesParam() {
+        val route = Screen.PackDetail.createRoute("custom_pack_42")
+        assertEquals("pack_detail/custom_pack_42", route)
+    }
 }

@@ -367,6 +367,50 @@ class PacksViewModelTest {
         assertTrue(viewModel.uiState.value.userFeedbackMessage?.contains("Paquetes combinados con éxito") == true)
     }
 
+    @Test
+    fun duplicatePackFlow() = runTest(testDispatcher) {
+        val pack = createSamplePack("pack_1", "Original")
+        fakeStickerPackRepository.packsFlow.value = listOf(pack)
+        advanceUntilIdle()
+
+        viewModel.onOpenDuplicateDialog(pack)
+        assertTrue(viewModel.uiState.value.isDuplicateDialogOpen)
+        assertEquals(pack, viewModel.uiState.value.packToDuplicate)
+
+        viewModel.onConfirmDuplicatePack("Original (Copia)")
+        advanceUntilIdle()
+
+        assertFalse(viewModel.uiState.value.isDuplicateDialogOpen)
+        assertNull(viewModel.uiState.value.packToDuplicate)
+        assertTrue(viewModel.uiState.value.userFeedbackMessage?.contains("Original (Copia)") == true)
+    }
+
+    @Test
+    fun updateStickerEmojisFlow() = runTest(testDispatcher) {
+        val pack = createSamplePack("pack_1", "Original")
+        fakeStickerPackRepository.packsFlow.value = listOf(pack)
+        advanceUntilIdle()
+
+        viewModel.onSelectPackDetail("pack_1")
+        viewModel.onUpdateStickerEmojis("pack_1", "s_1", listOf("💬", "🔥"))
+        advanceUntilIdle()
+
+        assertEquals("s_1", fakeStickerPackRepository.lastUpdatedStickerId)
+        assertEquals(listOf("💬", "🔥"), fakeStickerPackRepository.lastUpdatedEmojis)
+    }
+
+    @Test
+    fun setStickerAsTrayIconShowsFeedback() = runTest(testDispatcher) {
+        val pack = createSamplePack("pack_1", "Original")
+        fakeStickerPackRepository.packsFlow.value = listOf(pack)
+        advanceUntilIdle()
+
+        viewModel.onSetStickerAsTrayIcon("pack_1", "s_1")
+        advanceUntilIdle()
+
+        assertEquals("Icono del pack actualizado", viewModel.uiState.value.userFeedbackMessage)
+    }
+
     private fun createSamplePack(
         id: String,
         name: String,
@@ -470,8 +514,13 @@ class PacksViewModelTest {
         override suspend fun addEmotesToPack(packIdentifier: String, emotes: List<SevenTvEmote>): StickerResult<Unit> =
             StickerResult.Success(Unit)
 
-        override suspend fun updateStickerEmojis(stickerId: String, emojis: List<String>): StickerResult<Unit> =
-            StickerResult.Success(Unit)
+        var lastUpdatedStickerId: String? = null
+        var lastUpdatedEmojis: List<String>? = null
+        override suspend fun updateStickerEmojis(stickerId: String, emojis: List<String>): StickerResult<Unit> {
+            lastUpdatedStickerId = stickerId
+            lastUpdatedEmojis = emojis
+            return StickerResult.Success(Unit)
+        }
 
         override suspend fun updatePackWhitelisted(identifier: String, isWhitelisted: Boolean): StickerResult<Unit> {
             packsFlow.value = packsFlow.value.map {

@@ -16,9 +16,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.itemsIndexed
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
@@ -31,6 +29,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
@@ -41,26 +40,17 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.seventv.stickers.core.domain.model.StickerPack
 import com.seventv.stickers.core.network.model.SevenTvEmote
-import com.seventv.stickers.ui.theme.DarkBackground
-import com.seventv.stickers.ui.theme.DarkSurface
-import com.seventv.stickers.ui.theme.DarkSurfaceVariant
-import com.seventv.stickers.ui.theme.ErrorRed
-import com.seventv.stickers.ui.theme.OnSurfaceSubtext
-import com.seventv.stickers.ui.theme.OnSurfaceText
-import com.seventv.stickers.ui.theme.SevenTvCyan
 
 @Composable
 fun AddStickersModal(
@@ -79,13 +69,13 @@ fun AddStickersModal(
             modifier = Modifier
                 .fillMaxWidth(0.95f)
                 .fillMaxHeight(0.85f),
-            shape = RoundedCornerShape(20.dp),
-            color = DarkSurface
+            shape = MaterialTheme.shapes.extraLarge,
+            color = MaterialTheme.colorScheme.surfaceContainerHigh
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(16.dp)
+                    .padding(20.dp)
             ) {
                 // Modal Header
                 Row(
@@ -96,51 +86,70 @@ fun AddStickersModal(
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = "Añadir a '${pack.name}'",
-                            fontSize = 18.sp,
+                            style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold,
-                            color = OnSurfaceText,
+                            color = MaterialTheme.colorScheme.onSurface,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
                         Text(
                             text = "${pack.stickers.size}/30 stickers • ${if (pack.isAnimated) "Animados" else "Estáticos"}",
-                            fontSize = 12.sp,
-                            color = if (isPackFull) ErrorRed else SevenTvCyan
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (isPackFull) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
                         )
                     }
                     IconButton(onClick = onDismiss) {
-                        Icon(Icons.Default.Close, contentDescription = "Cerrar", tint = OnSurfaceSubtext)
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Cerrar",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(14.dp))
 
                 // Search Bar
                 OutlinedTextField(
                     value = state.searchQuery,
                     onValueChange = { viewModel.onSearchQueryChanged(it) },
-                    placeholder = { Text("Buscar emotes en 7TV (ej: kekw, pepe)...", color = OnSurfaceSubtext, fontSize = 13.sp) },
-                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = SevenTvCyan) },
+                    placeholder = {
+                        Text(
+                            text = "Buscar emotes en 7TV (ej: kekw, pepe)...",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.Search,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    },
                     trailingIcon = {
                         if (state.searchQuery.isNotEmpty()) {
                             IconButton(onClick = { viewModel.onSearchQueryChanged("") }) {
-                                Icon(Icons.Default.Close, contentDescription = "Limpiar", tint = OnSurfaceSubtext)
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "Limpiar",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
                             }
                         }
                     },
                     singleLine = true,
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = OnSurfaceText,
-                        unfocusedTextColor = OnSurfaceText,
-                        focusedBorderColor = SevenTvCyan,
-                        unfocusedBorderColor = DarkSurfaceVariant,
-                        cursorColor = SevenTvCyan
+                        focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                        unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                        unfocusedBorderColor = MaterialTheme.colorScheme.outline
                     ),
-                    shape = RoundedCornerShape(12.dp),
+                    shape = MaterialTheme.shapes.medium,
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(14.dp))
 
                 if (state.isAddingStickers) {
                     Box(
@@ -150,9 +159,13 @@ fun AddStickersModal(
                         contentAlignment = Alignment.Center
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            CircularProgressIndicator(color = SevenTvCyan)
+                            CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                             Spacer(modifier = Modifier.height(12.dp))
-                            Text("Procesando y añadiendo sticker...", color = OnSurfaceText, fontSize = 14.sp)
+                            Text(
+                                text = "Procesando y añadiendo sticker...",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
                         }
                     }
                 } else if (state.isSearching) {
@@ -162,7 +175,7 @@ fun AddStickersModal(
                             .weight(1f),
                         contentAlignment = Alignment.Center
                     ) {
-                        CircularProgressIndicator(color = SevenTvCyan)
+                        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                     }
                 } else if (state.searchQuery.isBlank()) {
                     Box(
@@ -173,9 +186,9 @@ fun AddStickersModal(
                     ) {
                         Text(
                             text = "Escribe el nombre de un emote de 7TV arriba para buscar y añadir stickers.",
-                            color = OnSurfaceSubtext,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             textAlign = TextAlign.Center,
-                            fontSize = 13.sp,
                             modifier = Modifier.padding(24.dp)
                         )
                     }
@@ -188,9 +201,9 @@ fun AddStickersModal(
                     ) {
                         Text(
                             text = "No se encontraron emotes en 7TV para '${state.searchQuery}'.",
-                            color = OnSurfaceSubtext,
-                            textAlign = TextAlign.Center,
-                            fontSize = 13.sp
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center
                         )
                     }
                 } else {
@@ -203,7 +216,7 @@ fun AddStickersModal(
                     ) {
                         itemsIndexed(state.searchResults, key = { index, emote -> "${emote.id}_$index" }) { _, emote ->
                             val alreadyInPack = pack.stickers.any { it.emoteId == emote.id }
-                            val isCompatible = !pack.isAnimated || emote.isAnimated // static can't go in animated pack without conversion
+                            val isCompatible = !pack.isAnimated || emote.isAnimated
                             EmoteSearchResultCard(
                                 emote = emote,
                                 alreadyInPack = alreadyInPack,
@@ -228,8 +241,10 @@ private fun EmoteSearchResultCard(
     onAdd: () -> Unit
 ) {
     Card(
-        colors = CardDefaults.cardColors(containerColor = DarkSurfaceVariant),
-        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainer
+        ),
+        shape = MaterialTheme.shapes.medium,
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(
@@ -239,8 +254,8 @@ private fun EmoteSearchResultCard(
             Box(
                 modifier = Modifier
                     .size(68.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(DarkBackground),
+                    .clip(MaterialTheme.shapes.small)
+                    .background(MaterialTheme.colorScheme.surfaceContainerHighest),
                 contentAlignment = Alignment.Center
             ) {
                 AsyncImage(
@@ -258,17 +273,17 @@ private fun EmoteSearchResultCard(
 
             Text(
                 text = emote.name,
-                color = OnSurfaceText,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurface,
                 fontWeight = FontWeight.Bold,
-                fontSize = 13.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
 
             Text(
                 text = if (emote.isAnimated) "Animado" else "Estático",
-                color = OnSurfaceSubtext,
-                fontSize = 10.sp
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -279,29 +294,29 @@ private fun EmoteSearchResultCard(
                 onClick = onAdd,
                 enabled = canAdd,
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = SevenTvCyan,
-                    contentColor = Color.Black,
-                    disabledContainerColor = DarkBackground,
-                    disabledContentColor = OnSurfaceSubtext
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                    disabledContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                    disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant
                 ),
-                shape = RoundedCornerShape(8.dp),
+                shape = MaterialTheme.shapes.small,
                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(32.dp)
+                    .height(34.dp)
             ) {
                 if (alreadyInPack) {
                     Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(14.dp))
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("Añadido", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    Text("Añadido", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
                 } else if (!isCompatible) {
-                    Text("Incompatible", fontSize = 11.sp)
+                    Text("Incompatible", style = MaterialTheme.typography.labelSmall)
                 } else if (isPackFull) {
-                    Text("Lleno", fontSize = 11.sp)
+                    Text("Lleno", style = MaterialTheme.typography.labelSmall)
                 } else {
                     Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(14.dp))
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("Añadir", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    Text("Añadir", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
                 }
             }
         }
