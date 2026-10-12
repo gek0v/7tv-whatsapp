@@ -41,8 +41,10 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
@@ -63,6 +65,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.seventv.stickers.core.network.model.SevenTvEmote
+import com.seventv.stickers.ui.components.AddToExistingPackDialog
 import com.seventv.stickers.ui.components.DockedDraftPill
 import com.seventv.stickers.ui.components.DraftBottomSheet
 import com.seventv.stickers.ui.components.EmoteCard
@@ -84,6 +87,27 @@ fun ChannelScreen(
             snackbarHostState.showSnackbar("¡${import.createdPacks.size} paquete(s) importados con éxito!")
         } else if (import is ChannelImportState.Error) {
             snackbarHostState.showSnackbar(import.message)
+        }
+    }
+
+    LaunchedEffect(state.addToPackSuccessMessage, state.addToPackErrorMessage) {
+        state.addToPackSuccessMessage?.let { msg ->
+            val result = snackbarHostState.showSnackbar(
+                message = msg,
+                actionLabel = "Ver packs",
+                duration = SnackbarDuration.Long
+            )
+            if (result == SnackbarResult.ActionPerformed) {
+                onNavigateToPacks()
+            }
+            viewModel.onClearAddToPackMessages()
+        }
+        state.addToPackErrorMessage?.let { err ->
+            snackbarHostState.showSnackbar(
+                message = err,
+                duration = SnackbarDuration.Short
+            )
+            viewModel.onClearAddToPackMessages()
         }
     }
 
@@ -312,8 +336,63 @@ fun ChannelScreen(
                         viewModel.onCreatePackFromDraft(draftPackName)
                         showDraftSheet = false
                     },
+                    onAddToExistingPack = {
+                        showDraftSheet = false
+                        viewModel.onOpenAddToExistingPackDialog(state.draftEmotes)
+                    },
                     onDismiss = { showDraftSheet = false }
                 )
+            }
+
+            // Add to Existing Pack Dialog
+            if (state.isAddToExistingPackDialogOpen) {
+                AddToExistingPackDialog(
+                    packs = state.existingPacks,
+                    emotesToAdd = state.emotesToAddToPack,
+                    onSelectPack = { pack ->
+                        viewModel.onAddEmotesToPack(pack.identifier)
+                    },
+                    onDismiss = viewModel::onDismissAddToExistingPackDialog
+                )
+            }
+
+            // Adding to Pack Progress Overlay
+            if (state.isAddingToPack) {
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.scrim.copy(alpha = 0.6f)
+                ) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Surface(
+                            shape = MaterialTheme.shapes.extraLarge,
+                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            tonalElevation = 6.dp,
+                            modifier = Modifier.padding(32.dp)
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(24.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                                Spacer(modifier = Modifier.height(16.dp))
+                                Text(
+                                    text = "Añadiendo stickers al paquete...",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "Convirtiendo y optimizando WebP para WhatsApp",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
             }
         }
     }

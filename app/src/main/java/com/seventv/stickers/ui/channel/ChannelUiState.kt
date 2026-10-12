@@ -46,5 +46,11 @@ data class ChannelUiState(
     val loadState: ChannelLoadState = ChannelLoadState.Idle,
     val importState: ChannelImportState = ChannelImportState.Idle,
     val selectedEmoteIds: Set<String> = emptySet(),
-    val draftEmotes: List<SevenTvEmote> = emptyList()
+    val draftEmotes: List<SevenTvEmote> = emptyList(),
+    val existingPacks: List<StickerPack> = emptyList(),
+    val isAddToExistingPackDialogOpen: Boolean = false,
+    val emotesToAddToPack: List<SevenTvEmote> = emptyList(),
+    val isAddingToPack: Boolean = false,
+    val addToPackSuccessMessage: String? = null,
+    val addToPackErrorMessage: String? = null
 )
