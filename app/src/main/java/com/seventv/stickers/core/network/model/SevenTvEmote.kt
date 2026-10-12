@@ -11,4 +11,7 @@ data class SevenTvEmote(
     val isNsfw: Boolean,
     val bestAssetUrl: String,
     val availableScales: List<String>
-)
+) {
+    val previewUrl: String
+        get() = bestAssetUrl
+}
