@@ -31,7 +31,6 @@ object WhatsAppIntentHelper {
         val targetPackage = (context?.let { getInstalledWhatsAppPackage(it) }) ?: WhatsAppConstants.PACKAGE_WHATSAPP
         return Intent(WhatsAppConstants.INTENT_ACTION_ENABLE_STICKER_PACK).apply {
             `package` = targetPackage
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             putExtra(WhatsAppConstants.EXTRA_STICKER_PACK_AUTHORITY, authority)
             putExtra(WhatsAppConstants.EXTRA_STICKER_PACK_ID, packIdentifier)
             putExtra(WhatsAppConstants.EXTRA_STICKER_PACK_NAME, packName)

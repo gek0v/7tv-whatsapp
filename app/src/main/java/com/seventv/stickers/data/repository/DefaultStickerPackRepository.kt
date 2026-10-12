@@ -122,7 +122,7 @@ class DefaultStickerPackRepository(
                                     val processResult = emoteBridge.convertEmoteToSticker(
                                         emote = emote,
                                         outputDir = stagingDir,
-                                        allowStaticFallback = true
+                                        allowStaticFallback = !plan.isAnimated
                                     )
                                     val done = completedCounter.incrementAndGet()
                                     onProgress?.invoke(done, totalInPlan)

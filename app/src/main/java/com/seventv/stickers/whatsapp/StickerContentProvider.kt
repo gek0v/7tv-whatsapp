@@ -43,7 +43,8 @@ class StickerContentProvider : ContentProvider() {
 
         private val STICKER_COLUMNS = arrayOf(
             WhatsAppConstants.STICKER_FILE_NAME_IN_QUERY,
-            WhatsAppConstants.STICKER_FILE_EMOJI_IN_QUERY
+            WhatsAppConstants.STICKER_FILE_EMOJI_IN_QUERY,
+            WhatsAppConstants.STICKER_FILE_ACCESSIBILITY_TEXT_IN_QUERY
         )
 
         private val uriMatcher = UriMatcher(UriMatcher.NO_MATCH).apply {
@@ -68,6 +69,18 @@ class StickerContentProvider : ContentProvider() {
         return true
     }
 
+    private fun ensureInitialized() {
+        if (!::database.isInitialized || !::storageManager.isInitialized) {
+            val ctx = context ?: throw IllegalStateException("Context is null in StickerContentProvider")
+            if (!::database.isInitialized) {
+                database = AppDatabase.getInstance(ctx)
+            }
+            if (!::storageManager.isInitialized) {
+                storageManager = DefaultStickerStorageManager(ctx.filesDir)
+            }
+        }
+    }
+
     @VisibleForTesting
     fun setTestDependencies(testDb: AppDatabase, testStorage: StickerStorageManager) {
         database = testDb
@@ -81,12 +94,13 @@ class StickerContentProvider : ContentProvider() {
         selectionArgs: Array<out String>?,
         sortOrder: String?
     ): Cursor? {
-        return when (uriMatcher.match(uri)) {
+        ensureInitialized()
+        val cursor: MatrixCursor = when (uriMatcher.match(uri)) {
             METADATA_CODE -> {
-                val cursor = MatrixCursor(METADATA_COLUMNS)
+                val c = MatrixCursor(METADATA_COLUMNS)
                 val packs = database.stickerPackDao().getAllPacksDirect()
                 for (pack in packs) {
-                    cursor.addRow(
+                    c.addRow(
                         arrayOf(
                             pack.pack.identifier,
                             pack.pack.name,
@@ -104,14 +118,14 @@ class StickerContentProvider : ContentProvider() {
                         )
                     )
                 }
-                cursor
+                c
             }
             METADATA_PACK_CODE -> {
-                val cursor = MatrixCursor(METADATA_COLUMNS)
+                val c = MatrixCursor(METADATA_COLUMNS)
                 val packId = uri.lastPathSegment ?: ""
                 val pack = database.stickerPackDao().getPackByIdentifierDirect(packId)
                 if (pack != null) {
-                    cursor.addRow(
+                    c.addRow(
                         arrayOf(
                             pack.pack.identifier,
                             pack.pack.name,
@@ -129,30 +143,34 @@ class StickerContentProvider : ContentProvider() {
                         )
                     )
                 }
-                cursor
+                c
             }
             STICKERS_CODE -> {
-                val cursor = MatrixCursor(STICKER_COLUMNS)
+                val c = MatrixCursor(STICKER_COLUMNS)
                 val packId = uri.lastPathSegment ?: ""
                 val pack = database.stickerPackDao().getPackByIdentifierDirect(packId)
                 if (pack != null) {
                     val sortedStickers = pack.stickers.sortedBy { it.sortOrder }
                     for (sticker in sortedStickers) {
-                        cursor.addRow(
+                        c.addRow(
                             arrayOf(
                                 File(sticker.relativeFilePath).name,
-                                sticker.emojis.joinToString(",")
+                                sticker.emojis.joinToString(","),
+                                sticker.emoteName
                             )
                         )
                     }
                 }
-                cursor
+                c
             }
             else -> throw IllegalArgumentException("Unknown URI: $uri")
         }
+        context?.contentResolver?.let { cursor.setNotificationUri(it, uri) }
+        return cursor
     }
 
     override fun openAssetFile(uri: Uri, mode: String): AssetFileDescriptor? {
+        ensureInitialized()
         val match = uriMatcher.match(uri)
         if (match != STICKERS_ASSET_CODE) {
             throw IllegalArgumentException("Invalid URI for asset: $uri")
@@ -168,7 +186,7 @@ class StickerContentProvider : ContentProvider() {
         val fileName = pathSegments[2]
         val packDir = storageManager.getPackDirectory(packIdentifier)
         val file = File(packDir, fileName)
-        if (file.canonicalFile.parentFile != packDir.canonicalFile) {
+        if (file.canonicalFile.parentFile?.canonicalPath != packDir.canonicalPath) {
             throw SecurityException("Path traversal attempt detected: $fileName")
         }
         if (!file.exists()) {
@@ -183,7 +201,10 @@ class StickerContentProvider : ContentProvider() {
             METADATA_CODE -> "vnd.android.cursor.dir/vnd.$AUTHORITY.metadata"
             METADATA_PACK_CODE -> "vnd.android.cursor.item/vnd.$AUTHORITY.metadata"
             STICKERS_CODE -> "vnd.android.cursor.dir/vnd.$AUTHORITY.stickers"
-            STICKERS_ASSET_CODE -> "image/webp"
+            STICKERS_ASSET_CODE -> {
+                val last = uri.lastPathSegment ?: ""
+                if (last.endsWith(".png", ignoreCase = true)) "image/png" else "image/webp"
+            }
             else -> null
         }
     }

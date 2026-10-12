@@ -25,8 +25,8 @@ object WhatsAppWhitelistChecker {
                 .scheme("content")
                 .authority(whitelistAuthority)
                 .appendPath(WhatsAppConstants.WHITELIST_QUERY_PATH)
-                .appendQueryParameter(WhatsAppConstants.EXTRA_STICKER_PACK_AUTHORITY, authority)
-                .appendQueryParameter(WhatsAppConstants.EXTRA_STICKER_PACK_ID, packIdentifier)
+                .appendQueryParameter(WhatsAppConstants.WHITELIST_QUERY_PARAM_AUTHORITY, authority)
+                .appendQueryParameter(WhatsAppConstants.WHITELIST_QUERY_PARAM_IDENTIFIER, packIdentifier)
                 .build()
 
             val cursor = context.contentResolver.query(queryUri, null, null, null, null)

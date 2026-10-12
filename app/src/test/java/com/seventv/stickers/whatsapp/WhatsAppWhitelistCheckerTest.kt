@@ -86,7 +86,7 @@ class WhatsAppWhitelistCheckerTest {
 
         assertTrue(isWhitelisted)
         assertEquals(
-            "content://com.whatsapp.provider.sticker_whitelist_check/is_whitelisted?sticker_pack_authority=com.seventv.stickers.stickercontentprovider&sticker_pack_id=test_pack_1",
+            "content://com.whatsapp.provider.sticker_whitelist_check/is_whitelisted?authority=com.seventv.stickers.stickercontentprovider&identifier=test_pack_1",
             MockWhitelistContentProvider.lastQueriedUri.toString()
         )
     }
@@ -158,7 +158,7 @@ class WhatsAppWhitelistCheckerTest {
 
         assertTrue(isWhitelisted)
         assertEquals(
-            "content://com.whatsapp.provider.sticker_whitelist_check/is_whitelisted?sticker_pack_authority=com.custom.authority&sticker_pack_id=pack_custom",
+            "content://com.whatsapp.provider.sticker_whitelist_check/is_whitelisted?authority=com.custom.authority&identifier=pack_custom",
             MockWhitelistContentProvider.lastQueriedUri.toString()
         )
     }

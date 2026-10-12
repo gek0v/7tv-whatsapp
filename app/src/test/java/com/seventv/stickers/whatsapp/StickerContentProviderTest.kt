@@ -227,23 +227,26 @@ class StickerContentProviderTest {
 
         assertNotNull(cursor)
         cursor!!.use { c ->
-            assertEquals(2, c.columnCount)
+            assertEquals(3, c.columnCount)
             assertEquals(3, c.count)
 
             // Row 0: sortOrder 0 -> stk-1
             assertTrue(c.moveToNext())
             assertEquals("sticker_stk-1.webp", c.getString(c.getColumnIndexOrThrow(WhatsAppConstants.STICKER_FILE_NAME_IN_QUERY)))
             assertEquals("😀", c.getString(c.getColumnIndexOrThrow(WhatsAppConstants.STICKER_FILE_EMOJI_IN_QUERY)))
+            assertEquals("emote1", c.getString(c.getColumnIndexOrThrow(WhatsAppConstants.STICKER_FILE_ACCESSIBILITY_TEXT_IN_QUERY)))
 
             // Row 1: sortOrder 1 -> stk-2
             assertTrue(c.moveToNext())
             assertEquals("sticker_stk-2.webp", c.getString(c.getColumnIndexOrThrow(WhatsAppConstants.STICKER_FILE_NAME_IN_QUERY)))
             assertEquals("🔥,💯,😎", c.getString(c.getColumnIndexOrThrow(WhatsAppConstants.STICKER_FILE_EMOJI_IN_QUERY)))
+            assertEquals("emote2", c.getString(c.getColumnIndexOrThrow(WhatsAppConstants.STICKER_FILE_ACCESSIBILITY_TEXT_IN_QUERY)))
 
             // Row 2: sortOrder 2 -> stk-3
             assertTrue(c.moveToNext())
             assertEquals("sticker_stk-3.webp", c.getString(c.getColumnIndexOrThrow(WhatsAppConstants.STICKER_FILE_NAME_IN_QUERY)))
             assertEquals("🎉,✨", c.getString(c.getColumnIndexOrThrow(WhatsAppConstants.STICKER_FILE_EMOJI_IN_QUERY)))
+            assertEquals("emote3", c.getString(c.getColumnIndexOrThrow(WhatsAppConstants.STICKER_FILE_ACCESSIBILITY_TEXT_IN_QUERY)))
         }
 
         // Unknown pack returns 0 rows
@@ -251,7 +254,7 @@ class StickerContentProviderTest {
         val unknownCursor = provider.query(unknownUri, null, null, null, null)
         assertNotNull(unknownCursor)
         unknownCursor!!.use { c ->
-            assertEquals(2, c.columnCount)
+            assertEquals(3, c.columnCount)
             assertEquals(0, c.count)
         }
     }

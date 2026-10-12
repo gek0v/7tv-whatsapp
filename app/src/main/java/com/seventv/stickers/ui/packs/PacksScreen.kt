@@ -41,7 +41,9 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -74,11 +76,18 @@ fun PacksScreen(
     val context = LocalContext.current
     val state by viewModel.uiState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
+    val coroutineScope = rememberCoroutineScope()
     var pendingExportPackId by remember { mutableStateOf<String?>(null) }
 
     val addPackLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
-    ) {
+    ) { result ->
+        val validationError = result.data?.getStringExtra("validation_error")
+        if (!validationError.isNullOrBlank()) {
+            coroutineScope.launch {
+                snackbarHostState.showSnackbar("Error de WhatsApp: $validationError")
+            }
+        }
         pendingExportPackId?.let { packId ->
             viewModel.syncWhitelist(context, packId)
             pendingExportPackId = null
