@@ -175,7 +175,7 @@ class StickerContentProvider : ContentProvider() {
             throw FileNotFoundException("Asset not found: $fileName in pack $packIdentifier")
         }
         val pfd = ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
-        return AssetFileDescriptor(pfd, 0, AssetFileDescriptor.UNKNOWN_LENGTH)
+        return AssetFileDescriptor(pfd, 0, file.length())
     }
 
     override fun getType(uri: Uri): String? {

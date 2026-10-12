@@ -1,5 +1,7 @@
 package com.seventv.stickers.ui.packs
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -19,6 +21,10 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -26,12 +32,15 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -52,6 +61,8 @@ import com.seventv.stickers.ui.theme.DarkSurfaceVariant
 import com.seventv.stickers.ui.theme.OnSurfaceSubtext
 import com.seventv.stickers.ui.theme.OnSurfaceText
 import com.seventv.stickers.ui.theme.SevenTvCyan
+import com.seventv.stickers.whatsapp.StickerContentProvider
+import com.seventv.stickers.whatsapp.WhatsAppIntentHelper
 import java.io.File
 
 @Composable
@@ -63,9 +74,45 @@ fun PackDetailScreen(
 ) {
     val context = LocalContext.current
     val state by viewModel.uiState.collectAsState()
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    val addPackLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) {
+        viewModel.syncWhitelist(context, packId)
+    }
 
     LaunchedEffect(packId) {
         viewModel.onSelectPackDetail(packId)
+        viewModel.syncWhitelist(context, packId)
+    }
+
+    // Handle WhatsApp Export Events
+    LaunchedEffect(state.exportEvent) {
+        val event = state.exportEvent ?: return@LaunchedEffect
+        when (event) {
+            is WhatsAppExportEvent.LaunchIntent -> {
+                val intent = WhatsAppIntentHelper.createAddPackIntent(
+                    authority = StickerContentProvider.AUTHORITY,
+                    packIdentifier = event.pack.identifier,
+                    packName = event.pack.name,
+                    context = context
+                )
+                try {
+                    addPackLauncher.launch(intent)
+                } catch (e: Exception) {
+                    snackbarHostState.showSnackbar("Error al abrir WhatsApp: ${e.message}")
+                }
+                viewModel.onClearExportEvent()
+            }
+            is WhatsAppExportEvent.Error -> {
+                snackbarHostState.showSnackbar(event.message)
+                viewModel.onClearExportEvent()
+            }
+            WhatsAppExportEvent.WhatsAppNotInstalled -> {
+                // Handled via Dialog below
+            }
+        }
     }
 
     val pack = state.selectedPackDetail
@@ -197,12 +244,50 @@ fun PackDetailScreen(
                 )
             }
         }
+
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier.align(Alignment.BottomCenter)
+        )
+    }
+
+    // WhatsApp Not Installed Dialog
+    if (state.exportEvent is WhatsAppExportEvent.WhatsAppNotInstalled) {
+        AlertDialog(
+            onDismissRequest = { viewModel.onClearExportEvent() },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Info, contentDescription = null, tint = SevenTvCyan)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("WhatsApp no encontrado", color = OnSurfaceText)
+                }
+            },
+            text = {
+                Text(
+                    "WhatsApp o WhatsApp Business no parece estar instalado en tu dispositivo. Instálalo desde Google Play Store para poder añadir tus stickers.",
+                    color = OnSurfaceSubtext
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = { viewModel.onClearExportEvent() },
+                    colors = ButtonDefaults.buttonColors(containerColor = SevenTvCyan, contentColor = Color.Black)
+                ) {
+                    Text("Entendido", fontWeight = FontWeight.Bold)
+                }
+            },
+            containerColor = DarkSurface
+        )
     }
 }
 
 @Composable
 private fun PackStickerCell(sticker: PackSticker) {
-    val file = File(sticker.filePath)
+    val context = LocalContext.current
+    val file = remember(sticker.filePath) {
+        val f = File(sticker.filePath)
+        if (f.isAbsolute && f.exists()) f else File(context.filesDir, sticker.filePath)
+    }
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = Color.Transparent),

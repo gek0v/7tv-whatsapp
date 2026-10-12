@@ -40,6 +40,19 @@ class WhatsAppIntentHelperTest {
     }
 
     @Test
+    fun isWhatsAppInstalled_returnsTrueWhenSmbInstalled() {
+        val packageInfo = PackageInfo().apply {
+            packageName = WhatsAppConstants.PACKAGE_WHATSAPP_SMB
+        }
+        shadowPackageManager.installPackage(packageInfo)
+
+        val result = WhatsAppIntentHelper.isWhatsAppInstalled(context)
+
+        assertTrue(result)
+        assertEquals(WhatsAppConstants.PACKAGE_WHATSAPP_SMB, WhatsAppIntentHelper.getInstalledWhatsAppPackage(context))
+    }
+
+    @Test
     fun isWhatsAppInstalled_returnsFalseWhenNotInstalled() {
         val result = WhatsAppIntentHelper.isWhatsAppInstalled(context)
 

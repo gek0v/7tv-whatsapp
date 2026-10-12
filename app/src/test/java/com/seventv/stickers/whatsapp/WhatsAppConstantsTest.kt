@@ -8,6 +8,7 @@ class WhatsAppConstantsTest {
     @Test
     fun packageAndIntentConstants() {
         assertEquals("com.whatsapp", WhatsAppConstants.PACKAGE_WHATSAPP)
+        assertEquals("com.whatsapp.w4b", WhatsAppConstants.PACKAGE_WHATSAPP_SMB)
         assertEquals("com.whatsapp.intent.action.ENABLE_STICKER_PACK", WhatsAppConstants.INTENT_ACTION_ENABLE_STICKER_PACK)
         assertEquals("sticker_pack_id", WhatsAppConstants.EXTRA_STICKER_PACK_ID)
         assertEquals("sticker_pack_authority", WhatsAppConstants.EXTRA_STICKER_PACK_AUTHORITY)
@@ -40,6 +41,7 @@ class WhatsAppConstantsTest {
     @Test
     fun whitelistProviderConstants() {
         assertEquals("com.whatsapp.provider.sticker_whitelist_check", WhatsAppConstants.WHITELIST_AUTHORITY)
+        assertEquals("com.whatsapp.w4b.provider.sticker_whitelist_check", WhatsAppConstants.WHITELIST_AUTHORITY_SMB)
         assertEquals("is_whitelisted", WhatsAppConstants.WHITELIST_QUERY_PATH)
         assertEquals("result", WhatsAppConstants.WHITELIST_QUERY_RESULT_COLUMN)
     }

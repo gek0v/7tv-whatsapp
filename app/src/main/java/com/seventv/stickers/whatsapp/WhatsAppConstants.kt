@@ -2,6 +2,7 @@ package com.seventv.stickers.whatsapp
 
 object WhatsAppConstants {
     const val PACKAGE_WHATSAPP = "com.whatsapp"
+    const val PACKAGE_WHATSAPP_SMB = "com.whatsapp.w4b"
     const val INTENT_ACTION_ENABLE_STICKER_PACK = "com.whatsapp.intent.action.ENABLE_STICKER_PACK"
 
     const val EXTRA_STICKER_PACK_ID = "sticker_pack_id"
@@ -29,6 +30,7 @@ object WhatsAppConstants {
 
     // WhatsApp Whitelist Provider constants
     const val WHITELIST_AUTHORITY = "com.whatsapp.provider.sticker_whitelist_check"
+    const val WHITELIST_AUTHORITY_SMB = "com.whatsapp.w4b.provider.sticker_whitelist_check"
     const val WHITELIST_QUERY_PATH = "is_whitelisted"
     const val WHITELIST_QUERY_RESULT_COLUMN = "result"
 }

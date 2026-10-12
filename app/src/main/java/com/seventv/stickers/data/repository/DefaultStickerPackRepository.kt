@@ -265,7 +265,7 @@ class DefaultStickerPackRepository(
                             packIdentifier = entity.packIdentifier,
                             emoteId = entity.emoteId,
                             emoteName = entity.emoteName,
-                            filePath = entity.relativeFilePath,
+                            filePath = storageManager.getAbsoluteFile(entity.relativeFilePath).absolutePath,
                             emojis = entity.emojis,
                             fileLength = entity.fileLength,
                             sortOrder = entity.sortOrder
@@ -276,7 +276,7 @@ class DefaultStickerPackRepository(
                         identifier = packIdentifier,
                         name = plan.packName,
                         publisher = publisher,
-                        trayImagePath = trayRelativePath,
+                        trayImagePath = storageManager.getAbsoluteFile(trayRelativePath).absolutePath,
                         isAnimated = plan.isAnimated,
                         isWhitelisted = false,
                         stickers = domainStickers,
@@ -371,7 +371,7 @@ class DefaultStickerPackRepository(
             identifier = packWithStickers.pack.identifier,
             name = packWithStickers.pack.name,
             publisher = packWithStickers.pack.publisher,
-            trayImagePath = packWithStickers.pack.trayImageRelativePath,
+            trayImagePath = storageManager.getAbsoluteFile(packWithStickers.pack.trayImageRelativePath).absolutePath,
             isAnimated = packWithStickers.pack.isAnimated,
             isWhitelisted = packWithStickers.pack.isWhitelisted,
             stickers = packWithStickers.stickers.sortedBy { it.sortOrder }.map { entity ->
@@ -380,7 +380,7 @@ class DefaultStickerPackRepository(
                     packIdentifier = entity.packIdentifier,
                     emoteId = entity.emoteId,
                     emoteName = entity.emoteName,
-                    filePath = entity.relativeFilePath,
+                    filePath = storageManager.getAbsoluteFile(entity.relativeFilePath).absolutePath,
                     emojis = entity.emojis,
                     fileLength = entity.fileLength,
                     sortOrder = entity.sortOrder

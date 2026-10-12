@@ -1,6 +1,7 @@
 package com.seventv.stickers.ui.packs
 
-import android.content.Intent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -38,7 +39,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -71,18 +74,30 @@ fun PacksScreen(
     val context = LocalContext.current
     val state by viewModel.uiState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
+    var pendingExportPackId by remember { mutableStateOf<String?>(null) }
+
+    val addPackLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) {
+        pendingExportPackId?.let { packId ->
+            viewModel.syncWhitelist(context, packId)
+            pendingExportPackId = null
+        }
+    }
 
     // Handle WhatsApp Export Events
     LaunchedEffect(state.exportEvent) {
         val event = state.exportEvent ?: return@LaunchedEffect
         when (event) {
             is WhatsAppExportEvent.LaunchIntent -> {
+                pendingExportPackId = event.pack.identifier
                 val intent = WhatsAppIntentHelper.createAddPackIntent(
                     packIdentifier = event.pack.identifier,
-                    packName = event.pack.name
+                    packName = event.pack.name,
+                    context = context
                 )
                 try {
-                    context.startActivity(intent)
+                    addPackLauncher.launch(intent)
                 } catch (e: Exception) {
                     snackbarHostState.showSnackbar("Error al abrir WhatsApp: ${e.message}")
                 }
@@ -275,7 +290,11 @@ private fun PackCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // Tray Icon or First sticker
-                val trayFile = File(pack.trayImagePath)
+                val context = LocalContext.current
+                val trayFile = remember(pack.trayImagePath) {
+                    val f = File(pack.trayImagePath)
+                    if (f.isAbsolute && f.exists()) f else File(context.filesDir, pack.trayImagePath)
+                }
                 Box(
                     modifier = Modifier
                         .size(52.dp)

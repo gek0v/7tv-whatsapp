@@ -10,10 +10,20 @@ object WhatsAppWhitelistChecker {
         packIdentifier: String,
         authority: String = StickerContentProvider.AUTHORITY
     ): Boolean {
+        return checkWhitelistForAuthority(context, WhatsAppConstants.WHITELIST_AUTHORITY, packIdentifier, authority) ||
+               checkWhitelistForAuthority(context, WhatsAppConstants.WHITELIST_AUTHORITY_SMB, packIdentifier, authority)
+    }
+
+    private fun checkWhitelistForAuthority(
+        context: Context,
+        whitelistAuthority: String,
+        packIdentifier: String,
+        authority: String
+    ): Boolean {
         return try {
             val queryUri = Uri.Builder()
                 .scheme("content")
-                .authority(WhatsAppConstants.WHITELIST_AUTHORITY)
+                .authority(whitelistAuthority)
                 .appendPath(WhatsAppConstants.WHITELIST_QUERY_PATH)
                 .appendQueryParameter(WhatsAppConstants.EXTRA_STICKER_PACK_AUTHORITY, authority)
                 .appendQueryParameter(WhatsAppConstants.EXTRA_STICKER_PACK_ID, packIdentifier)
@@ -29,7 +39,7 @@ object WhatsAppWhitelistChecker {
                 }
                 false
             } ?: false
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             false
         }
     }
