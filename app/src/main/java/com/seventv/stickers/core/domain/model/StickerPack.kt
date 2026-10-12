@@ -1,5 +1,8 @@
 package com.seventv.stickers.core.domain.model
 
+import androidx.compose.runtime.Immutable
+
+@Immutable
 data class StickerPack(
     val identifier: String,
     val name: String,

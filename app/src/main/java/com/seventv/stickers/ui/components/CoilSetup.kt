@@ -14,6 +14,7 @@ import coil.memory.MemoryCache
 object CoilSetup {
     fun createImageLoader(context: Context): ImageLoader {
         return ImageLoader.Builder(context)
+            .allowHardware(true)
             .memoryCache {
                 MemoryCache.Builder(context)
                     .maxSizePercent(0.25)
