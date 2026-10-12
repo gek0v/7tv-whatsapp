@@ -391,7 +391,7 @@ class PacksViewModel(
             _uiState.update { it.copy(isSearching = true) }
             val result = repo.searchEmotes(query.trim())
             if (result is com.seventv.stickers.core.common.result.StickerResult.Success) {
-                _uiState.update { it.copy(searchResults = result.data, isSearching = false) }
+                _uiState.update { it.copy(searchResults = result.data.distinctBy { e -> e.id }, isSearching = false) }
             } else {
                 _uiState.update { it.copy(searchResults = emptyList(), isSearching = false) }
             }

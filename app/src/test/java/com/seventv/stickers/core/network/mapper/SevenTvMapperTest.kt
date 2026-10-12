@@ -34,7 +34,28 @@ class SevenTvMapperTest {
         assertTrue(domain.isZeroWidth)
         assertFalse(domain.isNsfw)
         assertEquals("https://cdn.7tv.app/emote/60ccf4479f59298d1a7b4698/4x.webp", domain.bestAssetUrl)
+        assertEquals("https://cdn.7tv.app/emote/60ccf4479f59298d1a7b4698/1x.webp", domain.previewUrl)
         assertEquals(listOf("1x.webp", "4x.webp"), domain.availableScales)
+    }
+
+    @Test
+    fun selects2xPreviewScaleWhenAvailableOver4x() {
+        val dto = SevenTvEmoteDto(
+            id = "e_scale",
+            name = "ScaleEmote",
+            host = SevenTvHostDto(
+                url = "https://cdn.7tv.app/emote/e_scale",
+                files = listOf(
+                    SevenTvFileDto("1x.webp", "WEBP", 32, 32, 100),
+                    SevenTvFileDto("2x.webp", "WEBP", 64, 64, 200),
+                    SevenTvFileDto("3x.webp", "WEBP", 96, 96, 300),
+                    SevenTvFileDto("4x.webp", "WEBP", 128, 128, 400)
+                )
+            )
+        )
+        val domain = SevenTvMapper.toDomain(dto)
+        assertEquals("https://cdn.7tv.app/emote/e_scale/4x.webp", domain.bestAssetUrl)
+        assertEquals("https://cdn.7tv.app/emote/e_scale/2x.webp", domain.previewUrl)
     }
 
     @Test

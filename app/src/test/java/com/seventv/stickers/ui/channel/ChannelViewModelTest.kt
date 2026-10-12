@@ -80,6 +80,24 @@ class ChannelViewModelTest {
     }
 
     @Test
+    fun searchStreamerDeduplicatesEmotesById() = runTest(testDispatcher) {
+        val e1 = createSampleEmote("dup_1", "emote1")
+        val e1Duplicate = createSampleEmote("dup_1", "emote1_alias")
+        val e2 = createSampleEmote("dup_2", "emote2")
+        val sampleSet = SevenTvEmoteSet("set_dup", "Dup Set", "streamer", listOf(e1, e1Duplicate, e2))
+        fakeSevenTvRepository.emoteSetHandler = { StickerResult.Success(sampleSet) }
+
+        viewModel.onSearchStreamer("streamer")
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        val success = state.loadState as ChannelLoadState.Success
+        assertEquals(2, success.allEmotes.size)
+        assertEquals("dup_1", success.allEmotes[0].id)
+        assertEquals("dup_2", success.allEmotes[1].id)
+    }
+
+    @Test
     fun searchStreamerError() = runTest(testDispatcher) {
         fakeSevenTvRepository.emoteSetHandler = { StickerResult.Failure(StickerError.ResourceNotFound) }
         fakeSevenTvRepository.searchEmotesHandler = { _, _, _ ->

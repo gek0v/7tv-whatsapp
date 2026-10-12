@@ -13,6 +13,7 @@ object SevenTvMapper {
     private const val FLAG_ZERO_WIDTH = 1
     private const val FLAG_NSFW = 1 shl 16
     private val PREFERRED_SCALES = listOf("4x.webp", "3x.webp", "2x.webp", "1x.webp")
+    private val PREFERRED_PREVIEW_SCALES = listOf("2x.webp", "1x.webp", "3x.webp", "4x.webp")
 
     /**
      * Maps a [SevenTvEmoteDto] to domain [SevenTvEmote].
@@ -33,6 +34,16 @@ object SevenTvMapper {
             normalizeCdnUrl(host.url, targetFileName)
         }
 
+        val preferredPreviewScale = PREFERRED_PREVIEW_SCALES.firstOrNull { preferred ->
+            files.any { it.name.equals(preferred, ignoreCase = true) }
+        } ?: targetFileName
+
+        val previewUrl = if (host?.url.isNullOrBlank()) {
+            ""
+        } else {
+            normalizeCdnUrl(host.url, preferredPreviewScale)
+        }
+
         val isZeroWidth = ((dto.flags and FLAG_ZERO_WIDTH) != 0) ||
             (((dto.data?.flags ?: 0) and FLAG_ZERO_WIDTH) != 0)
 
@@ -51,7 +62,8 @@ object SevenTvMapper {
             isZeroWidth = isZeroWidth,
             isNsfw = isNsfw,
             bestAssetUrl = bestAssetUrl,
-            availableScales = availableScales
+            availableScales = availableScales,
+            previewUrl = previewUrl
         )
     }
 

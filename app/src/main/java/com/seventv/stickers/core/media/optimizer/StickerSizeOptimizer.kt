@@ -26,8 +26,8 @@ class StickerSizeOptimizer(
 ) {
 
     companion object {
-        private val QUALITY_STEPS = intArrayOf(90, 80, 70, 60, 50)
-        private const val MAX_DOWNSCALE_ATTEMPTS = 3
+        private val QUALITY_STEPS = intArrayOf(90, 80, 70, 60, 50, 40, 30)
+        private const val MAX_DOWNSCALE_ATTEMPTS = 5
         private const val DOWNSCALE_FACTOR = 0.9f
     }
 

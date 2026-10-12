@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
@@ -307,7 +308,7 @@ fun ExploreScreen(
                                     verticalArrangement = Arrangement.spacedBy(8.dp),
                                     modifier = Modifier.fillMaxSize()
                                 ) {
-                                    items(filtered, key = { it.id }) { emote ->
+                                    itemsIndexed(filtered, key = { index, emote -> "${emote.id}_$index" }) { _, emote ->
                                         val isInDraft = uiState.draftEmotes.any { it.id == emote.id }
                                         EmoteCard(
                                             emote = emote,

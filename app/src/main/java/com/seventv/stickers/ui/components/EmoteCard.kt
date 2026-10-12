@@ -27,9 +27,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.seventv.stickers.core.network.model.SevenTvEmote
 import com.seventv.stickers.ui.theme.DarkSurface
 import com.seventv.stickers.ui.theme.DarkSurfaceVariant
@@ -75,7 +77,11 @@ fun EmoteCard(
                     .aspectRatio(1f)
             ) {
                 AsyncImage(
-                    model = emote.previewUrl,
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(emote.previewUrl)
+                        .size(128, 128)
+                        .crossfade(true)
+                        .build(),
                     contentDescription = emote.name,
                     contentScale = ContentScale.Fit,
                     modifier = Modifier

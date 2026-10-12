@@ -19,6 +19,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -54,12 +55,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.seventv.stickers.core.network.model.SevenTvEmote
 import com.seventv.stickers.ui.theme.DarkBackground
 import com.seventv.stickers.ui.theme.DarkSurface
@@ -398,7 +401,7 @@ private fun ChannelContent(
             verticalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier.weight(1f)
         ) {
-            items(filteredEmotes, key = { it.id }) { emote ->
+            itemsIndexed(filteredEmotes, key = { index, emote -> "${emote.id}_$index" }) { _, emote ->
                 val isSelected = selectedEmoteIds.contains(emote.id)
                 ChannelEmoteCell(
                     emote = emote,
@@ -435,7 +438,11 @@ private fun ChannelEmoteCell(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 AsyncImage(
-                    model = emote.previewUrl,
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(emote.previewUrl)
+                        .size(128, 128)
+                        .crossfade(true)
+                        .build(),
                     contentDescription = emote.name,
                     modifier = Modifier.size(68.dp)
                 )

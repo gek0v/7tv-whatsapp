@@ -189,6 +189,26 @@ class ExploreViewModelTest {
     }
 
     @Test
+    fun filteredEmotesDeduplicatesDuplicateEmoteIds() = runTest(testDispatcher) {
+        val emote1 = createSampleEmote("dup_1", "pepe1")
+        val emote1Duplicate = createSampleEmote("dup_1", "pepe1_alias")
+        val emote2 = createSampleEmote("dup_2", "pepe2")
+
+        fakeSevenTvRepository.searchEmotesHandler = { _, _, _ ->
+            StickerResult.Success(listOf(emote1, emote1Duplicate, emote2))
+        }
+
+        viewModel.onQueryChanged("pepe")
+        advanceTimeBy(400)
+        runCurrent()
+
+        val filtered = viewModel.uiState.value.filteredEmotes
+        assertEquals(2, filtered.size)
+        assertEquals("dup_1", filtered[0].id)
+        assertEquals("dup_2", filtered[1].id)
+    }
+
+    @Test
     fun toggleDraftAddsEmoteAndRemovesOnSecondToggle() {
         val emote1 = createSampleEmote("1", "catJAM")
         val emote2 = createSampleEmote("2", "KEKW")

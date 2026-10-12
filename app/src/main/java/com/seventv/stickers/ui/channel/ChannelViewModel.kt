@@ -53,7 +53,7 @@ class ChannelViewModel(
                             loadState = ChannelLoadState.Success(
                                 streamerName = set.name.ifBlank { targetQuery },
                                 emoteSet = set,
-                                allEmotes = set.emotes
+                                allEmotes = set.emotes.distinctBy { emote -> emote.id }
                             )
                         )
                     }
@@ -207,8 +207,21 @@ class ChannelViewModel(
                         allCreatedPacks.addAll(result.data)
                     }
                     is StickerResult.Failure -> {
+                        val errorDetail = when (val err = result.error) {
+                            is com.seventv.stickers.core.common.result.StickerError.ExceedsSizeLimit ->
+                                "Uno de los stickers supera el tamaño permitido"
+                            is com.seventv.stickers.core.common.result.StickerError.InsufficientStickers ->
+                                "Se necesitan al menos ${err.min} stickers"
+                            is com.seventv.stickers.core.common.result.StickerError.ExceedsPackLimit ->
+                                "El paquete supera el límite de ${err.max} stickers"
+                            is com.seventv.stickers.core.common.result.StickerError.NetworkError ->
+                                err.message
+                            is com.seventv.stickers.core.common.result.StickerError.NativeEncodingFailed ->
+                                "Fallo en la codificación WebP: ${err.details}"
+                            else -> err.toString()
+                        }
                         _uiState.update {
-                            it.copy(importState = ChannelImportState.Error("Error creando el pack '${plan.packName}': ${result.error}"))
+                            it.copy(importState = ChannelImportState.Error("Error creando el pack '${plan.packName}': $errorDetail"))
                         }
                         return@launch
                     }

@@ -36,7 +36,7 @@ data class ExploreUiState(
     val filteredEmotes: List<SevenTvEmote>
         get() {
             val all = when (val res = searchResults) {
-                is SearchResultsState.Success -> res.emotes
+                is SearchResultsState.Success -> res.emotes.distinctBy { it.id }
                 else -> emptyList()
             }
             return when (activeFilter) {
