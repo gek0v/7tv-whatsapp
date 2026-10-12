@@ -1,8 +1,10 @@
 package com.seventv.stickers.ui.theme
 
 import android.app.Activity
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.graphics.Color
@@ -16,23 +18,50 @@ val SevenTvDarkColorScheme = darkColorScheme(
     secondary = TwitchPurple,
     onSecondary = Color.White,
     tertiary = WhatsAppGreen,
-    onTertiary = Color.White,
+    onTertiary = Color.Black,
     background = DarkBackground,
-    onBackground = OnSurfaceText,
+    onBackground = DarkOnSurface,
     surface = DarkSurface,
-    onSurface = OnSurfaceText,
+    onSurface = DarkOnSurface,
     surfaceVariant = DarkSurfaceVariant,
-    onSurfaceVariant = OnSurfaceSubtext,
+    onSurfaceVariant = DarkOnSurfaceVariant,
+    surfaceContainerLowest = DarkBackground,
+    surfaceContainerLow = DarkSurfaceContainerLow,
+    surfaceContainer = DarkSurfaceContainer,
+    surfaceContainerHigh = DarkSurfaceContainerHigh,
+    surfaceContainerHighest = DarkSurfaceContainerHighest,
     error = ErrorRed,
+    onError = Color.White
+)
+
+val SevenTvLightColorScheme = lightColorScheme(
+    primary = SevenTvCyanLight,
+    onPrimary = Color.White,
+    secondary = TwitchPurpleLight,
+    onSecondary = Color.White,
+    tertiary = WhatsAppGreenLight,
+    onTertiary = Color.White,
+    background = LightBackground,
+    onBackground = LightOnSurface,
+    surface = LightSurface,
+    onSurface = LightOnSurface,
+    surfaceVariant = LightSurfaceVariant,
+    onSurfaceVariant = LightOnSurfaceVariant,
+    surfaceContainerLowest = LightSurface,
+    surfaceContainerLow = LightSurfaceContainerLow,
+    surfaceContainer = LightSurfaceContainer,
+    surfaceContainerHigh = LightSurfaceContainerHigh,
+    surfaceContainerHighest = LightSurfaceContainerHighest,
+    error = ErrorRedLight,
     onError = Color.White
 )
 
 @Composable
 fun SevenTvTheme(
-    darkTheme: Boolean = true,
+    darkTheme: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit
 ) {
-    val colorScheme = SevenTvDarkColorScheme
+    val colorScheme = if (darkTheme) SevenTvDarkColorScheme else SevenTvLightColorScheme
     val view = LocalView.current
     if (!view.isInEditMode) {
         SideEffect {
@@ -47,6 +76,7 @@ fun SevenTvTheme(
     MaterialTheme(
         colorScheme = colorScheme,
         typography = Typography,
+        shapes = SevenTvShapes,
         content = content
     )
 }
