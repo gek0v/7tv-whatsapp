@@ -68,6 +68,7 @@ import coil.request.ImageRequest
 import com.seventv.stickers.core.domain.model.PackSticker
 import com.seventv.stickers.ui.components.ChatSimulatorBackground
 import com.seventv.stickers.ui.components.ChatSimulatorMode
+import com.seventv.stickers.ui.components.DraftBottomSheetDefaults
 import com.seventv.stickers.ui.components.StickerInspectorSheet
 import com.seventv.stickers.ui.components.WhatsAppAddButton
 import com.seventv.stickers.whatsapp.StickerContentProvider
@@ -237,8 +238,8 @@ fun PackDetailScreen(
             ) {
                 // Pack Health Indicator
                 val stickerCount = pack.stickers.size
-                val progress = (stickerCount / 30f).coerceIn(0f, 1f)
-                val isBelowMinimum = stickerCount < 3
+                val progress = (stickerCount / DraftBottomSheetDefaults.MAX_STICKERS.toFloat()).coerceIn(0f, 1f)
+                val isBelowMinimum = stickerCount < DraftBottomSheetDefaults.MIN_STICKERS
 
                 Surface(
                     shape = MaterialTheme.shapes.medium,
@@ -259,7 +260,7 @@ fun PackDetailScreen(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Text(
-                                text = "$stickerCount / 30",
+                                text = "$stickerCount / ${DraftBottomSheetDefaults.MAX_STICKERS}",
                                 style = MaterialTheme.typography.labelLarge,
                                 fontWeight = FontWeight.Bold,
                                 color = if (isBelowMinimum) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
@@ -276,14 +277,14 @@ fun PackDetailScreen(
                                 .clip(MaterialTheme.shapes.small),
                             color = when {
                                 isBelowMinimum -> MaterialTheme.colorScheme.error
-                                stickerCount >= 30 -> MaterialTheme.colorScheme.tertiary
+                                stickerCount >= DraftBottomSheetDefaults.MAX_STICKERS -> MaterialTheme.colorScheme.tertiary
                                 else -> MaterialTheme.colorScheme.primary
                             },
                             trackColor = MaterialTheme.colorScheme.surfaceContainerHighest
                         )
 
                         if (isBelowMinimum) {
-                            val missing = 3 - stickerCount
+                            val missing = DraftBottomSheetDefaults.MIN_STICKERS - stickerCount
                             Spacer(modifier = Modifier.height(6.dp))
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(
@@ -294,7 +295,7 @@ fun PackDetailScreen(
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text(
-                                    text = "Faltan $missing para el mínimo de 3 stickers",
+                                    text = "Faltan $missing para el mínimo de ${DraftBottomSheetDefaults.MIN_STICKERS} stickers",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.error
                                 )
@@ -410,7 +411,7 @@ fun PackDetailScreen(
     // Delete Sticker Confirmation Dialog
     if (state.isDeleteStickerConfirmDialogOpen && state.stickerToDelete != null && pack != null) {
         val sticker = state.stickerToDelete!!
-        val willBeBelowMinimum = pack.stickers.size <= 3
+        val willBeBelowMinimum = pack.stickers.size <= DraftBottomSheetDefaults.MIN_STICKERS
         AlertDialog(
             onDismissRequest = { viewModel.onDismissDeleteStickerDialog() },
             title = {
@@ -424,7 +425,7 @@ fun PackDetailScreen(
             text = {
                 if (willBeBelowMinimum) {
                     Text(
-                        text = "Al eliminar '${sticker.emoteName}', el pack quedará con ${pack.stickers.size - 1} stickers.\n\nWhatsApp exige un mínimo de 3 stickers por paquete. No podrás añadir o actualizar este paquete en WhatsApp hasta que contenga al menos 3 stickers.\n\n¿Deseas eliminarlo de todas formas?",
+                        text = "Al eliminar '${sticker.emoteName}', el pack quedará con ${pack.stickers.size - 1} stickers.\n\nWhatsApp exige un mínimo de ${DraftBottomSheetDefaults.MIN_STICKERS} stickers por paquete. No podrás añadir o actualizar este paquete en WhatsApp hasta que contenga al menos ${DraftBottomSheetDefaults.MIN_STICKERS} stickers.\n\n¿Deseas eliminarlo de todas formas?",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

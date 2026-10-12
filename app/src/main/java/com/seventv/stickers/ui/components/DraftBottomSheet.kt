@@ -79,7 +79,7 @@ fun DraftBottomSheet(
     val count = draftEmotes.size
     val status = DockedDraftPillDefaults.draftStatus(count)
     val statusColor = DockedDraftPillDefaults.statusColor(status, MaterialTheme.colorScheme)
-    val canCreate = count in 3..30 && packName.isNotBlank()
+    val canCreate = DraftBottomSheetDefaults.canCreate(count, packName)
     val helperText = DraftBottomSheetDefaults.helperText(count)
 
     ModalBottomSheet(
@@ -122,7 +122,7 @@ fun DraftBottomSheet(
                                 .background(statusColor, CircleShape)
                         )
                         Text(
-                            text = "$count / 30",
+                            text = "$count / ${DraftBottomSheetDefaults.MAX_STICKERS}",
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurface
                         )
@@ -231,7 +231,7 @@ fun DraftBottomSheet(
                 Text(
                     text = helperText,
                     style = MaterialTheme.typography.bodySmall,
-                    color = if (count < 3) MaterialTheme.colorScheme.error else DockedDraftPillDefaults.WarningOrange
+                    color = if (count < DraftBottomSheetDefaults.MIN_STICKERS) MaterialTheme.colorScheme.error else DockedDraftPillDefaults.WarningOrange
                 )
             }
 

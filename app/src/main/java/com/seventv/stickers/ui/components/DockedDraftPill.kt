@@ -227,7 +227,7 @@ fun DockedDraftPill(
 
                 // Linear tonal progress bar
                 LinearProgressIndicator(
-                    progress = { (count / 30f).coerceIn(0f, 1f) },
+                    progress = { (count / DockedDraftPillDefaults.MAX_STICKERS.toFloat()).coerceIn(0f, 1f) },
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(3.dp)

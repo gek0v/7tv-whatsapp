@@ -58,14 +58,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.seventv.stickers.ui.components.PackHeroCard
 import com.seventv.stickers.ui.components.PackMenuAction
-import com.seventv.stickers.ui.theme.WhatsAppGreen
 import com.seventv.stickers.whatsapp.WhatsAppIntentHelper
 import kotlinx.coroutines.launch
 
@@ -275,8 +273,8 @@ fun PacksScreen(
                             onClick = { viewModel.onStartBatchWhatsAppExport(context) },
                             enabled = state.selectedPackIds.isNotEmpty(),
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = WhatsAppGreen,
-                                contentColor = Color.White,
+                                containerColor = MaterialTheme.colorScheme.tertiary,
+                                contentColor = MaterialTheme.colorScheme.onTertiary,
                                 disabledContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest
                             ),
                             modifier = Modifier.weight(1f),
