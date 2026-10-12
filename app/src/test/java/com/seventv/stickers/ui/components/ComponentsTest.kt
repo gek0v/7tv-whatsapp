@@ -136,4 +136,41 @@ class ComponentsTest {
         assertEquals("ANIM", EmoteCardDefaults.badgeText(isAnimated = true))
         assertEquals("STATIC", EmoteCardDefaults.badgeText(isAnimated = false))
     }
+
+    @Test
+    fun sevenTvSearchBarDefaults_providesExpectedFiltersAndQueryBehaviors() {
+        val expectedFilters = listOf("Todos", "Animados", "Estáticos", "Populares hoy")
+        assertEquals(expectedFilters, SevenTvSearchBarDefaults.filters)
+        assertEquals(4, SevenTvSearchBarDefaults.filters.size)
+        assertTrue(SevenTvSearchBarDefaults.filters.contains("Todos"))
+        assertTrue(SevenTvSearchBarDefaults.filters.contains("Animados"))
+        assertTrue(SevenTvSearchBarDefaults.filters.contains("Estáticos"))
+        assertTrue(SevenTvSearchBarDefaults.filters.contains("Populares hoy"))
+
+        // Search clear button visibility logic
+        assertFalse("Empty query should not show clear button", SevenTvSearchBarDefaults.shouldShowClear(""))
+        assertTrue("Non-empty query should show clear button", SevenTvSearchBarDefaults.shouldShowClear("pepe"))
+
+        // Direct 7TV Emote URL extraction
+        val fullUrl = "https://7tv.app/emotes/60ccf4479f59298d1a7b4698"
+        val nakedUrl = "7tv.app/emotes/60ccf4479f59298d1a7b4698"
+        val nonUrl = "catJAM"
+
+        assertEquals("60ccf4479f59298d1a7b4698", SevenTvSearchBarDefaults.extractEmoteIdFromUrl(fullUrl))
+        assertEquals("60ccf4479f59298d1a7b4698", SevenTvSearchBarDefaults.extractEmoteIdFromUrl(nakedUrl))
+        org.junit.Assert.assertNull(SevenTvSearchBarDefaults.extractEmoteIdFromUrl(nonUrl))
+
+        assertTrue(SevenTvSearchBarDefaults.isDirectEmoteUrl(fullUrl))
+        assertTrue(SevenTvSearchBarDefaults.isDirectEmoteUrl(nakedUrl))
+        assertFalse(SevenTvSearchBarDefaults.isDirectEmoteUrl(nonUrl))
+    }
+
+    @Test
+    fun emoteCardDefaults_badgeConstantsAndHelpers() {
+        assertEquals("ANIM", EmoteCardDefaults.ANIMATED_BADGE)
+        assertEquals("STATIC", EmoteCardDefaults.STATIC_BADGE)
+        assertEquals("ANIM", EmoteCardDefaults.badgeText(isAnimated = true))
+        assertEquals("STATIC", EmoteCardDefaults.badgeText(isAnimated = false))
+    }
 }
+
