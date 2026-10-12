@@ -11,6 +11,7 @@ import com.seventv.stickers.core.network.model.SevenTvEmote
 import com.seventv.stickers.core.network.model.SevenTvEmoteSet
 import com.seventv.stickers.data.repository.SevenTvRepository
 import com.seventv.stickers.data.repository.StickerPackRepository
+import com.seventv.stickers.core.domain.manager.PackImportManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -19,7 +20,8 @@ import kotlinx.coroutines.launch
 
 class ChannelViewModel(
     private val sevenTvRepository: SevenTvRepository,
-    private val stickerPackRepository: StickerPackRepository
+    private val stickerPackRepository: StickerPackRepository,
+    private val packImportManager: PackImportManager? = null
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ChannelUiState())
@@ -153,6 +155,20 @@ class ChannelViewModel(
         val state = _uiState.value
         val streamerName = (state.loadState as? ChannelLoadState.Success)?.streamerName ?: "7TV Channel"
 
+        // Dismiss the modal confirmation dialog immediately so user can freely navigate and use the app
+        _uiState.update {
+            it.copy(
+                importState = ChannelImportState.Idle,
+                selectedEmoteIds = emptySet()
+            )
+        }
+
+        if (packImportManager != null) {
+            packImportManager.startImport(streamerName, plans)
+            return
+        }
+
+        // Inline fallback for standalone testing without PackImportManager
         viewModelScope.launch {
             val allCreatedPacks = mutableListOf<StickerPack>()
 
@@ -210,11 +226,12 @@ class ChannelViewModel(
 
     class Factory(
         private val sevenTvRepository: SevenTvRepository,
-        private val stickerPackRepository: StickerPackRepository
+        private val stickerPackRepository: StickerPackRepository,
+        private val packImportManager: PackImportManager? = null
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            return ChannelViewModel(sevenTvRepository, stickerPackRepository) as T
+            return ChannelViewModel(sevenTvRepository, stickerPackRepository, packImportManager) as T
         }
     }
 }

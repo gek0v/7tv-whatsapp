@@ -5,6 +5,8 @@ import com.seventv.stickers.core.common.result.StickerError
 import com.seventv.stickers.core.common.result.StickerResult
 import com.seventv.stickers.core.domain.engine.PackSplittingEngine
 import com.seventv.stickers.core.domain.engine.SplitPlan
+import com.seventv.stickers.core.domain.manager.PackImportManager
+import com.seventv.stickers.core.domain.manager.PackImportProgress
 import com.seventv.stickers.core.domain.model.StickerPack
 import com.seventv.stickers.core.network.model.DownloadedEmoteAsset
 import com.seventv.stickers.core.network.model.SevenTvEmote
@@ -183,6 +185,43 @@ class ChannelViewModelTest {
         val finalState = viewModel.uiState.value.importState
         assertTrue("Expected Success, got $finalState", finalState is ChannelImportState.Success)
         assertEquals(2, (finalState as ChannelImportState.Success).createdPacks.size)
+    }
+
+    @Test
+    fun importChannelWithPackImportManagerDelegatesToManagerAndDismissesDialogImmediately() = runTest(testDispatcher) {
+        val emotes = (1..5).map { createSampleEmote("id_$it", "emote_$it") }
+        fakeSevenTvRepository.emoteSetHandler = {
+            StickerResult.Success(SevenTvEmoteSet("s1", "Streamer", "streamer", emotes))
+        }
+
+        val packImportManager = PackImportManager(
+            stickerPackRepository = fakeStickerPackRepository,
+            scope = this
+        )
+        val vm = ChannelViewModel(
+            sevenTvRepository = fakeSevenTvRepository,
+            stickerPackRepository = fakeStickerPackRepository,
+            packImportManager = packImportManager
+        )
+
+        vm.onSearchStreamer("streamer")
+        advanceUntilIdle()
+
+        vm.onStartChannelImport()
+        val confirming = vm.uiState.value.importState as ChannelImportState.Confirming
+
+        vm.onConfirmImport(confirming.splitPlans)
+
+        // Dialog should be dismissed immediately (importState is Idle)
+        assertTrue(vm.uiState.value.importState is ChannelImportState.Idle)
+        assertTrue(vm.uiState.value.selectedEmoteIds.isEmpty())
+
+        advanceUntilIdle()
+
+        // PackImportManager should have completed
+        val progress = packImportManager.progress.value
+        assertTrue("Expected Completed, got $progress", progress is PackImportProgress.Completed)
+        assertEquals(1, (progress as PackImportProgress.Completed).packsCount)
     }
 
     private fun createSampleEmote(

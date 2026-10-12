@@ -18,6 +18,7 @@ interface AppContainer {
     val stickerPackRepository: StickerPackRepository
     val storageManager: StickerStorageManager
     val database: AppDatabase
+    val packImportManager: com.seventv.stickers.core.domain.manager.PackImportManager
 }
 
 class DefaultAppContainer(private val context: Context) : AppContainer {
@@ -53,5 +54,9 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
             mediaPipeline = mediaPipeline,
             sevenTvRepository = sevenTvRepository
         )
+    }
+
+    override val packImportManager: com.seventv.stickers.core.domain.manager.PackImportManager by lazy {
+        com.seventv.stickers.core.domain.manager.PackImportManager(stickerPackRepository)
     }
 }

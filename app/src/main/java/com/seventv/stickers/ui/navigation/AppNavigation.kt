@@ -1,5 +1,6 @@
 package com.seventv.stickers.ui.navigation
 
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Folder
@@ -28,6 +29,7 @@ import androidx.navigation.navArgument
 import com.seventv.stickers.di.AppContainer
 import com.seventv.stickers.ui.channel.ChannelScreen
 import com.seventv.stickers.ui.channel.ChannelViewModel
+import com.seventv.stickers.ui.components.ImportProgressBanner
 import com.seventv.stickers.ui.explore.ExploreScreen
 import com.seventv.stickers.ui.explore.ExploreViewModel
 import com.seventv.stickers.ui.packs.PackDetailScreen
@@ -65,35 +67,38 @@ fun AppNavigation(
 
     Scaffold(
         bottomBar = {
-            if (isBottomBarVisible) {
-                NavigationBar(
-                    containerColor = DarkSurface
-                ) {
-                    bottomNavItems.forEach { screen ->
-                        val isSelected = currentRoute == screen.route
-                        NavigationBarItem(
-                            icon = { Icon(screen.icon, contentDescription = screen.title) },
-                            label = { Text(screen.title) },
-                            selected = isSelected,
-                            colors = NavigationBarItemDefaults.colors(
-                                selectedIconColor = Color.Black,
-                                selectedTextColor = SevenTvCyan,
-                                indicatorColor = SevenTvCyan,
-                                unselectedIconColor = OnSurfaceSubtext,
-                                unselectedTextColor = OnSurfaceSubtext
-                            ),
-                            onClick = {
-                                if (currentRoute != screen.route) {
-                                    navController.navigate(screen.route) {
-                                        popUpTo(navController.graph.findStartDestination().id) {
-                                            saveState = true
+            Column {
+                ImportProgressBanner(importManager = container.packImportManager)
+                if (isBottomBarVisible) {
+                    NavigationBar(
+                        containerColor = DarkSurface
+                    ) {
+                        bottomNavItems.forEach { screen ->
+                            val isSelected = currentRoute == screen.route
+                            NavigationBarItem(
+                                icon = { Icon(screen.icon, contentDescription = screen.title) },
+                                label = { Text(screen.title) },
+                                selected = isSelected,
+                                colors = NavigationBarItemDefaults.colors(
+                                    selectedIconColor = Color.Black,
+                                    selectedTextColor = SevenTvCyan,
+                                    indicatorColor = SevenTvCyan,
+                                    unselectedIconColor = OnSurfaceSubtext,
+                                    unselectedTextColor = OnSurfaceSubtext
+                                ),
+                                onClick = {
+                                    if (currentRoute != screen.route) {
+                                        navController.navigate(screen.route) {
+                                            popUpTo(navController.graph.findStartDestination().id) {
+                                                saveState = true
+                                            }
+                                            launchSingleTop = true
+                                            restoreState = true
                                         }
-                                        launchSingleTop = true
-                                        restoreState = true
                                     }
                                 }
-                            }
-                        )
+                            )
+                        }
                     }
                 }
             }
@@ -129,7 +134,8 @@ fun AppNavigation(
                 val channelViewModel: ChannelViewModel = viewModel(
                     factory = ChannelViewModel.Factory(
                         sevenTvRepository = container.sevenTvRepository,
-                        stickerPackRepository = container.stickerPackRepository
+                        stickerPackRepository = container.stickerPackRepository,
+                        packImportManager = container.packImportManager
                     )
                 )
                 ChannelScreen(

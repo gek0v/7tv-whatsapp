@@ -35,7 +35,6 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedButton
@@ -261,46 +260,6 @@ fun ChannelScreen(
                     Text("Cancelar", color = OnSurfaceSubtext)
                 }
             },
-            containerColor = DarkSurface
-        )
-    }
-
-    // Importing in progress dialog
-    if (importState is ChannelImportState.Importing) {
-        AlertDialog(
-            onDismissRequest = {},
-            title = { Text("Procesando Stickers", color = OnSurfaceText, fontWeight = FontWeight.Bold) },
-            text = {
-                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
-                    CircularProgressIndicator(color = WhatsAppGreen)
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        "Creando pack ${importState.currentPack} de ${importState.totalPacks}",
-                        color = OnSurfaceText,
-                        fontWeight = FontWeight.SemiBold,
-                        fontSize = 15.sp
-                    )
-                    if (importState.totalStickers > 0) {
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Text(
-                            "Procesando sticker ${importState.currentSticker} de ${importState.totalStickers}",
-                            color = OnSurfaceSubtext,
-                            fontSize = 13.sp
-                        )
-                        Spacer(modifier = Modifier.height(10.dp))
-                        LinearProgressIndicator(
-                            progress = { importState.currentSticker.toFloat() / importState.totalStickers.coerceAtLeast(1) },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(6.dp)
-                                .clip(RoundedCornerShape(3.dp)),
-                            color = WhatsAppGreen,
-                            trackColor = DarkSurfaceVariant
-                        )
-                    }
-                }
-            },
-            confirmButton = {},
             containerColor = DarkSurface
         )
     }
