@@ -172,5 +172,59 @@ class ComponentsTest {
         assertEquals("ANIM", EmoteCardDefaults.badgeText(isAnimated = true))
         assertEquals("STATIC", EmoteCardDefaults.badgeText(isAnimated = false))
     }
+
+    @Test
+    fun dockedDraftPillDefaults_evaluatesDraftHealthAndStatus() {
+        // Less than 3 stickers: INSUFFICIENT
+        for (count in 0..2) {
+            assertEquals(DraftStatus.INSUFFICIENT, DockedDraftPillDefaults.draftStatus(count))
+            assertEquals("Mínimo 3 requeridos", DockedDraftPillDefaults.statusMessage(count))
+            assertEquals(com.seventv.stickers.ui.theme.ErrorRed, DockedDraftPillDefaults.statusColor(count))
+            assertFalse("Draft count $count should not be valid for pack export", DockedDraftPillDefaults.isValid(count))
+        }
+
+        // 3 to 30 stickers: READY
+        for (count in 3..30) {
+            assertEquals(DraftStatus.READY, DockedDraftPillDefaults.draftStatus(count))
+            assertEquals("Listo para WhatsApp", DockedDraftPillDefaults.statusMessage(count))
+            assertEquals(com.seventv.stickers.ui.theme.WhatsAppGreen, DockedDraftPillDefaults.statusColor(count))
+            assertTrue("Draft count $count should be valid for pack export", DockedDraftPillDefaults.isValid(count))
+        }
+
+        // More than 30 stickers: EXCEEDED
+        assertEquals(DraftStatus.EXCEEDED, DockedDraftPillDefaults.draftStatus(31))
+        assertEquals("Límite excedido", DockedDraftPillDefaults.statusMessage(31))
+        assertEquals(DockedDraftPillDefaults.WarningOrange, DockedDraftPillDefaults.statusColor(31))
+        assertFalse("Draft count 31 should not be valid for pack export", DockedDraftPillDefaults.isValid(31))
+
+        // Custom limits
+        assertEquals(DraftStatus.READY, DockedDraftPillDefaults.draftStatus(10, minCount = 5, maxCount = 10))
+        assertEquals(DraftStatus.EXCEEDED, DockedDraftPillDefaults.draftStatus(11, minCount = 5, maxCount = 10))
+        assertEquals(DraftStatus.INSUFFICIENT, DockedDraftPillDefaults.draftStatus(4, minCount = 5, maxCount = 10))
+
+        // Counter text format: "X / 30 stickers"
+        assertEquals("0 / 30 stickers", DockedDraftPillDefaults.counterText(0))
+        assertEquals("3 / 30 stickers", DockedDraftPillDefaults.counterText(3))
+        assertEquals("30 / 30 stickers", DockedDraftPillDefaults.counterText(30))
+        assertEquals("5 / 15 stickers", DockedDraftPillDefaults.counterText(5, maxCount = 15))
+    }
+
+    @Test
+    fun draftBottomSheetDefaults_validatesThresholdAndHelperTexts() {
+        // Can create: count in 3..30 AND non-blank packName
+        assertFalse(DraftBottomSheetDefaults.canCreate(count = 2, packName = "My Pack"))
+        assertFalse(DraftBottomSheetDefaults.canCreate(count = 3, packName = ""))
+        assertFalse(DraftBottomSheetDefaults.canCreate(count = 3, packName = "   "))
+        assertTrue(DraftBottomSheetDefaults.canCreate(count = 3, packName = "My Pack"))
+        assertTrue(DraftBottomSheetDefaults.canCreate(count = 30, packName = "My Pack"))
+        assertFalse(DraftBottomSheetDefaults.canCreate(count = 31, packName = "My Pack"))
+
+        // Helper text evaluation
+        assertEquals("Añade al menos 3 stickers para exportar a WhatsApp", DraftBottomSheetDefaults.helperText(0))
+        assertEquals("Añade al menos 3 stickers para exportar a WhatsApp", DraftBottomSheetDefaults.helperText(2))
+        org.junit.Assert.assertNull(DraftBottomSheetDefaults.helperText(3))
+        org.junit.Assert.assertNull(DraftBottomSheetDefaults.helperText(30))
+        assertEquals("El límite máximo es de 30 stickers por paquete", DraftBottomSheetDefaults.helperText(31))
+    }
 }
 
