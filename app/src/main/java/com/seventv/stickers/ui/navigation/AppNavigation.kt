@@ -1,6 +1,7 @@
 package com.seventv.stickers.ui.navigation
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Folder
@@ -99,12 +100,13 @@ fun AppNavigation(
                 }
             }
         },
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         modifier = modifier
     ) { innerPadding ->
         NavHost(
             navController = navController,
             startDestination = Screen.Explore.route,
-            modifier = Modifier.padding(innerPadding)
+            modifier = Modifier.padding(bottom = innerPadding.calculateBottomPadding())
         ) {
             composable(Screen.Explore.route) {
                 val exploreViewModel: ExploreViewModel = viewModel(

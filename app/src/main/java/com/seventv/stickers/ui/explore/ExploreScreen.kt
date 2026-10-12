@@ -47,6 +47,8 @@ import com.seventv.stickers.ui.components.EmoteCard
 import com.seventv.stickers.ui.components.SevenTvSearchBar
 import com.seventv.stickers.ui.components.SevenTvSearchBarDefaults
 
+import androidx.compose.foundation.layout.statusBars
+
 @Composable
 fun ExploreScreen(
     viewModel: ExploreViewModel,
@@ -108,7 +110,7 @@ fun ExploreScreen(
     Scaffold(
         modifier = modifier.fillMaxSize(),
         containerColor = MaterialTheme.colorScheme.background,
-        contentWindowInsets = WindowInsets(0, 0, 0, 0),
+        contentWindowInsets = WindowInsets.statusBars,
         snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { innerPadding ->
         Box(
