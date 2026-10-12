@@ -200,11 +200,16 @@ class ChannelViewModelTest {
     )
 
     private class FakeChannelSevenTvRepository : SevenTvRepository {
+        var streamerEmoteSetHandler: (suspend (String) -> StickerResult<SevenTvEmoteSet>)? = null
         var emoteSetHandler: suspend (String) -> StickerResult<SevenTvEmoteSet> = {
             StickerResult.Failure(StickerError.ResourceNotFound)
         }
         var searchEmotesHandler: suspend (String, Int, Int) -> StickerResult<List<SevenTvEmote>> = { _, _, _ ->
             StickerResult.Success(emptyList())
+        }
+
+        override suspend fun getStreamerEmoteSet(query: String): StickerResult<SevenTvEmoteSet> {
+            return streamerEmoteSetHandler?.invoke(query) ?: super.getStreamerEmoteSet(query)
         }
 
         override suspend fun searchEmotes(query: String, page: Int, limit: Int): StickerResult<List<SevenTvEmote>> {

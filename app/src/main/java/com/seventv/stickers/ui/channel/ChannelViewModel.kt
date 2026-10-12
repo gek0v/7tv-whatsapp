@@ -43,52 +43,22 @@ class ChannelViewModel(
         }
 
         viewModelScope.launch {
-            // First attempt to fetch emote set directly
-            val emoteSetResult = sevenTvRepository.getEmoteSet(targetQuery)
-            if (emoteSetResult is StickerResult.Success) {
-                val set = emoteSetResult.data
-                _uiState.update {
-                    it.copy(
-                        loadState = ChannelLoadState.Success(
-                            streamerName = set.name.ifBlank { targetQuery },
-                            emoteSet = set,
-                            allEmotes = set.emotes
-                        )
-                    )
-                }
-                return@launch
-            }
-
-            // Fallback: search emotes matching the channel name
-            val searchResult = sevenTvRepository.searchEmotes(targetQuery, limit = 100)
-            when (searchResult) {
+            when (val streamerResult = sevenTvRepository.getStreamerEmoteSet(targetQuery)) {
                 is StickerResult.Success -> {
-                    val emotes = searchResult.data
-                    if (emotes.isEmpty()) {
-                        _uiState.update {
-                            it.copy(loadState = ChannelLoadState.Error("No se encontraron emotes para '$targetQuery'"))
-                        }
-                    } else {
-                        val syntheticSet = SevenTvEmoteSet(
-                            id = targetQuery,
-                            name = targetQuery,
-                            ownerName = targetQuery,
-                            emotes = emotes
-                        )
-                        _uiState.update {
-                            it.copy(
-                                loadState = ChannelLoadState.Success(
-                                    streamerName = targetQuery,
-                                    emoteSet = syntheticSet,
-                                    allEmotes = emotes
-                                )
+                    val set = streamerResult.data
+                    _uiState.update {
+                        it.copy(
+                            loadState = ChannelLoadState.Success(
+                                streamerName = set.name.ifBlank { targetQuery },
+                                emoteSet = set,
+                                allEmotes = set.emotes
                             )
-                        }
+                        )
                     }
                 }
                 is StickerResult.Failure -> {
                     _uiState.update {
-                        it.copy(loadState = ChannelLoadState.Error("Error al consultar canal: ${searchResult.error}"))
+                        it.copy(loadState = ChannelLoadState.Error("No se encontraron emotes para '$targetQuery'"))
                     }
                 }
             }

@@ -1,5 +1,6 @@
 package com.seventv.stickers.core.network.api
 
+import com.seventv.stickers.core.network.dto.SevenTvGqlQueries
 import kotlinx.coroutines.test.runTest
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
@@ -10,7 +11,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import java.io.File
-import java.util.concurrent.TimeUnit
 
 class SevenTvApiTest {
     private val mockWebServer = MockWebServer()
@@ -28,23 +28,75 @@ class SevenTvApiTest {
     }
 
     @Test
-    fun searchEmotesReturnsEmoteListOnHttp200() = runTest {
+    fun searchEmotesSendsPostGqlAndParsesEmotes() = runTest {
         mockWebServer.enqueue(
             MockResponse()
                 .setResponseCode(200)
                 .setHeader("Content-Type", "application/json")
-                .setBody("""[{"id":"1","name":"KEKW","animated":false}]""")
+                .setBody("""
+                    {
+                      "data": {
+                        "emotes": {
+                          "count": 1,
+                          "items": [
+                            {"id":"1","name":"KEKW","animated":false}
+                          ]
+                        }
+                      }
+                    }
+                """.trimIndent())
         )
-        val response = api.searchEmotes("KEKW")
+        val response = api.searchEmotes(SevenTvGqlQueries.searchEmotesRequest("KEKW", page = 1, limit = 30))
         assertTrue(response.isSuccessful)
-        assertEquals(1, response.body()?.size)
-        assertEquals("KEKW", response.body()?.first()?.name)
+        val items = response.body()?.data?.emotes?.items.orEmpty()
+        assertEquals(1, items.size)
+        assertEquals("KEKW", items.first().name)
 
         val recordedRequest = mockWebServer.takeRequest()
-        assertEquals("GET", recordedRequest.method)
-        assertTrue(recordedRequest.path?.contains("/v3/emotes") == true)
-        assertTrue(recordedRequest.path?.contains("query=KEKW") == true)
+        assertEquals("POST", recordedRequest.method)
+        assertEquals("/v3/gql", recordedRequest.path)
+        val bodyText = recordedRequest.body.readUtf8()
+        assertTrue(bodyText.contains("SearchEmotes"))
+        assertTrue(bodyText.contains("KEKW"))
         assertEquals("7TV-WhatsApp-Android/1.0", recordedRequest.getHeader("User-Agent"))
+    }
+
+    @Test
+    fun searchUsersSendsPostGqlAndParsesUsers() = runTest {
+        mockWebServer.enqueue(
+            MockResponse()
+                .setResponseCode(200)
+                .setHeader("Content-Type", "application/json")
+                .setBody("""
+                    {
+                      "data": {
+                        "users": [
+                          {
+                            "id": "u1",
+                            "username": "ibai",
+                            "display_name": "Ibai",
+                            "emote_sets": [
+                              {"id": "s1", "name": "Ibai Set"}
+                            ]
+                          }
+                        ]
+                      }
+                    }
+                """.trimIndent())
+        )
+        val response = api.searchUsers(SevenTvGqlQueries.searchUsersRequest("ibai", limit = 1))
+        assertTrue(response.isSuccessful)
+        val users = response.body()?.data?.users.orEmpty()
+        assertEquals(1, users.size)
+        assertEquals("ibai", users.first().username)
+        assertEquals("Ibai Set", users.first().emoteSets.first().name)
+
+        val recordedRequest = mockWebServer.takeRequest()
+        assertEquals("POST", recordedRequest.method)
+        assertEquals("/v3/gql", recordedRequest.path)
+        val bodyText = recordedRequest.body.readUtf8()
+        assertTrue(bodyText.contains("SearchUsers"))
+        assertTrue(bodyText.contains("ibai"))
     }
 
     @Test
@@ -79,24 +131,6 @@ class SevenTvApiTest {
         val recordedRequest = mockWebServer.takeRequest()
         assertEquals("GET", recordedRequest.method)
         assertEquals("/v3/emotes/60ccf4479f59298d1a7b4698", recordedRequest.path)
-    }
-
-    @Test
-    fun searchEmotesWithPaginationSendsCorrectQueryParams() = runTest {
-        mockWebServer.enqueue(
-            MockResponse()
-                .setResponseCode(200)
-                .setHeader("Content-Type", "application/json")
-                .setBody("[]")
-        )
-        val response = api.searchEmotes(query = "monkaS", page = 2, limit = 50)
-        assertTrue(response.isSuccessful)
-
-        val recordedRequest = mockWebServer.takeRequest()
-        val path = recordedRequest.path ?: ""
-        assertTrue(path.contains("query=monkaS"))
-        assertTrue(path.contains("page=2"))
-        assertTrue(path.contains("limit=50"))
     }
 
     @Test

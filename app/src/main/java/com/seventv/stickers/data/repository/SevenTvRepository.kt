@@ -10,4 +10,5 @@ interface SevenTvRepository {
     suspend fun getEmote(emoteId: String): StickerResult<SevenTvEmote>
     suspend fun getEmoteSet(setId: String): StickerResult<SevenTvEmoteSet>
     suspend fun downloadEmote(emote: SevenTvEmote): StickerResult<DownloadedEmoteAsset>
+    suspend fun getStreamerEmoteSet(query: String): StickerResult<SevenTvEmoteSet> = getEmoteSet(query)
 }

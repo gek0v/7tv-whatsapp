@@ -7,6 +7,13 @@ import com.seventv.stickers.core.network.downloader.EmoteDownloader
 import com.seventv.stickers.core.network.dto.SevenTvEmoteDto
 import com.seventv.stickers.core.network.dto.SevenTvEmoteSetDto
 import com.seventv.stickers.core.network.dto.SevenTvFileDto
+import com.seventv.stickers.core.network.dto.SevenTvGqlEmoteSetRefDto
+import com.seventv.stickers.core.network.dto.SevenTvGqlEmotesConnection
+import com.seventv.stickers.core.network.dto.SevenTvGqlEmotesData
+import com.seventv.stickers.core.network.dto.SevenTvGqlRequest
+import com.seventv.stickers.core.network.dto.SevenTvGqlResponse
+import com.seventv.stickers.core.network.dto.SevenTvGqlUserDto
+import com.seventv.stickers.core.network.dto.SevenTvGqlUsersData
 import com.seventv.stickers.core.network.dto.SevenTvHostDto
 import com.seventv.stickers.core.network.model.DownloadedEmoteAsset
 import com.seventv.stickers.core.network.model.SevenTvEmote
@@ -56,11 +63,18 @@ class DefaultSevenTvRepositoryTest {
                 files = listOf(SevenTvFileDto(name = "4x.webp", format = "WEBP"))
             )
         )
-        fakeApi.searchEmotesHandler = { query, page, limit ->
-            assertEquals("kekw", query)
-            assertEquals(1, page)
-            assertEquals(30, limit)
-            Response.success(listOf(emoteDto))
+        fakeApi.searchEmotesHandler = { request ->
+            assertTrue(request.query.contains("SearchEmotes"))
+            Response.success(
+                SevenTvGqlResponse(
+                    data = SevenTvGqlEmotesData(
+                        emotes = SevenTvGqlEmotesConnection(
+                            count = 1,
+                            items = listOf(emoteDto)
+                        )
+                    )
+                )
+            )
         }
 
         val result = repository.searchEmotes(query = "kekw", page = 1, limit = 30)
@@ -73,6 +87,107 @@ class DefaultSevenTvRepositoryTest {
         assertEquals("KEKW", emote.name)
         assertFalse(emote.isAnimated)
         assertEquals("https://cdn.7tv.app/emote/emote1/4x.webp", emote.bestAssetUrl)
+    }
+
+    @Test
+    fun getStreamerEmoteSetDirectSuccess() = runTest(testDispatcher) {
+        val setDto = SevenTvEmoteSetDto(
+            id = "set_direct",
+            name = "Direct Set",
+            ownerName = "Streamer",
+            emotes = listOf(SevenTvEmoteDto(id = "e1", name = "Pog"))
+        )
+        fakeApi.getEmoteSetHandler = { setId ->
+            assertEquals("set_direct", setId)
+            Response.success(setDto)
+        }
+
+        val result = repository.getStreamerEmoteSet("set_direct")
+
+        assertTrue(result is StickerResult.Success<*>)
+        val set = (result as StickerResult.Success<SevenTvEmoteSet>).data
+        assertEquals("set_direct", set.id)
+        assertEquals("Direct Set", set.name)
+    }
+
+    @Test
+    fun getStreamerEmoteSetUserSearchSuccess() = runTest(testDispatcher) {
+        // Direct set call fails (query is username, not set id)
+        fakeApi.getEmoteSetHandler = { errorResponse(404, "Set not found") }
+
+        // User search returns streamer with active emote set
+        fakeApi.searchUsersHandler = { _ ->
+            Response.success(
+                SevenTvGqlResponse(
+                    data = SevenTvGqlUsersData(
+                        users = listOf(
+                            SevenTvGqlUserDto(
+                                id = "u_ibai",
+                                username = "ibai",
+                                displayName = "Ibai",
+                                emoteSets = listOf(SevenTvGqlEmoteSetRefDto(id = "set_ibai_1", name = "Ibai Set"))
+                            )
+                        )
+                    )
+                )
+            )
+        }
+
+        // Subsequent getEmoteSet with resolved set_ibai_1 succeeds
+        fakeApi.getEmoteSetHandler = { setId ->
+            if (setId == "set_ibai_1") {
+                Response.success(
+                    SevenTvEmoteSetDto(
+                        id = "set_ibai_1",
+                        name = "Ibai Set",
+                        ownerName = "Ibai",
+                        emotes = listOf(SevenTvEmoteDto(id = "e1", name = "Sisi"))
+                    )
+                )
+            } else {
+                errorResponse(404, "Not found")
+            }
+        }
+
+        val result = repository.getStreamerEmoteSet("ibai")
+
+        assertTrue("Expected Success, got $result", result is StickerResult.Success<*>)
+        val set = (result as StickerResult.Success<SevenTvEmoteSet>).data
+        assertEquals("set_ibai_1", set.id)
+        assertEquals("Ibai Set", set.name)
+        assertEquals(1, set.emotes.size)
+        assertEquals("Sisi", set.emotes.first().name)
+    }
+
+    @Test
+    fun getStreamerEmoteSetFallbackEmotesSuccess() = runTest(testDispatcher) {
+        // Direct set call fails
+        fakeApi.getEmoteSetHandler = { errorResponse(404, "Set not found") }
+        // User search returns empty
+        fakeApi.searchUsersHandler = {
+            Response.success(SevenTvGqlResponse(data = SevenTvGqlUsersData(users = emptyList())))
+        }
+        // Fallback emote search finds matching emotes
+        fakeApi.searchEmotesHandler = {
+            Response.success(
+                SevenTvGqlResponse(
+                    data = SevenTvGqlEmotesData(
+                        emotes = SevenTvGqlEmotesConnection(
+                            count = 1,
+                            items = listOf(SevenTvEmoteDto(id = "e1", name = "cat"))
+                        )
+                    )
+                )
+            )
+        }
+
+        val result = repository.getStreamerEmoteSet("cat")
+
+        assertTrue(result is StickerResult.Success<*>)
+        val set = (result as StickerResult.Success<SevenTvEmoteSet>).data
+        assertEquals("cat", set.id)
+        assertEquals("cat", set.name)
+        assertEquals(1, set.emotes.size)
     }
 
     @Test
@@ -145,7 +260,7 @@ class DefaultSevenTvRepositoryTest {
 
     @Test
     fun http429ReturnsRateLimited() = runTest(testDispatcher) {
-        fakeApi.searchEmotesHandler = { _, _, _ ->
+        fakeApi.searchEmotesHandler = { _ ->
             errorResponse(429, "Too Many Requests")
         }
 
@@ -172,7 +287,7 @@ class DefaultSevenTvRepositoryTest {
 
     @Test
     fun networkExceptionReturnsNetworkError() = runTest(testDispatcher) {
-        fakeApi.searchEmotesHandler = { _, _, _ ->
+        fakeApi.searchEmotesHandler = { _ ->
             throw IOException("Socket timeout")
         }
 
@@ -262,13 +377,19 @@ class DefaultSevenTvRepositoryTest {
     }
 
     private class FakeSevenTvApi : SevenTvApi {
-        var searchEmotesHandler: (suspend (String, Int, Int) -> Response<List<SevenTvEmoteDto>>)? = null
+        var searchEmotesHandler: (suspend (SevenTvGqlRequest) -> Response<SevenTvGqlResponse<SevenTvGqlEmotesData>>)? = null
+        var searchUsersHandler: (suspend (SevenTvGqlRequest) -> Response<SevenTvGqlResponse<SevenTvGqlUsersData>>)? = null
         var getEmoteHandler: (suspend (String) -> Response<SevenTvEmoteDto>)? = null
         var getEmoteSetHandler: (suspend (String) -> Response<SevenTvEmoteSetDto>)? = null
 
-        override suspend fun searchEmotes(query: String, page: Int, limit: Int): Response<List<SevenTvEmoteDto>> {
-            return searchEmotesHandler?.invoke(query, page, limit)
-                ?: Response.success(emptyList())
+        override suspend fun searchEmotes(request: SevenTvGqlRequest): Response<SevenTvGqlResponse<SevenTvGqlEmotesData>> {
+            return searchEmotesHandler?.invoke(request)
+                ?: Response.success(SevenTvGqlResponse(data = SevenTvGqlEmotesData()))
+        }
+
+        override suspend fun searchUsers(request: SevenTvGqlRequest): Response<SevenTvGqlResponse<SevenTvGqlUsersData>> {
+            return searchUsersHandler?.invoke(request)
+                ?: Response.success(SevenTvGqlResponse(data = SevenTvGqlUsersData()))
         }
 
         override suspend fun getEmote(emoteId: String): Response<SevenTvEmoteDto> {
