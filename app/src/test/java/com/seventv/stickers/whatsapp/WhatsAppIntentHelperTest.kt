@@ -76,6 +76,7 @@ class WhatsAppIntentHelperTest {
         assertEquals(customAuthority, intent.getStringExtra(WhatsAppConstants.EXTRA_STICKER_PACK_AUTHORITY))
         assertEquals(packId, intent.getStringExtra(WhatsAppConstants.EXTRA_STICKER_PACK_ID))
         assertEquals(packName, intent.getStringExtra(WhatsAppConstants.EXTRA_STICKER_PACK_NAME))
+        assertTrue(intent.flags and android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION != 0)
     }
 
     @Test

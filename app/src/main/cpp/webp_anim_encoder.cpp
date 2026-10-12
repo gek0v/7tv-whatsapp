@@ -3,7 +3,9 @@
 #include <android/log.h>
 #include <webp/encode.h>
 #include <webp/mux.h>
+#include <webp/demux.h>
 #include <cstdio>
+#include <cstring>
 #include <algorithm>
 
 #define LOG_TAG "seven_tv_webp"
@@ -238,6 +240,134 @@ Java_com_seventv_stickers_core_media_animated_NativeWebPAnimEncoder_encode(
     }
 
     return JNI_TRUE;
+}
+
+JNIEXPORT jobject JNICALL
+Java_com_seventv_stickers_core_media_animated_NativeWebPAnimDecoder_decode(
+    JNIEnv* env,
+    jobject /* thiz */,
+    jbyteArray webpBytes
+) {
+    if (env == nullptr || webpBytes == nullptr) {
+        return nullptr;
+    }
+
+    const jsize byte_count = env->GetArrayLength(webpBytes);
+    if (byte_count <= 12) {
+        return nullptr;
+    }
+
+    jbyte* bytes_ptr = env->GetByteArrayElements(webpBytes, nullptr);
+    if (bytes_ptr == nullptr) {
+        return nullptr;
+    }
+
+    WebPData webp_data;
+    webp_data.bytes = reinterpret_cast<const uint8_t*>(bytes_ptr);
+    webp_data.size = static_cast<size_t>(byte_count);
+
+    WebPAnimDecoderOptions dec_options;
+    if (!WebPAnimDecoderOptionsInit(&dec_options)) {
+        env->ReleaseByteArrayElements(webpBytes, bytes_ptr, JNI_ABORT);
+        return nullptr;
+    }
+    dec_options.color_mode = MODE_RGBA;
+
+    WebPAnimDecoder* dec = WebPAnimDecoderNew(&webp_data, &dec_options);
+    if (dec == nullptr) {
+        env->ReleaseByteArrayElements(webpBytes, bytes_ptr, JNI_ABORT);
+        return nullptr;
+    }
+
+    WebPAnimInfo info;
+    if (!WebPAnimDecoderGetInfo(dec, &info) || info.frame_count <= 0) {
+        WebPAnimDecoderDelete(dec);
+        env->ReleaseByteArrayElements(webpBytes, bytes_ptr, JNI_ABORT);
+        return nullptr;
+    }
+
+    const int width = info.canvas_width;
+    const int height = info.canvas_height;
+    const int frame_count = info.frame_count;
+
+    jclass bitmap_class = env->FindClass("android/graphics/Bitmap");
+    jclass config_class = env->FindClass("android/graphics/Bitmap$Config");
+    jfieldID argb_field = env->GetStaticFieldID(config_class, "ARGB_8888", "Landroid/graphics/Bitmap$Config;");
+    jobject argb_config = env->GetStaticObjectField(config_class, argb_field);
+    jmethodID create_bitmap_mid = env->GetStaticMethodID(
+        bitmap_class,
+        "createBitmap",
+        "(IILandroid/graphics/Bitmap$Config;)Landroid/graphics/Bitmap;"
+    );
+
+    jobjectArray bitmap_array = env->NewObjectArray(frame_count, bitmap_class, nullptr);
+    jintArray durations_array = env->NewIntArray(frame_count);
+    jintArray timestamps_array = env->NewIntArray(frame_count);
+
+    if (bitmap_array == nullptr || durations_array == nullptr || timestamps_array == nullptr) {
+        WebPAnimDecoderDelete(dec);
+        env->ReleaseByteArrayElements(webpBytes, bytes_ptr, JNI_ABORT);
+        return nullptr;
+    }
+
+    jint* durations_ptr = env->GetIntArrayElements(durations_array, nullptr);
+    jint* timestamps_ptr = env->GetIntArrayElements(timestamps_array, nullptr);
+
+    int frame_index = 0;
+    int prev_timestamp = 0;
+
+    while (WebPAnimDecoderHasMoreFrames(dec) && frame_index < frame_count) {
+        uint8_t* rgba_buf = nullptr;
+        int timestamp = 0;
+        if (!WebPAnimDecoderGetNext(dec, &rgba_buf, &timestamp) || rgba_buf == nullptr) {
+            break;
+        }
+
+        jobject frame_bmp = env->CallStaticObjectMethod(
+            bitmap_class,
+            create_bitmap_mid,
+            width,
+            height,
+            argb_config
+        );
+
+        if (frame_bmp != nullptr) {
+            void* dst_pixels = nullptr;
+            if (AndroidBitmap_lockPixels(env, frame_bmp, &dst_pixels) >= 0 && dst_pixels != nullptr) {
+                std::memcpy(dst_pixels, rgba_buf, static_cast<size_t>(width * height * 4));
+                AndroidBitmap_unlockPixels(env, frame_bmp);
+            }
+            env->SetObjectArrayElement(bitmap_array, frame_index, frame_bmp);
+            env->DeleteLocalRef(frame_bmp);
+        }
+
+        int duration = (timestamp > prev_timestamp) ? (timestamp - prev_timestamp) : 100;
+        if (duration < 8) duration = 8;
+        durations_ptr[frame_index] = duration;
+        timestamps_ptr[frame_index] = timestamp;
+        prev_timestamp = timestamp;
+        frame_index++;
+    }
+
+    env->ReleaseIntArrayElements(durations_array, durations_ptr, 0);
+    env->ReleaseIntArrayElements(timestamps_array, timestamps_ptr, 0);
+    env->ReleaseByteArrayElements(webpBytes, bytes_ptr, JNI_ABORT);
+    WebPAnimDecoderDelete(dec);
+
+    if (frame_index == 0) {
+        return nullptr;
+    }
+
+    jclass result_class = env->FindClass("com/seventv/stickers/core/media/animated/WebPDecodedFrames");
+    if (result_class == nullptr) {
+        return nullptr;
+    }
+    jmethodID ctor = env->GetMethodID(result_class, "<init>", "([Landroid/graphics/Bitmap;[I[I)V");
+    if (ctor == nullptr) {
+        return nullptr;
+    }
+
+    return env->NewObject(result_class, ctor, bitmap_array, durations_array, timestamps_array);
 }
 
 } // extern "C"

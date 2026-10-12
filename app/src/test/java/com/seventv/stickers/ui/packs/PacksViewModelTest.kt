@@ -133,6 +133,21 @@ class PacksViewModelTest {
     }
 
     @Test
+    fun addPackToWhatsApp_whenFewerThan3Stickers_showsFeedbackMessage() {
+        val packageManager = shadowOf(context.packageManager)
+        packageManager.installPackage(
+            PackageInfo().apply { packageName = WhatsAppConstants.PACKAGE_WHATSAPP }
+        )
+
+        val pack = createSamplePack("pack_small", "Small").copy(stickers = emptyList())
+        viewModel.onAddPackToWhatsApp(context, pack)
+
+        val state = viewModel.uiState.value
+        assertNull(state.exportEvent)
+        assertEquals("WhatsApp requiere al menos 3 stickers por paquete.", state.userFeedbackMessage)
+    }
+
+    @Test
     fun deletePackFlow() = runTest(testDispatcher) {
         val pack = createSamplePack("pack_to_delete", "Borrar")
         fakeStickerPackRepository.packsFlow.value = listOf(pack)
@@ -358,24 +373,26 @@ class PacksViewModelTest {
         isWhitelisted: Boolean = false,
         isAnimated: Boolean = false
     ): StickerPack {
-        val sticker = PackSticker(
-            id = "s_1",
-            packIdentifier = id,
-            emoteId = "e_1",
-            emoteName = "pepe",
-            filePath = "/data/pack/$id/sticker_1.webp",
-            emojis = listOf("💬"),
-            fileLength = 1000L,
-            sortOrder = 0
-        )
+        val stickers = (1..3).map { i ->
+            PackSticker(
+                id = "s_$i",
+                packIdentifier = id,
+                emoteId = "e_$i",
+                emoteName = "pepe$i",
+                filePath = "/data/pack/$id/sticker_$i.webp",
+                emojis = listOf("💬"),
+                fileLength = 1000L,
+                sortOrder = i - 1
+            )
+        }
         return StickerPack(
             identifier = id,
             name = name,
             publisher = "7TV Stickers",
-            trayImagePath = "/data/pack/$id/tray.webp",
+            trayImagePath = "/data/pack/$id/tray.png",
             isAnimated = isAnimated,
             isWhitelisted = isWhitelisted,
-            stickers = listOf(sticker)
+            stickers = stickers
         )
     }
 

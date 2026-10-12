@@ -66,11 +66,11 @@ class StickerStorageManagerTest {
         val trayFile = storageManager.saveTrayIcon(packIdentifier, trayBytes)
 
         assertTrue("Tray icon file should exist on disk", trayFile.exists())
-        assertEquals("tray_icon.webp", trayFile.name)
+        assertEquals("tray_icon.png", trayFile.name)
         assertArrayEquals("Tray icon content should match input bytes", trayBytes, trayFile.readBytes())
 
         val relativePath = trayFile.relativeTo(baseDir).invariantSeparatorsPath
-        assertEquals("sticker_packs/pack_alpha/tray_icon.webp", relativePath)
+        assertEquals("sticker_packs/pack_alpha/tray_icon.png", relativePath)
         assertEquals(trayFile.canonicalPath, storageManager.getAbsoluteFile(relativePath).canonicalPath)
     }
 
@@ -112,7 +112,7 @@ class StickerStorageManagerTest {
 
     @Test
     fun getAbsoluteFileResolvesCorrectly() {
-        val relativePath = "sticker_packs/pack_gamma/tray_icon.webp"
+        val relativePath = "sticker_packs/pack_gamma/tray_icon.png"
         val resolved = storageManager.getAbsoluteFile(relativePath)
 
         val expected = File(baseDir, relativePath)

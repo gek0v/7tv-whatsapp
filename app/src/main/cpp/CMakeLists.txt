@@ -40,6 +40,10 @@ if(TARGET libwebpmux AND NOT TARGET webpmux)
     add_library(webpmux ALIAS libwebpmux)
 endif()
 
+if(TARGET libwebpdemux AND NOT TARGET webpdemux)
+    add_library(webpdemux ALIAS libwebpdemux)
+endif()
+
 if(TARGET libwebp AND NOT TARGET webp)
     add_library(webp ALIAS libwebp)
 endif()
@@ -49,6 +53,7 @@ target_link_libraries(
     PRIVATE
     webp
     webpmux
+    webpdemux
     jnigraphics
     log
 )

@@ -78,6 +78,15 @@ class PacksViewModel(
             return
         }
 
+        if (pack.stickers.size < 3) {
+            _uiState.update { it.copy(userFeedbackMessage = "WhatsApp requiere al menos 3 stickers por paquete.") }
+            return
+        }
+        if (pack.stickers.size > 30) {
+            _uiState.update { it.copy(userFeedbackMessage = "WhatsApp permite un máximo de 30 stickers por paquete.") }
+            return
+        }
+
         _uiState.update { it.copy(exportEvent = WhatsAppExportEvent.LaunchIntent(pack)) }
     }
 
@@ -182,6 +191,14 @@ class PacksViewModel(
         val packs = (_uiState.value.loadState as? PacksLoadState.Success)?.packs ?: return
         val selectedPacks = packs.filter { it.identifier in _uiState.value.selectedPackIds }
         if (selectedPacks.isEmpty()) return
+
+        val invalidPack = selectedPacks.find { it.stickers.size !in 3..30 }
+        if (invalidPack != null) {
+            _uiState.update {
+                it.copy(userFeedbackMessage = "El paquete '${invalidPack.name}' tiene ${invalidPack.stickers.size} stickers. WhatsApp requiere entre 3 y 30 stickers por paquete.")
+            }
+            return
+        }
 
         val firstPack = selectedPacks.first()
         val remainingQueue = selectedPacks.drop(1)

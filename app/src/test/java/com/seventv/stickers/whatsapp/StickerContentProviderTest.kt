@@ -117,13 +117,13 @@ class StickerContentProviderTest {
             assertEquals("pack-anim", c.getString(c.getColumnIndexOrThrow(WhatsAppConstants.STICKER_PACK_IDENTIFIER_IN_QUERY)))
             assertEquals("Animated Pack", c.getString(c.getColumnIndexOrThrow(WhatsAppConstants.STICKER_PACK_NAME_IN_QUERY)))
             assertEquals("7TV Creator", c.getString(c.getColumnIndexOrThrow(WhatsAppConstants.STICKER_PACK_PUBLISHER_IN_QUERY)))
-            assertEquals("tray_icon.webp", c.getString(c.getColumnIndexOrThrow(WhatsAppConstants.STICKER_PACK_ICON_IN_QUERY)))
-            assertEquals("", c.getString(c.getColumnIndexOrThrow(WhatsAppConstants.ANDROID_APP_DOWNLOAD_LINK_IN_QUERY)))
-            assertEquals("", c.getString(c.getColumnIndexOrThrow(WhatsAppConstants.IOS_APP_DOWNLOAD_LINK_IN_QUERY)))
-            assertEquals("", c.getString(c.getColumnIndexOrThrow(WhatsAppConstants.PUBLISHER_EMAIL)))
-            assertEquals("", c.getString(c.getColumnIndexOrThrow(WhatsAppConstants.PUBLISHER_WEBSITE)))
-            assertEquals("", c.getString(c.getColumnIndexOrThrow(WhatsAppConstants.PRIVACY_POLICY_WEBSITE)))
-            assertEquals("", c.getString(c.getColumnIndexOrThrow(WhatsAppConstants.LICENSE_AGREEMENT_WEBSITE)))
+            assertEquals("tray_icon.png", c.getString(c.getColumnIndexOrThrow(WhatsAppConstants.STICKER_PACK_ICON_IN_QUERY)))
+            assertNull(c.getString(c.getColumnIndexOrThrow(WhatsAppConstants.ANDROID_APP_DOWNLOAD_LINK_IN_QUERY)))
+            assertNull(c.getString(c.getColumnIndexOrThrow(WhatsAppConstants.IOS_APP_DOWNLOAD_LINK_IN_QUERY)))
+            assertNull(c.getString(c.getColumnIndexOrThrow(WhatsAppConstants.PUBLISHER_EMAIL)))
+            assertNull(c.getString(c.getColumnIndexOrThrow(WhatsAppConstants.PUBLISHER_WEBSITE)))
+            assertNull(c.getString(c.getColumnIndexOrThrow(WhatsAppConstants.PRIVACY_POLICY_WEBSITE)))
+            assertNull(c.getString(c.getColumnIndexOrThrow(WhatsAppConstants.LICENSE_AGREEMENT_WEBSITE)))
             assertEquals("1", c.getString(c.getColumnIndexOrThrow(WhatsAppConstants.IMAGE_DATA_VERSION)))
             assertEquals(0, c.getInt(c.getColumnIndexOrThrow(WhatsAppConstants.AVOID_CACHE)))
             assertEquals(1, c.getInt(c.getColumnIndexOrThrow(WhatsAppConstants.ANIMATED_STICKER_PACK)))
@@ -133,7 +133,7 @@ class StickerContentProviderTest {
             assertEquals("pack-static", c.getString(c.getColumnIndexOrThrow(WhatsAppConstants.STICKER_PACK_IDENTIFIER_IN_QUERY)))
             assertEquals("Static Pack", c.getString(c.getColumnIndexOrThrow(WhatsAppConstants.STICKER_PACK_NAME_IN_QUERY)))
             assertEquals("7TV Artist", c.getString(c.getColumnIndexOrThrow(WhatsAppConstants.STICKER_PACK_PUBLISHER_IN_QUERY)))
-            assertEquals("tray_icon.webp", c.getString(c.getColumnIndexOrThrow(WhatsAppConstants.STICKER_PACK_ICON_IN_QUERY)))
+            assertEquals("tray_icon.png", c.getString(c.getColumnIndexOrThrow(WhatsAppConstants.STICKER_PACK_ICON_IN_QUERY)))
             assertEquals(0, c.getInt(c.getColumnIndexOrThrow(WhatsAppConstants.ANIMATED_STICKER_PACK)))
         }
     }
@@ -162,7 +162,7 @@ class StickerContentProviderTest {
             assertTrue(c.moveToNext())
             assertEquals("pack-single", c.getString(c.getColumnIndexOrThrow(WhatsAppConstants.STICKER_PACK_IDENTIFIER_IN_QUERY)))
             assertEquals("Single Pack", c.getString(c.getColumnIndexOrThrow(WhatsAppConstants.STICKER_PACK_NAME_IN_QUERY)))
-            assertEquals("tray_icon.webp", c.getString(c.getColumnIndexOrThrow(WhatsAppConstants.STICKER_PACK_ICON_IN_QUERY)))
+            assertEquals("tray_icon.png", c.getString(c.getColumnIndexOrThrow(WhatsAppConstants.STICKER_PACK_ICON_IN_QUERY)))
             assertEquals(0, c.getInt(c.getColumnIndexOrThrow(WhatsAppConstants.ANIMATED_STICKER_PACK)))
         }
 
@@ -182,7 +182,7 @@ class StickerContentProviderTest {
             identifier = "pack-stickers",
             name = "Sticker Pack",
             publisher = "7TV",
-            trayImageRelativePath = "sticker_packs/pack-stickers/tray_icon.webp",
+            trayImageRelativePath = "sticker_packs/pack-stickers/tray_icon.png",
             isAnimated = false,
             createdAt = 1000L
         )
@@ -203,7 +203,7 @@ class StickerContentProviderTest {
                 emoteId = "e1",
                 emoteName = "emote1",
                 relativeFilePath = "sticker_packs/pack-stickers/sticker_stk-1.webp",
-                emojis = listOf("😀"),
+                emojis = emptyList(), // should fallback to default emoji
                 fileLength = 1000L,
                 sortOrder = 0
             ),
@@ -213,7 +213,7 @@ class StickerContentProviderTest {
                 emoteId = "e2",
                 emoteName = "emote2",
                 relativeFilePath = "sticker_packs/pack-stickers/sticker_stk-2.webp",
-                emojis = listOf("🔥", "💯", "😎"),
+                emojis = listOf("🔥", "💯", "😎", "EXTRA_EMOJI"), // should take at most 3
                 fileLength = 2000L,
                 sortOrder = 1
             )
@@ -230,13 +230,13 @@ class StickerContentProviderTest {
             assertEquals(3, c.columnCount)
             assertEquals(3, c.count)
 
-            // Row 0: sortOrder 0 -> stk-1
+            // Row 0: sortOrder 0 -> stk-1, fallback emoji
             assertTrue(c.moveToNext())
             assertEquals("sticker_stk-1.webp", c.getString(c.getColumnIndexOrThrow(WhatsAppConstants.STICKER_FILE_NAME_IN_QUERY)))
             assertEquals("😀", c.getString(c.getColumnIndexOrThrow(WhatsAppConstants.STICKER_FILE_EMOJI_IN_QUERY)))
             assertEquals("emote1", c.getString(c.getColumnIndexOrThrow(WhatsAppConstants.STICKER_FILE_ACCESSIBILITY_TEXT_IN_QUERY)))
 
-            // Row 1: sortOrder 1 -> stk-2
+            // Row 1: sortOrder 1 -> stk-2, max 3 emojis
             assertTrue(c.moveToNext())
             assertEquals("sticker_stk-2.webp", c.getString(c.getColumnIndexOrThrow(WhatsAppConstants.STICKER_FILE_NAME_IN_QUERY)))
             assertEquals("🔥,💯,😎", c.getString(c.getColumnIndexOrThrow(WhatsAppConstants.STICKER_FILE_EMOJI_IN_QUERY)))
@@ -277,13 +277,17 @@ class StickerContentProviderTest {
             "image/webp",
             provider.getType(Uri.parse("content://$authority/stickers_asset/pack-1/sticker_1.webp"))
         )
+        assertEquals(
+            "image/png",
+            provider.getType(Uri.parse("content://$authority/stickers_asset/pack-1/tray_icon.png"))
+        )
         assertNull(
             provider.getType(Uri.parse("content://$authority/unsupported_path"))
         )
     }
 
     @Test
-    fun openAssetFile_returnsDescriptorForExistingFile() {
+    fun openAssetFile_andOpenFile_returnsDescriptorForExistingFile() {
         val packDir = storageManager.getPackDirectory("pack-asset")
         packDir.mkdirs()
         val assetFile = File(packDir, "sticker_test.webp")
@@ -295,6 +299,10 @@ class StickerContentProviderTest {
         assertNotNull(afd)
         assertNotNull(afd!!.parcelFileDescriptor)
         afd.close()
+
+        val pfd = provider.openFile(uri, "r")
+        assertNotNull(pfd)
+        pfd!!.close()
     }
 
     @Test

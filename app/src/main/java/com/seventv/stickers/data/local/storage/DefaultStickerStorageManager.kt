@@ -16,7 +16,7 @@ class DefaultStickerStorageManager(
 
     companion object {
         const val STICKER_PACKS_DIR_NAME = "sticker_packs"
-        const val TRAY_ICON_FILE_NAME = "tray_icon.webp"
+        const val TRAY_ICON_FILE_NAME = "tray_icon.png"
         const val STICKER_FILE_PREFIX = "sticker_"
         const val WEBP_EXTENSION = ".webp"
     }

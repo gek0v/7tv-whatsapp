@@ -44,6 +44,28 @@ class DefaultFrameExtractor : FrameExtractor {
         var singleBitmap: Bitmap? = null
 
         return try {
+            // Attempt native animated WebP decoding using libwebp
+            if (isWebP(bytes) && NativeWebPAnimDecoder.isAvailable) {
+                val decoded = try {
+                    NativeWebPAnimDecoder.decode(bytes)
+                } catch (_: Throwable) {
+                    null
+                }
+                if (decoded != null && decoded.bitmaps.isNotEmpty()) {
+                    val webpFrames = mutableListOf<AnimationFrame>()
+                    for (i in decoded.bitmaps.indices) {
+                        webpFrames.add(
+                            AnimationFrame(
+                                bitmap = decoded.bitmaps[i],
+                                durationMs = decoded.durationsMs.getOrElse(i) { 100 },
+                                timestampMs = decoded.timestampsMs.getOrElse(i) { 0 }
+                            )
+                        )
+                    }
+                    return StickerResult.Success(webpFrames)
+                }
+            }
+
             // Attempt decoding as animated GIF using Movie
             val movie = try {
                 Movie.decodeByteArray(bytes, 0, bytes.size)
@@ -145,5 +167,13 @@ class DefaultFrameExtractor : FrameExtractor {
         }
 
         return false
+    }
+
+    private fun isWebP(bytes: ByteArray): Boolean {
+        return bytes.size >= 12 &&
+            bytes[0] == 'R'.code.toByte() && bytes[1] == 'I'.code.toByte() &&
+            bytes[2] == 'F'.code.toByte() && bytes[3] == 'F'.code.toByte() &&
+            bytes[8] == 'W'.code.toByte() && bytes[9] == 'E'.code.toByte() &&
+            bytes[10] == 'B'.code.toByte() && bytes[11] == 'P'.code.toByte()
     }
 }

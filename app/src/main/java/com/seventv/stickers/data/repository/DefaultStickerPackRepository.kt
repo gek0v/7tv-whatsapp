@@ -213,7 +213,7 @@ class DefaultStickerPackRepository(
                         return@withContext StickerResult.Failure(StickerError.CorruptedSourceData)
                     }
 
-                    val trayOutFile = File(stagingDir, "tray_icon.webp")
+                    val trayOutFile = File(stagingDir, "tray_icon.png")
                     val trayResult = try {
                         mediaPipeline.processTrayIcon(firstBitmap, trayOutFile)
                     } finally {
@@ -245,7 +245,7 @@ class DefaultStickerPackRepository(
 
                     stagingDir.deleteRecursively()
 
-                    val trayRelativePath = "sticker_packs/$packIdentifier/tray_icon.webp"
+                    val trayRelativePath = "sticker_packs/$packIdentifier/tray_icon.png"
                     val createdAt = System.currentTimeMillis()
                     val packEntity = StickerPackEntity(
                         identifier = packIdentifier,
@@ -433,9 +433,33 @@ class DefaultStickerPackRepository(
                     }
                 }
 
-                if (firstSavedFile != null && firstSavedFile.exists()) {
+                var traySaved = false
+                for (srcId in sourcePackIdentifiers) {
+                    val srcTrayPng = java.io.File(storageManager.getPackDirectory(srcId), "tray_icon.png")
+                    if (srcTrayPng.exists() && srcTrayPng.length() > 0) {
+                        storageManager.saveTrayIcon(newPackId, srcTrayPng.readBytes())
+                        traySaved = true
+                        break
+                    }
+                    val srcTrayWebp = java.io.File(storageManager.getPackDirectory(srcId), "tray_icon.webp")
+                    if (srcTrayWebp.exists() && srcTrayWebp.length() > 0) {
+                        try {
+                            val bmp = BitmapFactory.decodeFile(srcTrayWebp.absolutePath)
+                            if (bmp != null) {
+                                val baos = java.io.ByteArrayOutputStream()
+                                bmp.compress(Bitmap.CompressFormat.PNG, 100, baos)
+                                storageManager.saveTrayIcon(newPackId, baos.toByteArray())
+                                bmp.recycle()
+                                traySaved = true
+                                break
+                            }
+                        } catch (_: Exception) {}
+                    }
+                }
+
+                if (!traySaved && firstSavedFile != null && firstSavedFile.exists()) {
                     val stagingDir = java.io.File(packDir, "staging_tray").apply { mkdirs() }
-                    val trayOutFile = java.io.File(stagingDir, "tray_icon.webp")
+                    val trayOutFile = java.io.File(stagingDir, "tray_icon.png")
                     val options = BitmapFactory.Options().apply { inPreferredConfig = Bitmap.Config.ARGB_8888 }
                     var firstBitmap: Bitmap? = BitmapFactory.decodeFile(firstSavedFile.absolutePath, options)
                     if (firstBitmap == null) {
@@ -451,15 +475,11 @@ class DefaultStickerPackRepository(
                             val trayResult = mediaPipeline.processTrayIcon(firstBitmap, trayOutFile)
                             if (trayResult is StickerResult.Success && trayOutFile.exists()) {
                                 storageManager.saveTrayIcon(newPackId, trayOutFile.readBytes())
-                            } else {
-                                storageManager.saveTrayIcon(newPackId, firstSavedFile.readBytes())
                             }
                         } finally {
                             stagingDir.deleteRecursively()
                             if (!firstBitmap.isRecycled) firstBitmap.recycle()
                         }
-                    } else {
-                        storageManager.saveTrayIcon(newPackId, firstSavedFile.readBytes())
                     }
                 }
 
@@ -468,7 +488,7 @@ class DefaultStickerPackRepository(
                     identifier = newPackId,
                     name = packName,
                     publisher = "7TV Stickers",
-                    trayImageRelativePath = "sticker_packs/$newPackId/tray_icon.webp",
+                    trayImageRelativePath = "sticker_packs/$newPackId/tray_icon.png",
                     isAnimated = isAnimated,
                     isWhitelisted = false,
                     createdAt = createdAt

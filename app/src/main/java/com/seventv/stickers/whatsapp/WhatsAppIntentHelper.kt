@@ -34,6 +34,7 @@ object WhatsAppIntentHelper {
             putExtra(WhatsAppConstants.EXTRA_STICKER_PACK_AUTHORITY, authority)
             putExtra(WhatsAppConstants.EXTRA_STICKER_PACK_ID, packIdentifier)
             putExtra(WhatsAppConstants.EXTRA_STICKER_PACK_NAME, packName)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
     }
 }

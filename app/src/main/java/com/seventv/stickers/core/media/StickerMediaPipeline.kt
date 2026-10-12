@@ -244,6 +244,16 @@ class StickerMediaPipeline(
             return StickerResult.Failure(StickerError.CorruptedSourceData)
         }
 
+        // WhatsApp strictly enforces webPImage.getFrameCount() > 1 for all stickers in animated packs.
+        if (currentFrames.size == 1) {
+            val single = currentFrames.first()
+            val clonedBitmap = single.bitmap.copy(Bitmap.Config.ARGB_8888, true)
+            currentFrames = listOf(
+                single.copy(durationMs = 500, timestampMs = 0),
+                AnimationFrame(bitmap = clonedBitmap, durationMs = 500, timestampMs = 500)
+            )
+        }
+
         var isFramesRecycled = false
         return try {
             var lastExceededSize = 0L
@@ -262,9 +272,17 @@ class StickerMediaPipeline(
             val decimated15Frames = frameThrottler.decimateFramerate(currentFrames, SECONDARY_DECIMATE_FPS)
             val didDecimateFurther = decimated15Frames.size < currentFrames.size
             currentFrames = decimated15Frames
+            if (currentFrames.size == 1) {
+                val single = currentFrames.first()
+                val clonedBitmap = single.bitmap.copy(Bitmap.Config.ARGB_8888, true)
+                currentFrames = listOf(
+                    single.copy(durationMs = 500, timestampMs = 0),
+                    AnimationFrame(bitmap = clonedBitmap, durationMs = 500, timestampMs = 500)
+                )
+            }
 
-            if (didDecimateFurther && decimated15Frames.isNotEmpty()) {
-                val secondaryResult = tryEncodeFrameSequence(decimated15Frames, outputDir)
+            if (didDecimateFurther && currentFrames.isNotEmpty()) {
+                val secondaryResult = tryEncodeFrameSequence(currentFrames, outputDir)
                 if (secondaryResult is TryEncodeResult.Success) {
                     recycleFrames(decimated15Frames)
                     isFramesRecycled = true

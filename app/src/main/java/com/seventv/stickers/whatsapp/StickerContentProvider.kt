@@ -105,13 +105,13 @@ class StickerContentProvider : ContentProvider() {
                             pack.pack.identifier,
                             pack.pack.name,
                             pack.pack.publisher,
-                            "tray_icon.webp",
-                            "",
-                            "",
-                            "",
-                            "",
-                            "",
-                            "",
+                            "tray_icon.png",
+                            null,
+                            null,
+                            null,
+                            null,
+                            null,
+                            null,
                             "1",
                             0,
                             if (pack.pack.isAnimated) 1 else 0
@@ -130,13 +130,13 @@ class StickerContentProvider : ContentProvider() {
                             pack.pack.identifier,
                             pack.pack.name,
                             pack.pack.publisher,
-                            "tray_icon.webp",
-                            "",
-                            "",
-                            "",
-                            "",
-                            "",
-                            "",
+                            "tray_icon.png",
+                            null,
+                            null,
+                            null,
+                            null,
+                            null,
+                            null,
                             "1",
                             0,
                             if (pack.pack.isAnimated) 1 else 0
@@ -152,11 +152,19 @@ class StickerContentProvider : ContentProvider() {
                 if (pack != null) {
                     val sortedStickers = pack.stickers.sortedBy { it.sortOrder }
                     for (sticker in sortedStickers) {
+                        val validEmojis = sticker.emojis.filter { it.isNotBlank() }
+                        val emojisString = if (validEmojis.isNotEmpty()) {
+                            validEmojis.take(3).joinToString(",")
+                        } else {
+                            "😀"
+                        }
+                        val maxA11y = if (pack.pack.isAnimated) 255 else 125
+                        val a11yText = sticker.emoteName.take(maxA11y)
                         c.addRow(
                             arrayOf(
                                 File(sticker.relativeFilePath).name,
-                                sticker.emojis.joinToString(","),
-                                sticker.emoteName
+                                emojisString,
+                                a11yText
                             )
                         )
                     }
@@ -169,8 +177,20 @@ class StickerContentProvider : ContentProvider() {
         return cursor
     }
 
+    override fun openFile(uri: Uri, mode: String): ParcelFileDescriptor? {
+        ensureInitialized()
+        val file = resolveAssetFile(uri, mode)
+        return ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
+    }
+
     override fun openAssetFile(uri: Uri, mode: String): AssetFileDescriptor? {
         ensureInitialized()
+        val file = resolveAssetFile(uri, mode)
+        val pfd = ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
+        return AssetFileDescriptor(pfd, 0, AssetFileDescriptor.UNKNOWN_LENGTH)
+    }
+
+    private fun resolveAssetFile(uri: Uri, mode: String): File {
         val match = uriMatcher.match(uri)
         if (match != STICKERS_ASSET_CODE) {
             throw IllegalArgumentException("Invalid URI for asset: $uri")
@@ -190,10 +210,27 @@ class StickerContentProvider : ContentProvider() {
             throw SecurityException("Path traversal attempt detected: $fileName")
         }
         if (!file.exists()) {
+            if (fileName == "tray_icon.png") {
+                val legacyWebp = File(packDir, "tray_icon.webp")
+                if (legacyWebp.exists()) {
+                    val bitmap = android.graphics.BitmapFactory.decodeFile(legacyWebp.absolutePath)
+                    if (bitmap != null) {
+                        val scaled = if (bitmap.width != 96 || bitmap.height != 96) {
+                            android.graphics.Bitmap.createScaledBitmap(bitmap, 96, 96, true)
+                        } else bitmap
+                        java.io.FileOutputStream(file).use { out ->
+                            scaled.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, out)
+                        }
+                        if (scaled != bitmap) scaled.recycle()
+                        bitmap.recycle()
+                    }
+                }
+            }
+        }
+        if (!file.exists()) {
             throw FileNotFoundException("Asset not found: $fileName in pack $packIdentifier")
         }
-        val pfd = ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
-        return AssetFileDescriptor(pfd, 0, file.length())
+        return file
     }
 
     override fun getType(uri: Uri): String? {
