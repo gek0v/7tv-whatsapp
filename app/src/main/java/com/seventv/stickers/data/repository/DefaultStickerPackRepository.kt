@@ -591,39 +591,53 @@ class DefaultStickerPackRepository(
             val stagingDir = File(packDir, "staging").apply { mkdirs() }
 
             try {
-                for ((index, emote) in emotes.withIndex()) {
-                    val stickerId = UUID.randomUUID().toString()
-                    val processResult = emoteBridge.convertEmoteToSticker(
-                        emote = emote,
-                        outputDir = stagingDir,
-                        allowStaticFallback = false
-                    )
-
-                    val processedSticker = when (processResult) {
-                        is StickerResult.Success -> processResult.data
-                        is StickerResult.Failure -> {
-                            stagingDir.deleteRecursively()
-                            return@withContext processResult
+                val semaphore = Semaphore(4)
+                val processedResults = coroutineScope {
+                    emotes.mapIndexed { index, emote ->
+                        async(Dispatchers.Default) {
+                            semaphore.withPermit {
+                                val stickerId = UUID.randomUUID().toString()
+                                val processResult = emoteBridge.convertEmoteToSticker(
+                                    emote = emote,
+                                    outputDir = stagingDir,
+                                    allowStaticFallback = false
+                                )
+                                ProcessItem(
+                                    index = index,
+                                    emote = emote,
+                                    stickerId = stickerId,
+                                    result = processResult
+                                )
+                            }
                         }
-                    }
+                    }.awaitAll()
+                }
 
+                val firstFailure = processedResults.firstOrNull { it.result is StickerResult.Failure }
+                if (firstFailure != null) {
+                    stagingDir.deleteRecursively()
+                    return@withContext firstFailure.result as StickerResult.Failure
+                }
+
+                for (item in processedResults.sortedBy { it.index }) {
+                    val processedSticker = (item.result as StickerResult.Success).data
                     val stickerBytes = processedSticker.file.readBytes()
                     val savedFile = storageManager.saveStickerFile(
                         packIdentifier = packIdentifier,
-                        stickerId = stickerId,
+                        stickerId = item.stickerId,
                         bytes = stickerBytes
                     )
 
-                    val relativePath = "sticker_packs/$packIdentifier/sticker_${stickerId}.webp"
+                    val relativePath = "sticker_packs/$packIdentifier/sticker_${item.stickerId}.webp"
                     val entity = StickerEntity(
-                        id = stickerId,
+                        id = item.stickerId,
                         packIdentifier = packIdentifier,
-                        emoteId = emote.id,
-                        emoteName = emote.name,
+                        emoteId = item.emote.id,
+                        emoteName = item.emote.name,
                         relativeFilePath = relativePath,
-                        emojis = com.seventv.stickers.core.domain.mapper.EmoteEmojiMapper.mapEmoteNameToEmojis(emote.name),
+                        emojis = com.seventv.stickers.core.domain.mapper.EmoteEmojiMapper.mapEmoteNameToEmojis(item.emote.name),
                         fileLength = savedFile.length(),
-                        sortOrder = currentCount + index
+                        sortOrder = currentCount + item.index
                     )
                     stickerDao.insertSticker(entity)
                 }

@@ -803,6 +803,64 @@ class DefaultStickerPackRepositoryTest {
     }
 
     @Test
+    fun addEmotesToPackAddsEmotesInParallelAndPreservesOrder() = runTest(testDispatcher) {
+        val sampleBytes = createSamplePngBytes(100, 100)
+        val packEntity = StickerPackEntity(
+            identifier = "add-pack-1",
+            name = "Add Test Pack",
+            publisher = "Tester",
+            trayImageRelativePath = "tray.png",
+            isAnimated = false,
+            isWhitelisted = true,
+            createdAt = 1000L
+        )
+        val existingSticker = StickerEntity(
+            id = "s0",
+            packIdentifier = "add-pack-1",
+            emoteId = "e0",
+            emoteName = "Emote0",
+            relativeFilePath = "s0.webp",
+            emojis = listOf("😀"),
+            fileLength = 100L,
+            sortOrder = 0
+        )
+        packDao.insertPackWithStickers(packEntity, listOf(existingSticker))
+
+        fakeSevenTvRepo.downloadHandler = { emote ->
+            StickerResult.Success(
+                DownloadedEmoteAsset(
+                    emoteId = emote.id,
+                    emoteName = emote.name,
+                    bytes = sampleBytes,
+                    isAnimated = false,
+                    format = "PNG"
+                )
+            )
+        }
+
+        val newEmotes = (1..5).map { idx ->
+            createSampleEmote("new_e_$idx", "NewEmote$idx", isAnimated = false)
+        }
+
+        val result = repository.addEmotesToPack("add-pack-1", newEmotes)
+        assertTrue("Expected Success adding emotes, got $result", result is StickerResult.Success)
+
+        val updatedPack = packDao.getPackByIdentifier("add-pack-1")
+        assertNotNull(updatedPack)
+        assertEquals(6, updatedPack!!.stickers.size)
+        assertFalse("Pack whitelisted should be reset to false after adding emotes", updatedPack.pack.isWhitelisted)
+
+        val sortedStickers = updatedPack.stickers.sortedBy { it.sortOrder }
+        for ((idx, sticker) in sortedStickers.withIndex()) {
+            assertEquals(idx, sticker.sortOrder)
+            if (idx > 0) {
+                assertEquals("new_e_$idx", sticker.emoteId)
+                assertEquals("NewEmote$idx", sticker.emoteName)
+            }
+        }
+    }
+
+    @Test
     fun checkForPackUpdatesReturnsOnlyNewEmotes() = runTest(testDispatcher) {
         val packEntity = StickerPackEntity(
             identifier = "sync-pack-1",

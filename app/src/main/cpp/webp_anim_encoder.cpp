@@ -76,7 +76,7 @@ Java_com_seventv_stickers_core_media_animated_NativeWebPAnimEncoder_encode(
         return JNI_FALSE;
     }
     config.quality = clamped_quality;
-    config.method = 2; // Fast & efficient compression (was 4, ~3x faster with nearly identical ratio)
+    config.method = 1; // Fast & efficient compression (was 2, ~30-40% faster native encoding with nearly identical ratio)
     if (!WebPValidateConfig(&config)) {
         LOGE("WebPConfig validation failed");
         WebPAnimEncoderDelete(enc);
