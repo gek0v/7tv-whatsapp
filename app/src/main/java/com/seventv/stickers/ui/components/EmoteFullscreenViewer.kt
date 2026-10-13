@@ -25,8 +25,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
@@ -59,6 +61,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import com.seventv.stickers.ui.theme.WhatsAppGreen
 import java.util.Locale
 
 object EmoteFullscreenViewerDefaults {
@@ -91,7 +94,9 @@ fun EmoteFullscreenViewer(
     isInDraft: Boolean? = null,
     onToggleDraft: (() -> Unit)? = null,
     fileSizeText: String? = null,
-    emojis: List<String>? = null
+    emojis: List<String>? = null,
+    onShareSticker: (() -> Unit)? = null,
+    isSharingSticker: Boolean = false
 ) {
     var simMode by remember { mutableStateOf(ChatSimulatorMode.WHATSAPP_DARK) }
     var scale by remember { mutableFloatStateOf(1f) }
@@ -345,6 +350,49 @@ fun EmoteFullscreenViewer(
                                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                                     )
                                 }
+                            }
+                        }
+                    }
+
+                    // Direct Share to WhatsApp Action Button
+                    if (onShareSticker != null) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Button(
+                            onClick = onShareSticker,
+                            enabled = !isSharingSticker,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = WhatsAppGreen,
+                                contentColor = Color.White,
+                                disabledContainerColor = WhatsAppGreen.copy(alpha = 0.6f),
+                                disabledContentColor = Color.White.copy(alpha = 0.8f)
+                            ),
+                            shape = MaterialTheme.shapes.medium,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            if (isSharingSticker) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(18.dp),
+                                    color = Color.White,
+                                    strokeWidth = 2.dp
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Preparando sticker...",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Default.Share,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Enviar sticker a WhatsApp",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = FontWeight.Bold
+                                )
                             }
                         }
                     }

@@ -19,6 +19,7 @@ interface AppContainer {
     val storageManager: StickerStorageManager
     val database: AppDatabase
     val packImportManager: com.seventv.stickers.core.domain.manager.PackImportManager
+    val stickerShareManager: com.seventv.stickers.core.domain.manager.StickerShareManager
 }
 
 class DefaultAppContainer(private val context: Context) : AppContainer {
@@ -47,6 +48,10 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
         DefaultStickerMediaPipeline()
     }
 
+    private val emoteStickerBridge by lazy {
+        com.seventv.stickers.data.repository.EmoteStickerBridge(sevenTvRepository, mediaPipeline)
+    }
+
     override val stickerPackRepository: StickerPackRepository by lazy {
         DefaultStickerPackRepository(
             database = database,
@@ -58,5 +63,9 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
 
     override val packImportManager: com.seventv.stickers.core.domain.manager.PackImportManager by lazy {
         com.seventv.stickers.core.domain.manager.PackImportManager(stickerPackRepository)
+    }
+
+    override val stickerShareManager: com.seventv.stickers.core.domain.manager.StickerShareManager by lazy {
+        com.seventv.stickers.core.domain.manager.StickerShareManager(context, emoteStickerBridge)
     }
 }

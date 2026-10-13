@@ -9,6 +9,10 @@
         <intent>
             <action android:name="com.whatsapp.intent.action.ENABLE_STICKER_PACK" />
         </intent>
+        <intent>
+            <action android:name="android.intent.action.SEND" />
+            <data android:mimeType="image/webp" />
+        </intent>
         <provider android:authorities="com.whatsapp.provider.sticker_whitelist_check" />
         <provider android:authorities="com.whatsapp.w4b.provider.sticker_whitelist_check" />
     </queries>
@@ -36,6 +40,16 @@
             android:enabled="true"
             android:exported="true"
             android:readPermission="com.whatsapp.sticker.READ" />
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="com.seventv.stickers.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
     </application>
 
 </manifest>

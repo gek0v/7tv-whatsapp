@@ -77,6 +77,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import com.seventv.stickers.SevenTvApplication
+import com.seventv.stickers.core.common.result.StickerResult
 import com.seventv.stickers.core.domain.model.PackSticker
 import com.seventv.stickers.ui.components.ChatSimulatorBackground
 import com.seventv.stickers.ui.components.ChatSimulatorMode
@@ -523,6 +525,20 @@ fun PackDetailScreen(
             isAnimated = pack.isAnimated,
             onFullscreenClick = {
                 fullscreenSticker = inspectedSticker
+            },
+            onShareSticker = {
+                val targetSticker = inspectedSticker ?: return@StickerInspectorSheet
+                val shareManager = (context.applicationContext as SevenTvApplication).container.stickerShareManager
+                when (val result = shareManager.getShareUriForSticker(targetSticker)) {
+                    is StickerResult.Success<android.net.Uri> -> {
+                        shareManager.launchShare(context, result.data)
+                    }
+                    is StickerResult.Failure -> {
+                        coroutineScope.launch {
+                            snackbarHostState.showSnackbar("Error al preparar sticker: ${result.error}")
+                        }
+                    }
+                }
             }
         )
     }
@@ -932,7 +948,20 @@ fun PackDetailScreen(
             model = if (file.exists()) file else sticker.filePath,
             onDismiss = { fullscreenSticker = null },
             fileSizeText = EmoteFullscreenViewerDefaults.formatFileSize(sticker.fileLength),
-            emojis = sticker.emojis
+            emojis = sticker.emojis,
+            onShareSticker = {
+                val shareManager = (context.applicationContext as SevenTvApplication).container.stickerShareManager
+                when (val result = shareManager.getShareUriForSticker(sticker)) {
+                    is StickerResult.Success<android.net.Uri> -> {
+                        shareManager.launchShare(context, result.data)
+                    }
+                    is StickerResult.Failure -> {
+                        coroutineScope.launch {
+                            snackbarHostState.showSnackbar("Error al preparar sticker: ${result.error}")
+                        }
+                    }
+                }
+            }
         )
     }
 }

@@ -10,6 +10,7 @@ import com.seventv.stickers.ui.components.CoilSetup
 class SevenTvApplication : Application(), ImageLoaderFactory {
 
     lateinit var appContainer: AppContainer
+    val container: AppContainer get() = appContainer
 
     override fun onCreate() {
         super.onCreate()

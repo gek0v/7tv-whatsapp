@@ -28,6 +28,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.Button
@@ -64,6 +65,7 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.seventv.stickers.core.domain.model.PackSticker
 import com.seventv.stickers.core.media.model.StickerSpecs
+import com.seventv.stickers.ui.theme.WhatsAppGreen
 import java.io.File
 import java.util.Locale
 
@@ -115,6 +117,7 @@ fun StickerInspectorSheet(
     onSetAsTrayIcon: () -> Unit = {},
     isAnimated: Boolean = false,
     onFullscreenClick: (() -> Unit)? = null,
+    onShareSticker: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -508,6 +511,37 @@ fun StickerInspectorSheet(
             }
 
             Spacer(modifier = Modifier.height(24.dp))
+
+            // Action: Direct Share to WhatsApp
+            if (onShareSticker != null) {
+                Button(
+                    onClick = {
+                        onShareSticker()
+                        onDismiss()
+                    },
+                    shape = MaterialTheme.shapes.large,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = WhatsAppGreen,
+                        contentColor = Color.White
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Share,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Enviar directamente a WhatsApp",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+            }
 
             // Actions: Tray Icon & Delete
             Row(

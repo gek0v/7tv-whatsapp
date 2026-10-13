@@ -60,16 +60,20 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
+import com.seventv.stickers.SevenTvApplication
+import com.seventv.stickers.core.common.result.StickerResult
 import com.seventv.stickers.core.network.model.ChannelEmoteSetSummary
 import com.seventv.stickers.core.network.model.SevenTvEmote
 import com.seventv.stickers.ui.components.AddToExistingPackDialog
@@ -77,6 +81,7 @@ import com.seventv.stickers.ui.components.DockedDraftPill
 import com.seventv.stickers.ui.components.DraftBottomSheet
 import com.seventv.stickers.ui.components.EmoteCard
 import com.seventv.stickers.ui.components.EmoteFullscreenViewer
+import kotlinx.coroutines.launch
 
 @Composable
 fun ChannelScreen(
@@ -86,9 +91,12 @@ fun ChannelScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
     var draftPackName by remember { mutableStateOf("7TV Canal Pack") }
     var showDraftSheet by remember { mutableStateOf(false) }
     var previewEmote by remember { mutableStateOf<SevenTvEmote?>(null) }
+    var isSharingSticker by remember { mutableStateOf(false) }
 
     LaunchedEffect(state.importState) {
         val import = state.importState
@@ -421,7 +429,28 @@ fun ChannelScreen(
                     model = emote.bestAssetUrl,
                     onDismiss = { previewEmote = null },
                     isInDraft = isInDraft,
-                    onToggleDraft = { viewModel.onToggleDraftEmote(emote) }
+                    onToggleDraft = { viewModel.onToggleDraftEmote(emote) },
+                    onShareSticker = {
+                        coroutineScope.launch {
+                            isSharingSticker = true
+                            try {
+                                val shareManager = (context.applicationContext as SevenTvApplication).container.stickerShareManager
+                                when (val result = shareManager.prepareEmoteForShare(emote)) {
+                                    is StickerResult.Success<android.net.Uri> -> {
+                                        shareManager.launchShare(context, result.data)
+                                    }
+                                    is StickerResult.Failure -> {
+                                        snackbarHostState.showSnackbar("Error al preparar sticker para WhatsApp")
+                                    }
+                                }
+                            } catch (e: Exception) {
+                                snackbarHostState.showSnackbar("Error al compartir: ${e.message}")
+                            } finally {
+                                isSharingSticker = false
+                            }
+                        }
+                    },
+                    isSharingSticker = isSharingSticker
                 )
             }
         }
