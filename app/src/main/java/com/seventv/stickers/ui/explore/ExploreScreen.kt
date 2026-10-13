@@ -479,11 +479,11 @@ fun ExploreScreen(
                             try {
                                 val shareManager = (context.applicationContext as SevenTvApplication).container.stickerShareManager
                                 when (val result = shareManager.prepareEmoteForShare(emote)) {
-                                    is StickerResult.Success<android.net.Uri> -> {
+                                    is StickerResult.Success -> {
                                         shareManager.launchShare(context, result.data)
                                     }
                                     is StickerResult.Failure -> {
-                                        snackbarHostState.showSnackbar("Error al preparar sticker para WhatsApp")
+                                        snackbarHostState.showSnackbar("Error al preparar sticker para compartir")
                                     }
                                 }
                             } catch (e: Exception) {

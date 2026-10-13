@@ -14,5 +14,6 @@ data class SevenTvEmote(
     val isNsfw: Boolean,
     val bestAssetUrl: String,
     val availableScales: List<String>,
-    val previewUrl: String = bestAssetUrl
+    val previewUrl: String = bestAssetUrl,
+    val gifUrl: String? = null
 )

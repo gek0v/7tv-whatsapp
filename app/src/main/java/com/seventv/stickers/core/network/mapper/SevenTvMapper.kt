@@ -14,6 +14,7 @@ object SevenTvMapper {
     private const val FLAG_NSFW = 1 shl 16
     private val PREFERRED_SCALES = listOf("4x.webp", "3x.webp", "2x.webp", "1x.webp")
     private val PREFERRED_PREVIEW_SCALES = listOf("2x.webp", "1x.webp", "3x.webp", "4x.webp")
+    private val PREFERRED_GIF_SCALES = listOf("4x.gif", "3x.gif", "2x.gif", "1x.gif")
 
     /**
      * Maps a [SevenTvEmoteDto] to domain [SevenTvEmote].
@@ -52,6 +53,16 @@ object SevenTvMapper {
 
         val isAnimated = dto.animated || (dto.data?.animated == true)
 
+        val preferredGif = PREFERRED_GIF_SCALES.firstOrNull { preferred ->
+            files.any { it.name.equals(preferred, ignoreCase = true) }
+        } ?: if (isAnimated) "4x.gif" else null
+
+        val gifUrl = if (isAnimated && !host?.url.isNullOrBlank() && preferredGif != null) {
+            normalizeCdnUrl(host.url, preferredGif)
+        } else {
+            null
+        }
+
         val emoteId = dto.id.ifEmpty { dto.data?.id.orEmpty() }
         val emoteName = dto.name.ifEmpty { dto.data?.name.orEmpty() }
 
@@ -63,7 +74,8 @@ object SevenTvMapper {
             isNsfw = isNsfw,
             bestAssetUrl = bestAssetUrl,
             availableScales = availableScales,
-            previewUrl = previewUrl
+            previewUrl = previewUrl,
+            gifUrl = gifUrl
         )
     }
 

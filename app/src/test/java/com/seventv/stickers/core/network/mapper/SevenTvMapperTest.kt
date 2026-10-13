@@ -7,6 +7,7 @@ import com.seventv.stickers.core.network.dto.SevenTvFileDto
 import com.seventv.stickers.core.network.dto.SevenTvHostDto
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -164,5 +165,43 @@ class SevenTvMapperTest {
     fun normalizesTrailingSlashesInBaseUrl() {
         val url = SevenTvMapper.normalizeCdnUrl("//cdn.7tv.app/emote/test/", "/4x.webp")
         assertEquals("https://cdn.7tv.app/emote/test/4x.webp", url)
+    }
+
+    @Test
+    fun mapsGifUrlForAnimatedEmoteWhenGifFilesAvailable() {
+        val dto = SevenTvEmoteDto(
+            id = "catJAM_id",
+            name = "catJAM",
+            animated = true,
+            host = SevenTvHostDto(
+                url = "//cdn.7tv.app/emote/catJAM_id",
+                files = listOf(
+                    SevenTvFileDto("1x.webp", "WEBP", 32, 32, 100),
+                    SevenTvFileDto("4x.webp", "WEBP", 128, 128, 400),
+                    SevenTvFileDto("1x.gif", "GIF", 32, 32, 150),
+                    SevenTvFileDto("4x.gif", "GIF", 128, 128, 500)
+                )
+            )
+        )
+        val domain = SevenTvMapper.toDomain(dto)
+        assertEquals("https://cdn.7tv.app/emote/catJAM_id/4x.gif", domain.gifUrl)
+    }
+
+    @Test
+    fun mapsNullGifUrlForStaticEmote() {
+        val dto = SevenTvEmoteDto(
+            id = "static_id",
+            name = "StaticEmote",
+            animated = false,
+            host = SevenTvHostDto(
+                url = "//cdn.7tv.app/emote/static_id",
+                files = listOf(
+                    SevenTvFileDto("1x.webp", "WEBP", 32, 32, 100),
+                    SevenTvFileDto("4x.webp", "WEBP", 128, 128, 400)
+                )
+            )
+        )
+        val domain = SevenTvMapper.toDomain(dto)
+        assertNull(domain.gifUrl)
     }
 }

@@ -179,6 +179,26 @@ class DefaultSevenTvRepository(
             }
         }
 
+    override suspend fun downloadEmoteGif(emote: SevenTvEmote): StickerResult<ByteArray> =
+        withContext(dispatcher) {
+            val targetUrl = emote.gifUrl ?: if (emote.isAnimated && emote.bestAssetUrl.isNotBlank()) {
+                val base = emote.bestAssetUrl.substringBeforeLast('/')
+                "$base/4x.gif"
+            } else null
+
+            if (targetUrl.isNullOrBlank()) {
+                return@withContext StickerResult.Failure(StickerError.ResourceNotFound)
+            }
+
+            try {
+                downloader.downloadFromUrl(targetUrl)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                StickerResult.Failure(StickerError.NetworkError(message = e.message ?: "GIF download failed"))
+            }
+        }
+
     private suspend fun <T, R> safeApiCall(
         call: suspend () -> Response<T>,
         transform: (T) -> R

@@ -529,12 +529,12 @@ fun PackDetailScreen(
             onShareSticker = {
                 val targetSticker = inspectedSticker ?: return@StickerInspectorSheet
                 val shareManager = (context.applicationContext as SevenTvApplication).container.stickerShareManager
-                when (val result = shareManager.getShareUriForSticker(targetSticker)) {
-                    is StickerResult.Success<android.net.Uri> -> {
-                        shareManager.launchShare(context, result.data)
-                    }
-                    is StickerResult.Failure -> {
-                        coroutineScope.launch {
+                coroutineScope.launch {
+                    when (val result = shareManager.prepareStickerForShare(targetSticker, isAnimated = pack.isAnimated)) {
+                        is StickerResult.Success -> {
+                            shareManager.launchShare(context, result.data)
+                        }
+                        is StickerResult.Failure -> {
                             snackbarHostState.showSnackbar("Error al preparar sticker: ${result.error}")
                         }
                     }
@@ -951,12 +951,12 @@ fun PackDetailScreen(
             emojis = sticker.emojis,
             onShareSticker = {
                 val shareManager = (context.applicationContext as SevenTvApplication).container.stickerShareManager
-                when (val result = shareManager.getShareUriForSticker(sticker)) {
-                    is StickerResult.Success<android.net.Uri> -> {
-                        shareManager.launchShare(context, result.data)
-                    }
-                    is StickerResult.Failure -> {
-                        coroutineScope.launch {
+                coroutineScope.launch {
+                    when (val result = shareManager.prepareStickerForShare(sticker, isAnimated = pack.isAnimated)) {
+                        is StickerResult.Success -> {
+                            shareManager.launchShare(context, result.data)
+                        }
+                        is StickerResult.Failure -> {
                             snackbarHostState.showSnackbar("Error al preparar sticker: ${result.error}")
                         }
                     }

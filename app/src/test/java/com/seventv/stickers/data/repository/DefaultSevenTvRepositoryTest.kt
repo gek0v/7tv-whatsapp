@@ -478,6 +478,31 @@ class DefaultSevenTvRepositoryTest {
     }
 
     @Test
+    fun downloadEmoteGifDelegatesToDownloader() = runTest(testDispatcher) {
+        val gifEmote = SevenTvEmote(
+            id = "catjam_gif",
+            name = "catJAM",
+            isAnimated = true,
+            isZeroWidth = false,
+            isNsfw = false,
+            bestAssetUrl = "https://cdn.7tv.app/emote/catjam_gif/4x.webp",
+            availableScales = listOf("4x.webp", "4x.gif"),
+            gifUrl = "https://cdn.7tv.app/emote/catjam_gif/4x.gif"
+        )
+        val expectedGifBytes = byteArrayOf(71, 73, 70, 56, 57, 97) // "GIF89a"
+        var requestedUrl: String? = null
+        fakeDownloader.downloadFromUrlHandler = { url ->
+            requestedUrl = url
+            StickerResult.Success(expectedGifBytes)
+        }
+
+        val result = repository.downloadEmoteGif(gifEmote)
+        assertTrue(result is StickerResult.Success<*>)
+        assertEquals(expectedGifBytes, (result as StickerResult.Success<ByteArray>).data)
+        assertEquals("https://cdn.7tv.app/emote/catjam_gif/4x.gif", requestedUrl)
+    }
+
+    @Test
     fun emptyResponseBodyReturnsNetworkError() = runTest(testDispatcher) {
         fakeApi.getEmoteHandler = {
             Response.success(null)

@@ -1,5 +1,6 @@
 package com.seventv.stickers.data.repository
 
+import com.seventv.stickers.core.common.result.StickerError
 import com.seventv.stickers.core.common.result.StickerResult
 import com.seventv.stickers.core.network.model.ChannelEmoteSetSummary
 import com.seventv.stickers.core.network.model.ChannelSearchResult
@@ -16,6 +17,8 @@ interface SevenTvRepository {
     suspend fun getEmote(emoteId: String): StickerResult<SevenTvEmote>
     suspend fun getEmoteSet(setId: String): StickerResult<SevenTvEmoteSet>
     suspend fun downloadEmote(emote: SevenTvEmote): StickerResult<DownloadedEmoteAsset>
+    suspend fun downloadEmoteGif(emote: SevenTvEmote): StickerResult<ByteArray> =
+        StickerResult.Failure(StickerError.ResourceNotFound)
     suspend fun getChannelData(query: String): StickerResult<ChannelSearchResult> =
         when (val result = getEmoteSet(query)) {
             is StickerResult.Success -> {

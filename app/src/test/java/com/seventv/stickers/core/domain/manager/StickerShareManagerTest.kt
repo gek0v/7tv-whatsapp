@@ -14,7 +14,9 @@ import com.seventv.stickers.data.repository.EmoteStickerBridge
 import com.seventv.stickers.data.repository.SevenTvRepository
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -46,6 +48,8 @@ class StickerShareManagerTest {
         shareManager = StickerShareManager(
             context = context,
             emoteStickerBridge = bridge,
+            sevenTvRepository = fakeRepo,
+            uriResolver = { _, auth, file -> Uri.parse("content://$auth/${file.name}") },
             dispatcher = testDispatcher
         )
     }
@@ -114,7 +118,90 @@ class StickerShareManagerTest {
         assertTrue(launched)
     }
 
+    @Test
+    fun createShareIntent_withGifMime_configuresGifType() {
+        val testUri = Uri.parse("content://com.seventv.stickers.fileprovider/quick_share/test_anim.gif")
+        val intent = shareManager.createShareIntent(testUri, mimeType = "image/gif")
+
+        assertEquals(Intent.ACTION_SEND, intent.action)
+        assertEquals("image/gif", intent.type)
+        assertEquals(testUri, intent.getParcelableExtra(Intent.EXTRA_STREAM))
+    }
+
+    @Test
+    fun prepareEmoteForShare_animatedEmote_downloadsAndCachesGif() = runTest(testDispatcher) {
+        val gifBytes = byteArrayOf(71, 73, 70, 56, 57, 97) // "GIF89a"
+        fakeRepo.gifBytes = gifBytes
+
+        val animatedEmote = SevenTvEmote(
+            id = "anim_123",
+            name = "catJAM",
+            isAnimated = true,
+            isZeroWidth = false,
+            isNsfw = false,
+            bestAssetUrl = "https://cdn.7tv.app/emote/anim_123/4x.webp",
+            availableScales = listOf("4x.webp", "4x.gif"),
+            gifUrl = "https://cdn.7tv.app/emote/anim_123/4x.gif"
+        )
+
+        val result = shareManager.prepareEmoteForShare(animatedEmote)
+        assertTrue(result is StickerResult.Success)
+        val shareMedia = (result as StickerResult.Success).data
+        assertEquals("image/gif", shareMedia.mimeType)
+        assertTrue(shareMedia.isAnimated)
+        assertTrue(shareMedia.uri.toString().endsWith(".gif"))
+    }
+
+    @Test
+    fun prepareStickerForShare_animatedSticker_fetchesGif() = runTest(testDispatcher) {
+        val gifBytes = byteArrayOf(71, 73, 70, 56, 57, 97)
+        fakeRepo.gifBytes = gifBytes
+
+        val sticker = PackSticker(
+            id = "s_anim",
+            packIdentifier = "pack_anim",
+            emoteId = "emote_anim_1",
+            emoteName = "catJAM",
+            filePath = "sticker_packs/pack_anim/dummy.webp",
+            fileLength = 100L
+        )
+
+        val result = shareManager.prepareStickerForShare(sticker, isAnimated = true)
+        assertTrue(result is StickerResult.Success)
+        val shareMedia = (result as StickerResult.Success).data
+        assertEquals("image/gif", shareMedia.mimeType)
+        assertTrue(shareMedia.isAnimated)
+    }
+
+    @Test
+    fun prepareStickerForShare_staticSticker_sharesLocalWebp() = runTest(testDispatcher) {
+        val localDir = java.io.File(context.filesDir, "sticker_packs/pack_1").apply { mkdirs() }
+        java.io.File(localDir, "test.webp").apply { writeBytes(byteArrayOf(1, 2, 3)) }
+
+        val sticker = PackSticker(
+            id = "s_static",
+            packIdentifier = "pack_1",
+            emoteId = "e_1",
+            emoteName = "pepe",
+            filePath = "sticker_packs/pack_1/test.webp",
+            fileLength = 3L
+        )
+
+        val result = shareManager.prepareStickerForShare(sticker, isAnimated = false)
+        assertTrue(result is StickerResult.Success)
+        val shareMedia = (result as StickerResult.Success).data
+        assertEquals("image/webp", shareMedia.mimeType)
+        assertFalse(shareMedia.isAnimated)
+    }
+
     private class FakeSevenTvRepo : SevenTvRepository {
+        var gifBytes: ByteArray? = null
+
+        override suspend fun downloadEmoteGif(emote: SevenTvEmote): StickerResult<ByteArray> {
+            val bytes = gifBytes ?: return StickerResult.Failure(StickerError.ResourceNotFound)
+            return StickerResult.Success(bytes)
+        }
+
         override suspend fun downloadEmote(emote: SevenTvEmote): StickerResult<DownloadedEmoteAsset> {
             return StickerResult.Failure(StickerError.ResourceNotFound)
         }

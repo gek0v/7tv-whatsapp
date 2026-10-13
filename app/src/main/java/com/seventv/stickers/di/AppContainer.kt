@@ -66,6 +66,10 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
     }
 
     override val stickerShareManager: com.seventv.stickers.core.domain.manager.StickerShareManager by lazy {
-        com.seventv.stickers.core.domain.manager.StickerShareManager(context, emoteStickerBridge)
+        com.seventv.stickers.core.domain.manager.StickerShareManager(
+            context = context,
+            emoteStickerBridge = emoteStickerBridge,
+            sevenTvRepository = sevenTvRepository
+        )
     }
 }

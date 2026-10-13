@@ -371,7 +371,7 @@ fun EmoteFullscreenViewer(
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    text = "Preparando imagen...",
+                                    text = if (isAnimated) "Preparando GIF..." else "Preparando imagen...",
                                     style = MaterialTheme.typography.labelLarge,
                                     fontWeight = FontWeight.Bold
                                 )
@@ -383,7 +383,7 @@ fun EmoteFullscreenViewer(
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    text = "Compartir imagen WebP",
+                                    text = if (isAnimated) "Compartir GIF animado" else "Compartir imagen WebP",
                                     style = MaterialTheme.typography.labelLarge,
                                     fontWeight = FontWeight.Bold
                                 )

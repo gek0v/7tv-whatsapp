@@ -531,7 +531,7 @@ fun StickerInspectorSheet(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "Compartir imagen WebP",
+                        text = if (isAnimated) "Compartir GIF animado" else "Compartir imagen WebP",
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.Bold
                     )
