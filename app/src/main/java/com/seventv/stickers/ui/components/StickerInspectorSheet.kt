@@ -42,6 +42,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -113,6 +114,7 @@ fun StickerInspectorSheet(
     onDeleteSticker: () -> Unit = {},
     onSetAsTrayIcon: () -> Unit = {},
     isAnimated: Boolean = false,
+    onFullscreenClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -166,12 +168,24 @@ fun StickerInspectorSheet(
                     )
                 }
 
-                IconButton(onClick = onDismiss) {
-                    Icon(
-                        imageVector = Icons.Default.Close,
-                        contentDescription = "Cerrar",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (onFullscreenClick != null) {
+                        TextButton(onClick = onFullscreenClick) {
+                            Text(
+                                text = "⛶ Expandir",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                    IconButton(onClick = onDismiss) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Cerrar",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
 
@@ -226,6 +240,7 @@ fun StickerInspectorSheet(
                     .fillMaxWidth()
                     .height(220.dp)
                     .clip(MaterialTheme.shapes.large)
+                    .clickable(enabled = onFullscreenClick != null) { onFullscreenClick?.invoke() }
             ) {
                 val bubbleColor = ChatSimulatorDefaults.bubbleColor(simMode)
                 Box(

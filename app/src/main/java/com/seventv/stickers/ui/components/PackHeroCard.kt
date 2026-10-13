@@ -120,7 +120,8 @@ fun PackHeroCard(
     onExportToWhatsApp: () -> Unit,
     onPackClick: () -> Unit,
     onMenuAction: (PackMenuAction) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onStickerClick: ((PackSticker) -> Unit)? = null
 ) {
     val context = LocalContext.current
     var menuExpanded by remember { mutableStateOf(false) }
@@ -231,11 +232,21 @@ fun PackHeroCard(
                             if (f.isAbsolute && f.exists()) f else File(context.filesDir, sticker.filePath)
                         }
 
-                        Box(
-                            modifier = Modifier
+                        val boxModifier = if (onStickerClick != null) {
+                            Modifier
                                 .size(60.dp)
                                 .clip(MaterialTheme.shapes.medium)
-                                .background(MaterialTheme.colorScheme.surfaceContainerHigh),
+                                .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                                .clickable { onStickerClick(sticker) }
+                        } else {
+                            Modifier
+                                .size(60.dp)
+                                .clip(MaterialTheme.shapes.medium)
+                                .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                        }
+
+                        Box(
+                            modifier = boxModifier,
                             contentAlignment = Alignment.Center
                         ) {
                             AsyncImage(

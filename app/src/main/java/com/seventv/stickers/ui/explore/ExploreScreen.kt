@@ -40,10 +40,12 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.seventv.stickers.core.network.model.SevenTvEmote
 import com.seventv.stickers.ui.components.AddToExistingPackDialog
 import com.seventv.stickers.ui.components.DockedDraftPill
 import com.seventv.stickers.ui.components.DraftBottomSheet
 import com.seventv.stickers.ui.components.EmoteCard
+import com.seventv.stickers.ui.components.EmoteFullscreenViewer
 import com.seventv.stickers.ui.components.SevenTvSearchBar
 import com.seventv.stickers.ui.components.SevenTvSearchBarDefaults
 
@@ -63,6 +65,7 @@ fun ExploreScreen(
     val clipboardManager = LocalClipboardManager.current
     var packName by remember { mutableStateOf("7TV Pack") }
     var showDraftSheet by remember { mutableStateOf(false) }
+    var previewEmote by remember { mutableStateOf<SevenTvEmote?>(null) }
 
     LaunchedEffect(Unit) {
         if (uiState.searchResults is SearchResultsState.Idle) {
@@ -320,6 +323,9 @@ fun ExploreScreen(
                                             onToggleDraft = { viewModel.onToggleDraftEmote(emote) },
                                             onClick = {
                                                 viewModel.onOpenAddToExistingPackDialog(listOf(emote))
+                                            },
+                                            onPreviewClick = {
+                                                previewEmote = emote
                                             }
                                         )
                                     }
@@ -446,6 +452,20 @@ fun ExploreScreen(
                         }
                     }
                 }
+            }
+
+            // Fullscreen Emote Viewer
+            if (previewEmote != null) {
+                val emote = previewEmote!!
+                val isInDraft = uiState.draftEmotes.any { it.id == emote.id }
+                EmoteFullscreenViewer(
+                    name = emote.name,
+                    isAnimated = emote.isAnimated,
+                    model = emote.bestAssetUrl,
+                    onDismiss = { previewEmote = null },
+                    isInDraft = isInDraft,
+                    onToggleDraft = { viewModel.onToggleDraftEmote(emote) }
+                )
             }
         }
     }

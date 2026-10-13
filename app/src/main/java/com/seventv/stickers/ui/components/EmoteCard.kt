@@ -34,6 +34,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
@@ -59,7 +60,8 @@ fun EmoteCard(
     isInDraft: Boolean,
     onToggleDraft: () -> Unit,
     modifier: Modifier = Modifier,
-    onClick: (() -> Unit)? = null
+    onClick: (() -> Unit)? = null,
+    onPreviewClick: (() -> Unit)? = null
 ) {
     val cardModifier = if (onClick != null) {
         modifier.clickable(onClick = onClick)
@@ -79,10 +81,20 @@ fun EmoteCard(
                 .fillMaxWidth()
                 .padding(8.dp)
         ) {
-            Box(
-                modifier = Modifier
+            val imageBoxModifier = if (onPreviewClick != null) {
+                Modifier
                     .fillMaxWidth()
                     .aspectRatio(1f)
+                    .clip(MaterialTheme.shapes.small)
+                    .clickable(onClick = onPreviewClick)
+            } else {
+                Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(1f)
+            }
+
+            Box(
+                modifier = imageBoxModifier
             ) {
                 AsyncImage(
                     model = ImageRequest.Builder(LocalContext.current)

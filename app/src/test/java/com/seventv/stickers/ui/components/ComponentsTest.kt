@@ -412,5 +412,23 @@ class ComponentsTest {
         assertFalse(AddToExistingPackDialogDefaults.isPackCompatible(staticPack, emptyList()))
         org.junit.Assert.assertNull(AddToExistingPackDialogDefaults.incompatibilityReason(staticPack, emptyList()))
     }
+
+    @Test
+    fun emoteFullscreenViewerDefaults_validatesZoomAndBadgeCalculations() {
+        // Zoom clamping
+        assertEquals(1.0f, EmoteFullscreenViewerDefaults.clampZoom(0.5f), 0.001f)
+        assertEquals(1.0f, EmoteFullscreenViewerDefaults.clampZoom(1.0f), 0.001f)
+        assertEquals(2.5f, EmoteFullscreenViewerDefaults.clampZoom(2.5f), 0.001f)
+        assertEquals(4.0f, EmoteFullscreenViewerDefaults.clampZoom(4.0f), 0.001f)
+        assertEquals(4.0f, EmoteFullscreenViewerDefaults.clampZoom(5.5f), 0.001f)
+
+        // Badge text
+        assertEquals("ANIM", EmoteFullscreenViewerDefaults.badgeText(isAnimated = true))
+        assertEquals("STATIC", EmoteFullscreenViewerDefaults.badgeText(isAnimated = false))
+
+        // File size formatting
+        assertEquals("128.0 KB", EmoteFullscreenViewerDefaults.formatFileSize(128 * 1024L))
+        assertEquals("500.0 KB", EmoteFullscreenViewerDefaults.formatFileSize(500 * 1024L))
+    }
 }
 

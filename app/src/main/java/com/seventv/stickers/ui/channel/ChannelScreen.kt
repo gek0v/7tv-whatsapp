@@ -76,6 +76,7 @@ import com.seventv.stickers.ui.components.AddToExistingPackDialog
 import com.seventv.stickers.ui.components.DockedDraftPill
 import com.seventv.stickers.ui.components.DraftBottomSheet
 import com.seventv.stickers.ui.components.EmoteCard
+import com.seventv.stickers.ui.components.EmoteFullscreenViewer
 
 @Composable
 fun ChannelScreen(
@@ -87,6 +88,7 @@ fun ChannelScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     var draftPackName by remember { mutableStateOf("7TV Canal Pack") }
     var showDraftSheet by remember { mutableStateOf(false) }
+    var previewEmote by remember { mutableStateOf<SevenTvEmote?>(null) }
 
     LaunchedEffect(state.importState) {
         val import = state.importState
@@ -323,6 +325,7 @@ fun ChannelScreen(
                             onDeselectAll = viewModel::onDeselectAllEmotes,
                             onImportFullChannel = { viewModel.onStartChannelImport(useOnlySelected = false) },
                             onImportSelected = { viewModel.onStartChannelImport(useOnlySelected = true) },
+                            onPreviewEmote = { previewEmote = it },
                             modifier = Modifier.weight(1f)
                         )
                     }
@@ -406,6 +409,20 @@ fun ChannelScreen(
                         }
                     }
                 }
+            }
+
+            // Fullscreen Emote Viewer
+            if (previewEmote != null) {
+                val emote = previewEmote!!
+                val isInDraft = state.draftEmotes.any { it.id == emote.id }
+                EmoteFullscreenViewer(
+                    name = emote.name,
+                    isAnimated = emote.isAnimated,
+                    model = emote.bestAssetUrl,
+                    onDismiss = { previewEmote = null },
+                    isInDraft = isInDraft,
+                    onToggleDraft = { viewModel.onToggleDraftEmote(emote) }
+                )
             }
         }
     }
@@ -500,6 +517,7 @@ private fun ChannelContent(
     onDeselectAll: () -> Unit,
     onImportFullChannel: () -> Unit,
     onImportSelected: () -> Unit,
+    onPreviewEmote: (SevenTvEmote) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Column(modifier = modifier) {
@@ -779,7 +797,8 @@ private fun ChannelContent(
                             } else {
                                 Modifier
                             },
-                            onClick = { onToggleSelectEmote(emote.id) }
+                            onClick = { onToggleSelectEmote(emote.id) },
+                            onPreviewClick = { onPreviewEmote(emote) }
                         )
                     }
                 }

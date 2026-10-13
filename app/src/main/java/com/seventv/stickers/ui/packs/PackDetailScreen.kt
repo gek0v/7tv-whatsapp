@@ -81,6 +81,8 @@ import com.seventv.stickers.core.domain.model.PackSticker
 import com.seventv.stickers.ui.components.ChatSimulatorBackground
 import com.seventv.stickers.ui.components.ChatSimulatorMode
 import com.seventv.stickers.ui.components.DraftBottomSheetDefaults
+import com.seventv.stickers.ui.components.EmoteFullscreenViewer
+import com.seventv.stickers.ui.components.EmoteFullscreenViewerDefaults
 import com.seventv.stickers.ui.components.StickerInspectorSheet
 import com.seventv.stickers.ui.components.WhatsAppAddButton
 import com.seventv.stickers.whatsapp.StickerContentProvider
@@ -101,6 +103,7 @@ fun PackDetailScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
     var inspectedSticker by remember { mutableStateOf<PackSticker?>(null) }
+    var fullscreenSticker by remember { mutableStateOf<PackSticker?>(null) }
 
     val addPackLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
@@ -480,6 +483,7 @@ fun PackDetailScreen(
                                 isTrayIcon = index == 0,
                                 issue = state.stickerIssues[sticker.id],
                                 onClick = { inspectedSticker = sticker },
+                                onPreviewClick = { fullscreenSticker = sticker },
                                 onDeleteClick = { viewModel.onOpenDeleteStickerDialog(sticker) },
                                 onIssueClick = { viewModel.onOpenDiagnosticDialog() }
                             )
@@ -516,7 +520,10 @@ fun PackDetailScreen(
                 viewModel.onSetStickerAsTrayIcon(pack.identifier, inspectedSticker!!.id)
                 inspectedSticker = null
             },
-            isAnimated = pack.isAnimated
+            isAnimated = pack.isAnimated,
+            onFullscreenClick = {
+                fullscreenSticker = inspectedSticker
+            }
         )
     }
 
@@ -911,6 +918,23 @@ fun PackDetailScreen(
             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
         )
     }
+
+    // Fullscreen Sticker Viewer
+    if (fullscreenSticker != null && pack != null) {
+        val sticker = fullscreenSticker!!
+        val file = remember(sticker.filePath) {
+            val f = File(sticker.filePath)
+            if (f.isAbsolute && f.exists()) f else File(context.filesDir, sticker.filePath)
+        }
+        EmoteFullscreenViewer(
+            name = sticker.emoteName,
+            isAnimated = pack.isAnimated,
+            model = if (file.exists()) file else sticker.filePath,
+            onDismiss = { fullscreenSticker = null },
+            fileSizeText = EmoteFullscreenViewerDefaults.formatFileSize(sticker.fileLength),
+            emojis = sticker.emojis
+        )
+    }
 }
 
 @Composable
@@ -919,6 +943,7 @@ private fun PackStickerCell(
     isTrayIcon: Boolean = false,
     issue: StickerIssue? = null,
     onClick: () -> Unit = {},
+    onPreviewClick: () -> Unit = {},
     onDeleteClick: () -> Unit = {},
     onIssueClick: () -> Unit = {}
 ) {
@@ -958,7 +983,10 @@ private fun PackStickerCell(
                         .crossfade(true)
                         .build(),
                     contentDescription = sticker.emoteName,
-                    modifier = Modifier.size(72.dp)
+                    modifier = Modifier
+                        .size(72.dp)
+                        .clip(MaterialTheme.shapes.small)
+                        .clickable(onClick = onPreviewClick)
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(

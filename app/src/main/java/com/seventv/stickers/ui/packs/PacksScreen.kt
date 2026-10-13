@@ -63,10 +63,14 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.seventv.stickers.core.domain.model.PackSticker
+import com.seventv.stickers.ui.components.EmoteFullscreenViewer
+import com.seventv.stickers.ui.components.EmoteFullscreenViewerDefaults
 import com.seventv.stickers.ui.components.PackHeroCard
 import com.seventv.stickers.ui.components.PackMenuAction
 import com.seventv.stickers.whatsapp.WhatsAppIntentHelper
 import kotlinx.coroutines.launch
+import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -81,6 +85,8 @@ fun PacksScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
     var pendingExportPackId by remember { mutableStateOf<String?>(null) }
+    var fullscreenSticker by remember { mutableStateOf<PackSticker?>(null) }
+    var fullscreenPackIsAnimated by remember { mutableStateOf(false) }
 
     val addPackLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
@@ -430,6 +436,10 @@ fun PacksScreen(
                                                     PackMenuAction.DELETE -> viewModel.onOpenDeleteDialog(pack)
                                                 }
                                             },
+                                            onStickerClick = { sticker ->
+                                                fullscreenSticker = sticker
+                                                fullscreenPackIsAnimated = pack.isAnimated
+                                            },
                                             modifier = Modifier.weight(1f)
                                         )
                                     }
@@ -445,6 +455,10 @@ fun PacksScreen(
                                                 PackMenuAction.DUPLICATE -> viewModel.onOpenDuplicateDialog(pack)
                                                 PackMenuAction.DELETE -> viewModel.onOpenDeleteDialog(pack)
                                             }
+                                        },
+                                        onStickerClick = { sticker ->
+                                            fullscreenSticker = sticker
+                                            fullscreenPackIsAnimated = pack.isAnimated
                                         }
                                     )
                                 }
@@ -790,6 +804,23 @@ fun PacksScreen(
                 }
             },
             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+        )
+    }
+
+    // Fullscreen Sticker Viewer
+    if (fullscreenSticker != null) {
+        val sticker = fullscreenSticker!!
+        val file = remember(sticker.filePath) {
+            val f = File(sticker.filePath)
+            if (f.isAbsolute && f.exists()) f else File(context.filesDir, sticker.filePath)
+        }
+        EmoteFullscreenViewer(
+            name = sticker.emoteName,
+            isAnimated = fullscreenPackIsAnimated,
+            model = if (file.exists()) file else sticker.filePath,
+            onDismiss = { fullscreenSticker = null },
+            fileSizeText = EmoteFullscreenViewerDefaults.formatFileSize(sticker.fileLength),
+            emojis = sticker.emojis
         )
     }
 }
