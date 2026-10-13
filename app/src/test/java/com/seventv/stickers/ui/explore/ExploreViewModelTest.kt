@@ -114,15 +114,62 @@ class ExploreViewModelTest {
     }
 
     @Test
-    fun blankQueryResetsSearchToIdleImmediately() = runTest(testDispatcher) {
+    fun blankQueryRestoresCategoryEmotes() = runTest(testDispatcher) {
+        val trendingEmote = createSampleEmote("1", "catJAM", isAnimated = true)
+        fakeSevenTvRepository.searchEmotesWithCategoryHandler = { query, _, _, category ->
+            assertEquals("", query)
+            assertEquals("TRENDING_DAY", category)
+            StickerResult.Success(listOf(trendingEmote))
+        }
+
         viewModel.onQueryChanged("pepe")
         advanceTimeBy(200)
         viewModel.onQueryChanged("")
         advanceTimeBy(500)
         runCurrent()
 
-        assertEquals(0, fakeSevenTvRepository.searchCallCount)
-        assertTrue(viewModel.uiState.value.searchResults is SearchResultsState.Idle)
+        assertEquals(1, fakeSevenTvRepository.searchCallCount)
+        val state = viewModel.uiState.value
+        assertTrue(state.searchResults is SearchResultsState.Success)
+        assertEquals(listOf(trendingEmote), (state.searchResults as SearchResultsState.Success).emotes)
+    }
+
+    @Test
+    fun loadCategoryEmotesPopulatesTrendingSuccess() = runTest(testDispatcher) {
+        val trendingEmote = createSampleEmote("1", "GIGACHAD", isAnimated = false)
+        fakeSevenTvRepository.searchEmotesWithCategoryHandler = { query, _, _, category ->
+            assertEquals("", query)
+            assertEquals("TRENDING_DAY", category)
+            StickerResult.Success(listOf(trendingEmote))
+        }
+
+        viewModel.loadCategoryEmotes(ExploreCategory.TRENDING)
+        runCurrent()
+
+        assertEquals(1, fakeSevenTvRepository.searchCallCount)
+        val state = viewModel.uiState.value
+        assertEquals(ExploreCategory.TRENDING, state.selectedCategory)
+        assertTrue(state.searchResults is SearchResultsState.Success)
+        assertEquals(listOf(trendingEmote), (state.searchResults as SearchResultsState.Success).emotes)
+    }
+
+    @Test
+    fun onCategorySelectedSwitchesToTopAndLoadsEmotes() = runTest(testDispatcher) {
+        val topEmote = createSampleEmote("2", "NOOOO", isAnimated = true)
+        fakeSevenTvRepository.searchEmotesWithCategoryHandler = { query, _, _, category ->
+            assertEquals("", query)
+            assertEquals("TOP", category)
+            StickerResult.Success(listOf(topEmote))
+        }
+
+        viewModel.onCategorySelected(ExploreCategory.TOP)
+        runCurrent()
+
+        assertEquals(1, fakeSevenTvRepository.searchCallCount)
+        val state = viewModel.uiState.value
+        assertEquals(ExploreCategory.TOP, state.selectedCategory)
+        assertTrue(state.searchResults is SearchResultsState.Success)
+        assertEquals(listOf(topEmote), (state.searchResults as SearchResultsState.Success).emotes)
     }
 
     @Test
@@ -411,13 +458,23 @@ class ExploreViewModelTest {
 
     private class FakeSevenTvRepository : SevenTvRepository {
         var searchEmotesHandler: (suspend (String, Int, Int) -> StickerResult<List<SevenTvEmote>>)? = null
+        var searchEmotesWithCategoryHandler: (suspend (String, Int, Int, String?) -> StickerResult<List<SevenTvEmote>>)? = null
         var searchCallCount: Int = 0
         var lastSearchQuery: String? = null
+        var lastSearchCategory: String? = null
 
-        override suspend fun searchEmotes(query: String, page: Int, limit: Int): StickerResult<List<SevenTvEmote>> {
+        override suspend fun searchEmotes(
+            query: String,
+            page: Int,
+            limit: Int,
+            category: String?
+        ): StickerResult<List<SevenTvEmote>> {
             searchCallCount++
             lastSearchQuery = query
-            return searchEmotesHandler?.invoke(query, page, limit) ?: StickerResult.Success(emptyList())
+            lastSearchCategory = category
+            return searchEmotesWithCategoryHandler?.invoke(query, page, limit, category)
+                ?: searchEmotesHandler?.invoke(query, page, limit)
+                ?: StickerResult.Success(emptyList())
         }
 
         override suspend fun getEmote(emoteId: String): StickerResult<SevenTvEmote> =
@@ -555,7 +612,9 @@ class ExploreViewModelTest {
             basePackName: String,
             publisher: String,
             emotes: List<SevenTvEmote>,
-            onProgress: ((current: Int, total: Int) -> Unit)?
+            onProgress: ((current: Int, total: Int) -> Unit)?,
+            originSetId: String?,
+            originStreamerName: String?
         ): StickerResult<List<StickerPack>> {
             createCallCount++
             return createPacksFromEmotesHandler?.invoke(basePackName, publisher, emotes)
@@ -575,5 +634,6 @@ class ExploreViewModelTest {
         override suspend fun updateStickerEmojis(stickerId: String, emojis: List<String>): StickerResult<Unit> = StickerResult.Success(Unit)
         override suspend fun updatePackWhitelisted(identifier: String, isWhitelisted: Boolean): StickerResult<Unit> = StickerResult.Success(Unit)
         override suspend fun syncWhitelistStatus(context: Context, packIdentifier: String): StickerResult<Boolean> = StickerResult.Success(false)
+        override suspend fun checkForPackUpdates(packIdentifier: String): StickerResult<List<SevenTvEmote>> = StickerResult.Success(emptyList())
     }
 }

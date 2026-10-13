@@ -46,27 +46,79 @@ class ExploreViewModel(
     }
 
     /**
+     * Loads emotes for a category (TRENDING or TOP) when query is empty.
+     */
+    fun loadCategoryEmotes(category: ExploreCategory = _uiState.value.selectedCategory) {
+        _uiState.update { it.copy(selectedCategory = category, searchResults = SearchResultsState.Loading) }
+        searchJob?.cancel()
+        searchJob = viewModelScope.launch {
+            when (val result = sevenTvRepository.searchEmotes(query = "", category = category.apiValue)) {
+                is StickerResult.Success -> {
+                    _uiState.update { state ->
+                        state.copy(
+                            searchResults = if (result.data.isEmpty()) {
+                                SearchResultsState.Empty(category.label)
+                            } else {
+                                SearchResultsState.Success(result.data)
+                            }
+                        )
+                    }
+                }
+                is StickerResult.Failure -> {
+                    _uiState.update { state ->
+                        state.copy(
+                            searchResults = SearchResultsState.Error(
+                                result.error.toSearchErrorMessage()
+                            )
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Updates the active category (TRENDING or TOP) and refreshes results.
+     */
+    fun onCategorySelected(category: ExploreCategory) {
+        if (_uiState.value.selectedCategory == category && _uiState.value.searchResults !is SearchResultsState.Error) return
+        _uiState.update { it.copy(selectedCategory = category) }
+        val currentQuery = _uiState.value.query.trim()
+        if (currentQuery.isNotEmpty()) {
+            performSearch(currentQuery, category.apiValue)
+        } else {
+            loadCategoryEmotes(category)
+        }
+    }
+
+    /**
      * Updates the active search query and debounces 400ms before executing the search.
-     * An empty or blank query immediately resets the search results state to [SearchResultsState.Idle].
+     * An empty or blank query reloads the currently selected category emotes.
      */
     fun onQueryChanged(query: String) {
         _uiState.update { it.copy(query = query) }
         searchJob?.cancel()
 
         if (query.isBlank()) {
-            _uiState.update { it.copy(searchResults = SearchResultsState.Idle) }
+            loadCategoryEmotes(_uiState.value.selectedCategory)
             return
         }
 
         searchJob = viewModelScope.launch {
             delay(SEARCH_DEBOUNCE_MS)
-            _uiState.update { it.copy(searchResults = SearchResultsState.Loading) }
+            performSearch(query.trim(), _uiState.value.selectedCategory.apiValue)
+        }
+    }
 
-            when (val result = sevenTvRepository.searchEmotes(query.trim())) {
+    private fun performSearch(query: String, category: String?) {
+        _uiState.update { it.copy(searchResults = SearchResultsState.Loading) }
+        searchJob?.cancel()
+        searchJob = viewModelScope.launch {
+            when (val result = sevenTvRepository.searchEmotes(query = query, category = category)) {
                 is StickerResult.Success -> {
                     _uiState.update { state ->
                         val searchState = if (result.data.isEmpty()) {
-                            SearchResultsState.Empty(query.trim())
+                            SearchResultsState.Empty(query)
                         } else {
                             SearchResultsState.Success(result.data)
                         }
@@ -318,6 +370,7 @@ class ExploreViewModel(
         StickerError.ResourceNotFound -> "No se encontró el emote requerido"
         StickerError.RateLimited -> "Límite de peticiones de 7TV alcanzado"
         is StickerError.PackNotFound -> "Paquete no encontrado: $identifier"
+        is StickerError.ValidationError -> message
     }
 
     class Factory(

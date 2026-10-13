@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -31,6 +32,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Warning
 import com.seventv.stickers.core.domain.validator.StickerIssue
 import androidx.compose.material3.AlertDialog
@@ -159,6 +161,20 @@ fun PackDetailScreen(
         }
     }
 
+    LaunchedEffect(state.syncState) {
+        when (val sync = state.syncState) {
+            is PackSyncState.UpToDate -> {
+                snackbarHostState.showSnackbar("¡El paquete ya está al día con el canal de 7TV!")
+                viewModel.onDismissSyncDialog()
+            }
+            is PackSyncState.Error -> {
+                snackbarHostState.showSnackbar(sync.message)
+                viewModel.onDismissSyncDialog()
+            }
+            else -> Unit
+        }
+    }
+
     val pack = state.selectedPackDetail
 
     Scaffold(
@@ -209,6 +225,26 @@ fun PackDetailScreen(
                 },
                 actions = {
                     if (pack != null) {
+                        if (pack.originSetId != null) {
+                            IconButton(
+                                onClick = { viewModel.onCheckPackUpdates(pack) },
+                                enabled = state.syncState !is PackSyncState.Checking
+                            ) {
+                                if (state.syncState is PackSyncState.Checking) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(20.dp),
+                                        strokeWidth = 2.dp,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                } else {
+                                    Icon(
+                                        imageVector = Icons.Default.Refresh,
+                                        contentDescription = "Buscar novedades del canal",
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            }
+                        }
                         IconButton(onClick = { viewModel.onOpenAddStickersDialog() }) {
                             Icon(
                                 imageVector = Icons.Default.Add,
@@ -634,6 +670,90 @@ fun PackDetailScreen(
                     )
                 ) {
                     Text("Entendido", fontWeight = FontWeight.Bold)
+                }
+            },
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+        )
+    }
+
+    // Channel Pack Synchronization Dialog
+    val syncState = state.syncState
+    if (syncState is PackSyncState.NewEmotesAvailable && pack != null) {
+        AlertDialog(
+            onDismissRequest = { if (!state.isApplyingSync) viewModel.onDismissSyncDialog() },
+            title = {
+                Text(
+                    text = "Novedades de ${syncState.streamerName}",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            },
+            text = {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        text = "Se encontraron ${syncState.newEmotes.size} nuevos emotes en el canal. Selecciona los que deseas añadir a este pack (disponibles: ${syncState.availableSlots}):",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    LazyVerticalGrid(
+                        columns = GridCells.Fixed(3),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 280.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(syncState.newEmotes) { emote ->
+                            val isSelected = state.selectedSyncEmoteIds.contains(emote.id)
+                            Card(
+                                onClick = { viewModel.onToggleSyncEmoteSelection(emote.id, syncState.availableSlots) },
+                                colors = CardDefaults.cardColors(
+                                    containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
+                                ),
+                                border = if (isSelected) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
+                                modifier = Modifier.size(72.dp)
+                            ) {
+                                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                    AsyncImage(
+                                        model = ImageRequest.Builder(context)
+                                            .data(emote.bestAssetUrl)
+                                            .crossfade(true)
+                                            .build(),
+                                        contentDescription = emote.name,
+                                        modifier = Modifier.size(48.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = { viewModel.onApplySyncUpdates() },
+                    enabled = !state.isApplyingSync && state.selectedSyncEmoteIds.isNotEmpty()
+                ) {
+                    if (state.isApplyingSync) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.onPrimary
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Añadiendo...")
+                    } else {
+                        Text("Añadir (${state.selectedSyncEmoteIds.size})")
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { viewModel.onDismissSyncDialog() },
+                    enabled = !state.isApplyingSync
+                ) {
+                    Text("Cancelar")
                 }
             },
             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh

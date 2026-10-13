@@ -525,7 +525,12 @@ class ChannelViewModelTest {
             return streamerEmoteSetHandler?.invoke(query) ?: super.getStreamerEmoteSet(query)
         }
 
-        override suspend fun searchEmotes(query: String, page: Int, limit: Int): StickerResult<List<SevenTvEmote>> {
+        override suspend fun searchEmotes(
+            query: String,
+            page: Int,
+            limit: Int,
+            category: String?
+        ): StickerResult<List<SevenTvEmote>> {
             return searchEmotesHandler(query, page, limit)
         }
 
@@ -557,7 +562,9 @@ class ChannelViewModelTest {
             basePackName: String,
             publisher: String,
             emotes: List<SevenTvEmote>,
-            onProgress: ((current: Int, total: Int) -> Unit)?
+            onProgress: ((current: Int, total: Int) -> Unit)?,
+            originSetId: String?,
+            originStreamerName: String?
         ): StickerResult<List<StickerPack>> {
             onProgress?.invoke(emotes.size, emotes.size)
             val pack = StickerPack(
@@ -566,7 +573,9 @@ class ChannelViewModelTest {
                 publisher = publisher,
                 trayImagePath = "tray.webp",
                 isAnimated = emotes.any { it.isAnimated },
-                stickers = emptyList()
+                stickers = emptyList(),
+                originSetId = originSetId,
+                originStreamerName = originStreamerName
             )
             return StickerResult.Success(listOf(pack))
         }
@@ -590,5 +599,8 @@ class ChannelViewModelTest {
 
         override suspend fun syncWhitelistStatus(context: Context, packIdentifier: String): StickerResult<Boolean> =
             StickerResult.Success(false)
+
+        override suspend fun checkForPackUpdates(packIdentifier: String): StickerResult<List<SevenTvEmote>> =
+            StickerResult.Success(emptyList())
     }
 }

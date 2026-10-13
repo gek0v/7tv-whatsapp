@@ -125,7 +125,8 @@ class DefaultStickerPackRepositoryTest {
             storageManager = storageManager,
             emoteBridge = emoteBridge,
             mediaPipeline = mediaPipeline,
-            dispatcher = testDispatcher
+            dispatcher = testDispatcher,
+            sevenTvRepository = fakeSevenTvRepo
         )
     }
 
@@ -801,15 +802,69 @@ class DefaultStickerPackRepositoryTest {
         assertTrue("Error should be UnsupportedFormat", (result2 as StickerResult.Failure).error is StickerError.UnsupportedFormat)
     }
 
+    @Test
+    fun checkForPackUpdatesReturnsOnlyNewEmotes() = runTest(testDispatcher) {
+        val packEntity = StickerPackEntity(
+            identifier = "sync-pack-1",
+            name = "Streamer Pack",
+            publisher = "Streamer",
+            trayImageRelativePath = "tray.png",
+            isAnimated = false,
+            isWhitelisted = false,
+            createdAt = 1000L,
+            originSetId = "set-123",
+            originStreamerName = "streamer"
+        )
+        val existingSticker = StickerEntity(
+            id = "s1",
+            packIdentifier = "sync-pack-1",
+            emoteId = "e1",
+            emoteName = "Emote1",
+            relativeFilePath = "s1.webp",
+            emojis = listOf("😀"),
+            fileLength = 100L,
+            sortOrder = 0
+        )
+        packDao.insertPackWithStickers(packEntity, listOf(existingSticker))
+
+        val remoteEmote1 = createSampleEmote("e1", "Emote1", isAnimated = false)
+        val remoteEmote2 = createSampleEmote("e2", "Emote2", isAnimated = false)
+        val remoteEmote3 = createSampleEmote("e3", "Emote3", isAnimated = false)
+
+        fakeSevenTvRepo.emoteSetHandler = { setId ->
+            assertEquals("set-123", setId)
+            StickerResult.Success(
+                SevenTvEmoteSet(
+                    id = "set-123",
+                    name = "Streamer Set",
+                    ownerName = "Streamer",
+                    emotes = listOf(remoteEmote1, remoteEmote2, remoteEmote3)
+                )
+            )
+        }
+
+        val result = repository.checkForPackUpdates("sync-pack-1")
+        assertTrue("Expected Success, got $result", result is StickerResult.Success)
+        val newEmotes = (result as StickerResult.Success).data
+        assertEquals(2, newEmotes.size)
+        assertEquals(listOf("e2", "e3"), newEmotes.map { it.id })
+    }
+
     private class FakeSevenTvRepository : SevenTvRepository {
         var downloadHandler: (suspend (SevenTvEmote) -> StickerResult<DownloadedEmoteAsset>)? = null
+        var emoteSetHandler: (suspend (String) -> StickerResult<SevenTvEmoteSet>)? = null
 
         override suspend fun downloadEmote(emote: SevenTvEmote): StickerResult<DownloadedEmoteAsset> {
             return downloadHandler?.invoke(emote)
                 ?: StickerResult.Failure(StickerError.ResourceNotFound)
         }
 
-        override suspend fun searchEmotes(query: String, page: Int, limit: Int): StickerResult<List<SevenTvEmote>> {
+        override suspend fun searchEmotes(
+            query: String,
+            page: Int,
+            limit: Int,
+            category: String?
+        ): StickerResult<List<SevenTvEmote>> {
             return StickerResult.Success(emptyList())
         }
 
@@ -818,7 +873,7 @@ class DefaultStickerPackRepositoryTest {
         }
 
         override suspend fun getEmoteSet(setId: String): StickerResult<SevenTvEmoteSet> {
-            return StickerResult.Failure(StickerError.ResourceNotFound)
+            return emoteSetHandler?.invoke(setId) ?: StickerResult.Failure(StickerError.ResourceNotFound)
         }
     }
 }

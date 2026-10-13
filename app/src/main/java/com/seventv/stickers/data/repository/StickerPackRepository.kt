@@ -13,7 +13,9 @@ interface StickerPackRepository {
         basePackName: String,
         publisher: String,
         emotes: List<SevenTvEmote>,
-        onProgress: ((current: Int, total: Int) -> Unit)? = null
+        onProgress: ((current: Int, total: Int) -> Unit)? = null,
+        originSetId: String? = null,
+        originStreamerName: String? = null
     ): StickerResult<List<StickerPack>>
     suspend fun deletePack(identifier: String): StickerResult<Unit>
     suspend fun deletePacks(identifiers: List<String>): StickerResult<Unit>
@@ -24,4 +26,5 @@ interface StickerPackRepository {
     suspend fun updateStickerEmojis(stickerId: String, emojis: List<String>): StickerResult<Unit>
     suspend fun updatePackWhitelisted(identifier: String, isWhitelisted: Boolean): StickerResult<Unit>
     suspend fun syncWhitelistStatus(context: Context, packIdentifier: String): StickerResult<Boolean>
+    suspend fun checkForPackUpdates(packIdentifier: String): StickerResult<List<SevenTvEmote>>
 }

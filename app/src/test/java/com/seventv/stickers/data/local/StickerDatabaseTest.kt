@@ -404,6 +404,27 @@ class StickerDatabaseTest {
         }
     }
 
+    @Test
+    fun insertAndQueryPackWithOriginSet_persistsOriginMetadata() = runTest {
+        val pack = StickerPackEntity(
+            identifier = "streamer-pack-1",
+            name = "Ibai Emotes",
+            publisher = "Ibai",
+            trayImageRelativePath = "sticker_packs/streamer-pack-1/tray_icon.webp",
+            isAnimated = true,
+            isWhitelisted = false,
+            createdAt = 1000L,
+            originSetId = "60b947c94c979d3118cf9456",
+            originStreamerName = "ibai"
+        )
+        packDao.insertPack(pack)
+
+        val retrieved = packDao.getPackByIdentifierDirect("streamer-pack-1")
+        assertNotNull(retrieved)
+        assertEquals("60b947c94c979d3118cf9456", retrieved?.pack?.originSetId)
+        assertEquals("ibai", retrieved?.pack?.originStreamerName)
+    }
+
     private fun countStickersInDb(packIdentifier: String): Int {
         val cursor = db.openHelper.readableDatabase.query(
             "SELECT COUNT(*) FROM stickers WHERE packIdentifier = ?",

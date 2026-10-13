@@ -6,9 +6,13 @@ import com.seventv.stickers.core.network.model.ChannelSearchResult
 import com.seventv.stickers.core.network.model.DownloadedEmoteAsset
 import com.seventv.stickers.core.network.model.SevenTvEmote
 import com.seventv.stickers.core.network.model.SevenTvEmoteSet
-
 interface SevenTvRepository {
-    suspend fun searchEmotes(query: String, page: Int = 1, limit: Int = 30): StickerResult<List<SevenTvEmote>>
+    suspend fun searchEmotes(
+        query: String,
+        page: Int = 1,
+        limit: Int = 30,
+        category: String? = null
+    ): StickerResult<List<SevenTvEmote>>
     suspend fun getEmote(emoteId: String): StickerResult<SevenTvEmote>
     suspend fun getEmoteSet(setId: String): StickerResult<SevenTvEmoteSet>
     suspend fun downloadEmote(emote: SevenTvEmote): StickerResult<DownloadedEmoteAsset>

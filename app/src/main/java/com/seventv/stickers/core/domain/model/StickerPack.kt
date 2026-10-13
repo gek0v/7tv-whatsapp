@@ -11,5 +11,7 @@ data class StickerPack(
     val isAnimated: Boolean,
     val isWhitelisted: Boolean = false,
     val stickers: List<PackSticker> = emptyList(),
-    val createdAt: Long = System.currentTimeMillis()
+    val createdAt: Long = System.currentTimeMillis(),
+    val originSetId: String? = null,
+    val originStreamerName: String? = null
 )

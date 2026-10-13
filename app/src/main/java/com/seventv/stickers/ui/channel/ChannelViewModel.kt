@@ -185,13 +185,17 @@ class ChannelViewModel(
         }
 
         val emotesToSave = currentState.draftEmotes
-        val resolvedPublisher = (currentState.loadState as? ChannelLoadState.Success)?.streamerName ?: publisher
+        val successState = currentState.loadState as? ChannelLoadState.Success
+        val resolvedPublisher = successState?.streamerName ?: publisher
+        val originSetId = successState?.currentSetId
 
         viewModelScope.launch {
             when (val result = stickerPackRepository.createPacksFromEmotes(
                 basePackName = packName.ifBlank { "7TV Pack" },
                 publisher = resolvedPublisher,
-                emotes = emotesToSave
+                emotes = emotesToSave,
+                originSetId = originSetId,
+                originStreamerName = resolvedPublisher
             )) {
                 is StickerResult.Success -> {
                     _uiState.update {
@@ -271,7 +275,9 @@ class ChannelViewModel(
 
     fun onConfirmImport(plans: List<SplitPlan>) {
         val state = _uiState.value
-        val streamerName = (state.loadState as? ChannelLoadState.Success)?.streamerName ?: "7TV Channel"
+        val successState = state.loadState as? ChannelLoadState.Success
+        val streamerName = successState?.streamerName ?: "7TV Channel"
+        val currentSetId = successState?.currentSetId
 
         // Dismiss the modal confirmation dialog immediately so user can freely navigate and use the app
         _uiState.update {
@@ -282,7 +288,7 @@ class ChannelViewModel(
         }
 
         if (packImportManager != null) {
-            packImportManager.startImport(streamerName, plans)
+            packImportManager.startImport(streamerName, plans, originSetId = currentSetId)
             return
         }
 
@@ -317,7 +323,9 @@ class ChannelViewModel(
                                 )
                             )
                         }
-                    }
+                    },
+                    originSetId = currentSetId,
+                    originStreamerName = streamerName
                 )
 
                 when (result) {
@@ -436,6 +444,7 @@ class ChannelViewModel(
         StickerError.ResourceNotFound -> "No se encontró el emote requerido"
         StickerError.RateLimited -> "Límite de peticiones de 7TV alcanzado"
         is StickerError.PackNotFound -> "Paquete no encontrado: $identifier"
+        is StickerError.ValidationError -> message
     }
 
     class Factory(

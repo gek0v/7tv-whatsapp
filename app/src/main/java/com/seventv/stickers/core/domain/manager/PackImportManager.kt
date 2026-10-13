@@ -41,7 +41,7 @@ class PackImportManager(
 
     fun isImporting(): Boolean = _progress.value is PackImportProgress.Running
 
-    fun startImport(streamerName: String, plans: List<SplitPlan>) {
+    fun startImport(streamerName: String, plans: List<SplitPlan>, originSetId: String? = null) {
         if (plans.isEmpty()) return
         if (isImporting()) return
 
@@ -69,7 +69,9 @@ class PackImportManager(
                             currentSticker = current,
                             totalStickers = total
                         )
-                    }
+                    },
+                    originSetId = originSetId,
+                    originStreamerName = streamerName
                 )
 
                 when (result) {

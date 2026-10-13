@@ -47,6 +47,9 @@ import com.seventv.stickers.ui.components.EmoteCard
 import com.seventv.stickers.ui.components.SevenTvSearchBar
 import com.seventv.stickers.ui.components.SevenTvSearchBarDefaults
 
+import androidx.compose.foundation.layout.Row
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.foundation.layout.statusBars
 
 @Composable
@@ -60,6 +63,12 @@ fun ExploreScreen(
     val clipboardManager = LocalClipboardManager.current
     var packName by remember { mutableStateOf("7TV Pack") }
     var showDraftSheet by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        if (uiState.searchResults is SearchResultsState.Idle) {
+            viewModel.loadCategoryEmotes()
+        }
+    }
 
     LaunchedEffect(uiState.packCreationState) {
         when (val state = uiState.packCreationState) {
@@ -153,6 +162,26 @@ fun ExploreScreen(
                     },
                     filters = listOf("Todos", "Animados", "Estáticos")
                 )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Category selector chips (Trending & Top)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    FilterChip(
+                        selected = uiState.selectedCategory == ExploreCategory.TRENDING,
+                        onClick = { viewModel.onCategorySelected(ExploreCategory.TRENDING) },
+                        label = { Text("🔥 Tendencias") }
+                    )
+                    FilterChip(
+                        selected = uiState.selectedCategory == ExploreCategory.TOP,
+                        onClick = { viewModel.onCategorySelected(ExploreCategory.TOP) },
+                        label = { Text("⭐ Populares") }
+                    )
+                }
 
                 Spacer(modifier = Modifier.height(8.dp))
 

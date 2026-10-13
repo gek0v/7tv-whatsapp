@@ -109,7 +109,9 @@ class PackImportManagerTest {
             basePackName: String,
             publisher: String,
             emotes: List<SevenTvEmote>,
-            onProgress: ((current: Int, total: Int) -> Unit)?
+            onProgress: ((current: Int, total: Int) -> Unit)?,
+            originSetId: String?,
+            originStreamerName: String?
         ): StickerResult<List<StickerPack>> {
             if (shouldFail) {
                 return StickerResult.Failure(StickerError.CorruptedSourceData)
@@ -121,7 +123,9 @@ class PackImportManagerTest {
                 publisher = publisher,
                 trayImagePath = "tray.webp",
                 isAnimated = false,
-                stickers = emptyList()
+                stickers = emptyList(),
+                originSetId = originSetId,
+                originStreamerName = originStreamerName
             )
             return StickerResult.Success(listOf(pack))
         }
@@ -138,6 +142,8 @@ class PackImportManagerTest {
         override suspend fun updatePackWhitelisted(identifier: String, isWhitelisted: Boolean): StickerResult<Unit> =
             StickerResult.Success(Unit)
         override suspend fun syncWhitelistStatus(context: Context, packIdentifier: String): StickerResult<Boolean> =
-            StickerResult.Success(false)
+            StickerResult.Success(true)
+        override suspend fun checkForPackUpdates(packIdentifier: String): StickerResult<List<SevenTvEmote>> =
+            StickerResult.Success(emptyList())
     }
 }

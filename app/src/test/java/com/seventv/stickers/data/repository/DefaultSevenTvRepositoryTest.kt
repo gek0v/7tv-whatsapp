@@ -28,6 +28,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.ResponseBody.Companion.toResponseBody
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Before
@@ -89,6 +90,28 @@ class DefaultSevenTvRepositoryTest {
         assertEquals("KEKW", emote.name)
         assertFalse(emote.isAnimated)
         assertEquals("https://cdn.7tv.app/emote/emote1/4x.webp", emote.bestAssetUrl)
+    }
+
+    @Test
+    fun searchEmotesWithCategorySendsFilterVariable() = runTest(testDispatcher) {
+        var capturedRequest: SevenTvGqlRequest? = null
+        fakeApi.searchEmotesHandler = { request ->
+            capturedRequest = request
+            Response.success(
+                SevenTvGqlResponse(
+                    data = SevenTvGqlEmotesData(
+                        emotes = SevenTvGqlEmotesConnection(count = 0, items = emptyList())
+                    )
+                )
+            )
+        }
+
+        repository.searchEmotes(query = "", category = "TRENDING_DAY")
+
+        assertNotNull(capturedRequest)
+        val filterJson = capturedRequest?.variables?.get("filter")
+        assertNotNull(filterJson)
+        assertTrue(filterJson.toString().contains("TRENDING_DAY"))
     }
 
     @Test

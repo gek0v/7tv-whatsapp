@@ -321,7 +321,12 @@ class EmoteStickerBridgeTest {
                 ?: StickerResult.Failure(StickerError.ResourceNotFound)
         }
 
-        override suspend fun searchEmotes(query: String, page: Int, limit: Int): StickerResult<List<SevenTvEmote>> {
+        override suspend fun searchEmotes(
+            query: String,
+            page: Int,
+            limit: Int,
+            category: String?
+        ): StickerResult<List<SevenTvEmote>> {
             return StickerResult.Success(emptyList())
         }
 

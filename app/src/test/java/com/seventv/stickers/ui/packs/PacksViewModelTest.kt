@@ -539,11 +539,80 @@ class PacksViewModelTest {
         return out.toByteArray()
     }
 
+    @Test
+    fun onCheckPackUpdatesWhenNoOriginSetReportsError() = runTest(testDispatcher) {
+        val pack = createSamplePack("no-origin-pack", "No Origin")
+        viewModel.onCheckPackUpdates(pack)
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertTrue(state.syncState is PackSyncState.Error)
+        assertEquals("Este paquete no está vinculado a un conjunto de emotes de 7TV.", (state.syncState as PackSyncState.Error).message)
+    }
+
+    @Test
+    fun onCheckPackUpdatesWhenUpToDateReportsUpToDate() = runTest(testDispatcher) {
+        val pack = createSamplePack("sync-pack", "Sync Pack", originSetId = "set-123")
+        fakeStickerPackRepository.checkForUpdatesHandler = {
+            StickerResult.Success(emptyList())
+        }
+
+        viewModel.onCheckPackUpdates(pack)
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertTrue(state.syncState is PackSyncState.UpToDate)
+    }
+
+    @Test
+    fun onCheckPackUpdatesWhenNewEmotesFoundSetsNewEmotesAvailableState() = runTest(testDispatcher) {
+        val pack = createSamplePack("sync-pack", "Sync Pack", originSetId = "set-123", originStreamerName = "ibai")
+        val emote1 = SevenTvEmote(id = "e1", name = "Emote1", isAnimated = false, isZeroWidth = false, isNsfw = false, bestAssetUrl = "url", availableScales = listOf("1x"))
+        val emote2 = SevenTvEmote(id = "e2", name = "Emote2", isAnimated = false, isZeroWidth = false, isNsfw = false, bestAssetUrl = "url", availableScales = listOf("1x"))
+
+        fakeStickerPackRepository.checkForUpdatesHandler = {
+            StickerResult.Success(listOf(emote1, emote2))
+        }
+
+        viewModel.onCheckPackUpdates(pack)
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertTrue(state.syncState is PackSyncState.NewEmotesAvailable)
+        val available = state.syncState as PackSyncState.NewEmotesAvailable
+        assertEquals(2, available.newEmotes.size)
+        assertEquals("ibai", available.streamerName)
+        assertEquals(setOf("e1", "e2"), state.selectedSyncEmoteIds)
+    }
+
+    @Test
+    fun onApplySyncUpdatesCallsAddEmotesToPackAndShowsFeedback() = runTest(testDispatcher) {
+        val pack = createSamplePack("sync-pack", "Sync Pack", originSetId = "set-123", originStreamerName = "ibai")
+        val emote1 = SevenTvEmote(id = "e1", name = "Emote1", isAnimated = false, isZeroWidth = false, isNsfw = false, bestAssetUrl = "url", availableScales = listOf("1x"))
+
+        fakeStickerPackRepository.checkForUpdatesHandler = {
+            StickerResult.Success(listOf(emote1))
+        }
+
+        viewModel.onCheckPackUpdates(pack)
+        advanceUntilIdle()
+
+        viewModel.onApplySyncUpdates()
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertTrue(state.syncState is PackSyncState.Idle)
+        assertFalse(state.isApplyingSync)
+        assertEquals("¡Se han añadido 1 nuevos stickers al pack!", state.userFeedbackMessage)
+    }
+
     private fun createSamplePack(
         id: String,
         name: String,
         isWhitelisted: Boolean = false,
-        isAnimated: Boolean = false
+        isAnimated: Boolean = false,
+        originSetId: String? = null,
+        originStreamerName: String? = null
     ): StickerPack {
         val packDir = File(context.cacheDir, "test_packs/$id").apply { mkdirs() }
         val webpBytes = createMinimalWebp(isAnimated)
@@ -569,7 +638,9 @@ class PacksViewModelTest {
             trayImagePath = "/data/pack/$id/tray.png",
             isAnimated = isAnimated,
             isWhitelisted = isWhitelisted,
-            stickers = stickers
+            stickers = stickers,
+            originSetId = originSetId,
+            originStreamerName = originStreamerName
         )
     }
 
@@ -577,6 +648,7 @@ class PacksViewModelTest {
         val packsFlow = MutableStateFlow<List<StickerPack>>(emptyList())
         var lastDeletedIdentifier: String? = null
         var lastSyncedIdentifier: String? = null
+        var checkForUpdatesHandler: (suspend (String) -> StickerResult<List<SevenTvEmote>>)? = null
 
         override fun observeAllPacks(): Flow<List<StickerPack>> = packsFlow.asStateFlow()
 
@@ -590,8 +662,14 @@ class PacksViewModelTest {
             basePackName: String,
             publisher: String,
             emotes: List<SevenTvEmote>,
-            onProgress: ((current: Int, total: Int) -> Unit)?
+            onProgress: ((current: Int, total: Int) -> Unit)?,
+            originSetId: String?,
+            originStreamerName: String?
         ): StickerResult<List<StickerPack>> = StickerResult.Success(emptyList())
+
+        override suspend fun checkForPackUpdates(packIdentifier: String): StickerResult<List<SevenTvEmote>> {
+            return checkForUpdatesHandler?.invoke(packIdentifier) ?: StickerResult.Success(emptyList())
+        }
 
         override suspend fun deletePack(identifier: String): StickerResult<Unit> {
             lastDeletedIdentifier = identifier

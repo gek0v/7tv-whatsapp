@@ -17,6 +17,19 @@ sealed interface WhatsAppExportEvent {
     data class Error(val message: String) : WhatsAppExportEvent
 }
 
+sealed interface PackSyncState {
+    data object Idle : PackSyncState
+    data object Checking : PackSyncState
+    data object UpToDate : PackSyncState
+    data class NewEmotesAvailable(
+        val packIdentifier: String,
+        val streamerName: String,
+        val newEmotes: List<SevenTvEmote>,
+        val availableSlots: Int
+    ) : PackSyncState
+    data class Error(val message: String) : PackSyncState
+}
+
 data class PacksUiState(
     val loadState: PacksLoadState = PacksLoadState.Loading,
     val selectedPackDetail: StickerPack? = null,
@@ -49,5 +62,9 @@ data class PacksUiState(
     val stickerIssues: Map<String, com.seventv.stickers.core.domain.validator.StickerIssue> = emptyMap(),
     val isDiagnosticDialogOpen: Boolean = false,
     val packDiagnosticReport: com.seventv.stickers.core.domain.validator.StickerPackInspectionReport? = null,
-    val isDeletingInvalidStickers: Boolean = false
+    val isDeletingInvalidStickers: Boolean = false,
+    // Channel Pack Synchronization
+    val syncState: PackSyncState = PackSyncState.Idle,
+    val selectedSyncEmoteIds: Set<String> = emptySet(),
+    val isApplyingSync: Boolean = false
 )

@@ -26,9 +26,10 @@ class DefaultSevenTvRepository(
     override suspend fun searchEmotes(
         query: String,
         page: Int,
-        limit: Int
+        limit: Int,
+        category: String?
     ): StickerResult<List<SevenTvEmote>> = safeApiCall(
-        call = { api.searchEmotes(SevenTvGqlQueries.searchEmotesRequest(query, page, limit)) },
+        call = { api.searchEmotes(SevenTvGqlQueries.searchEmotesRequest(query, page, limit, category)) },
         transform = { gqlResponse ->
             val items = gqlResponse.data?.emotes?.items.orEmpty()
             items.map { SevenTvMapper.toDomain(it) }

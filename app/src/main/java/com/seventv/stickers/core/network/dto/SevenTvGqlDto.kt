@@ -74,8 +74,8 @@ data class SevenTvGqlEmoteSetRefDto(
 
 object SevenTvGqlQueries {
     const val SEARCH_EMOTES = """
-        query SearchEmotes(${'$'}query: String!, ${'$'}page: Int, ${'$'}limit: Int) {
-          emotes(query: ${'$'}query, page: ${'$'}page, limit: ${'$'}limit) {
+        query SearchEmotes(${'$'}query: String!, ${'$'}page: Int, ${'$'}limit: Int, ${'$'}filter: EmoteSearchFilter) {
+          emotes(query: ${'$'}query, page: ${'$'}page, limit: ${'$'}limit, filter: ${'$'}filter) {
             count
             items {
               id
@@ -119,13 +119,23 @@ object SevenTvGqlQueries {
         }
     """
 
-    fun searchEmotesRequest(query: String, page: Int = 1, limit: Int = 30): SevenTvGqlRequest {
+    fun searchEmotesRequest(
+        query: String,
+        page: Int = 1,
+        limit: Int = 30,
+        category: String? = null
+    ): SevenTvGqlRequest {
         return SevenTvGqlRequest(
             query = SEARCH_EMOTES,
             variables = buildJsonObject {
                 put("query", query)
                 put("page", page)
                 put("limit", limit)
+                if (!category.isNullOrBlank()) {
+                    put("filter", buildJsonObject {
+                        put("category", category)
+                    })
+                }
             }
         )
     }

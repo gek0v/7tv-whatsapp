@@ -12,5 +12,7 @@ data class StickerPackEntity(
     val trayImageRelativePath: String,
     val isAnimated: Boolean,
     val isWhitelisted: Boolean = false,
-    val createdAt: Long = System.currentTimeMillis()
+    val createdAt: Long = System.currentTimeMillis(),
+    val originSetId: String? = null,
+    val originStreamerName: String? = null
 )

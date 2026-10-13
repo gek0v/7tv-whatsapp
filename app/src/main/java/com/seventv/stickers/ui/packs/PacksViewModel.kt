@@ -595,6 +595,107 @@ class PacksViewModel(
         _uiState.update { it.copy(exportEvent = null) }
     }
 
+    fun onCheckPackUpdates(pack: StickerPack) {
+        val originSetId = pack.originSetId
+        if (originSetId.isNullOrBlank()) {
+            _uiState.update { it.copy(syncState = PackSyncState.Error("Este paquete no está vinculado a un conjunto de emotes de 7TV.")) }
+            return
+        }
+        val availableSlots = 30 - pack.stickers.size
+        if (availableSlots <= 0) {
+            _uiState.update {
+                it.copy(syncState = PackSyncState.Error("El pack ya contiene el límite máximo de 30 stickers permitido por WhatsApp."))
+            }
+            return
+        }
+
+        _uiState.update { it.copy(syncState = PackSyncState.Checking) }
+
+        viewModelScope.launch {
+            when (val result = stickerPackRepository.checkForPackUpdates(pack.identifier)) {
+                is com.seventv.stickers.core.common.result.StickerResult.Success -> {
+                    val newEmotes = result.data
+                    if (newEmotes.isEmpty()) {
+                        _uiState.update { it.copy(syncState = PackSyncState.UpToDate) }
+                    } else {
+                        val initialSelected = newEmotes.take(availableSlots).map { it.id }.toSet()
+                        _uiState.update {
+                            it.copy(
+                                syncState = PackSyncState.NewEmotesAvailable(
+                                    packIdentifier = pack.identifier,
+                                    streamerName = pack.originStreamerName ?: pack.publisher,
+                                    newEmotes = newEmotes,
+                                    availableSlots = availableSlots
+                                ),
+                                selectedSyncEmoteIds = initialSelected
+                            )
+                        }
+                    }
+                }
+                is com.seventv.stickers.core.common.result.StickerResult.Failure -> {
+                    _uiState.update {
+                        it.copy(syncState = PackSyncState.Error("Error al comprobar novedades: ${result.error}"))
+                    }
+                }
+            }
+        }
+    }
+
+    fun onToggleSyncEmoteSelection(emoteId: String, availableSlots: Int) {
+        _uiState.update { state ->
+            val current = state.selectedSyncEmoteIds.toMutableSet()
+            if (current.contains(emoteId)) {
+                current.remove(emoteId)
+            } else {
+                if (current.size < availableSlots) {
+                    current.add(emoteId)
+                }
+            }
+            state.copy(selectedSyncEmoteIds = current)
+        }
+    }
+
+    fun onApplySyncUpdates() {
+        val sync = _uiState.value.syncState as? PackSyncState.NewEmotesAvailable ?: return
+        val selectedIds = _uiState.value.selectedSyncEmoteIds
+        val emotesToAdd = sync.newEmotes.filter { selectedIds.contains(it.id) }
+        if (emotesToAdd.isEmpty()) return
+
+        _uiState.update { it.copy(isApplyingSync = true) }
+
+        viewModelScope.launch {
+            when (val result = stickerPackRepository.addEmotesToPack(sync.packIdentifier, emotesToAdd)) {
+                is com.seventv.stickers.core.common.result.StickerResult.Success -> {
+                    _uiState.update {
+                        it.copy(
+                            syncState = PackSyncState.Idle,
+                            selectedSyncEmoteIds = emptySet(),
+                            isApplyingSync = false,
+                            userFeedbackMessage = "¡Se han añadido ${emotesToAdd.size} nuevos stickers al pack!"
+                        )
+                    }
+                }
+                is com.seventv.stickers.core.common.result.StickerResult.Failure -> {
+                    _uiState.update {
+                        it.copy(
+                            isApplyingSync = false,
+                            syncState = PackSyncState.Error("Error al añadir stickers: ${result.error}")
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    fun onDismissSyncDialog() {
+        _uiState.update {
+            it.copy(
+                syncState = PackSyncState.Idle,
+                selectedSyncEmoteIds = emptySet()
+            )
+        }
+    }
+
     class Factory(
         private val stickerPackRepository: StickerPackRepository,
         private val sevenTvRepository: com.seventv.stickers.data.repository.SevenTvRepository? = null

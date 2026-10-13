@@ -24,9 +24,15 @@ sealed interface PackCreationState {
     data class Error(val message: String) : PackCreationState
 }
 
+enum class ExploreCategory(val apiValue: String, val label: String) {
+    TRENDING("TRENDING_DAY", "Tendencias"),
+    TOP("TOP", "Populares")
+}
+
 data class ExploreUiState(
     val query: String = "",
     val activeFilter: EmoteFilter = EmoteFilter.ALL,
+    val selectedCategory: ExploreCategory = ExploreCategory.TRENDING,
     val searchResults: SearchResultsState = SearchResultsState.Idle,
     val draftEmotes: List<SevenTvEmote> = emptyList(),
     val packCreationState: PackCreationState = PackCreationState.Idle,

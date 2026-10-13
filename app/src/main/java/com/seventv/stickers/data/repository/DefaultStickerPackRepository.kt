@@ -43,7 +43,8 @@ class DefaultStickerPackRepository(
     private val emoteBridge: EmoteStickerBridge,
     private val mediaPipeline: StickerMediaPipeline,
     private val splittingEngine: PackSplittingEngine = PackSplittingEngine,
-    private val dispatcher: CoroutineDispatcher = Dispatchers.IO
+    private val dispatcher: CoroutineDispatcher = Dispatchers.IO,
+    private val sevenTvRepository: SevenTvRepository? = null
 ) : StickerPackRepository {
 
     constructor(
@@ -60,7 +61,8 @@ class DefaultStickerPackRepository(
         emoteBridge = EmoteStickerBridge(sevenTvRepository, mediaPipeline),
         mediaPipeline = mediaPipeline,
         splittingEngine = splittingEngine,
-        dispatcher = dispatcher
+        dispatcher = dispatcher,
+        sevenTvRepository = sevenTvRepository
     )
 
     override fun observeAllPacks(): Flow<List<StickerPack>> {
@@ -90,7 +92,9 @@ class DefaultStickerPackRepository(
         basePackName: String,
         publisher: String,
         emotes: List<SevenTvEmote>,
-        onProgress: ((current: Int, total: Int) -> Unit)?
+        onProgress: ((current: Int, total: Int) -> Unit)?,
+        originSetId: String?,
+        originStreamerName: String?
     ): StickerResult<List<StickerPack>> = withContext(dispatcher) {
         try {
             val splitResult = splittingEngine.splitEmotes(basePackName, emotes)
@@ -254,7 +258,9 @@ class DefaultStickerPackRepository(
                         trayImageRelativePath = trayRelativePath,
                         isAnimated = plan.isAnimated,
                         isWhitelisted = false,
-                        createdAt = createdAt
+                        createdAt = createdAt,
+                        originSetId = originSetId,
+                        originStreamerName = originStreamerName
                     )
 
                     stickerPackDao.insertPackWithStickers(packEntity, stickerEntities)
@@ -280,7 +286,9 @@ class DefaultStickerPackRepository(
                         isAnimated = plan.isAnimated,
                         isWhitelisted = false,
                         stickers = domainStickers,
-                        createdAt = createdAt
+                        createdAt = createdAt,
+                        originSetId = originSetId,
+                        originStreamerName = originStreamerName
                     )
 
                     createdPacks.add(domainPack)
@@ -677,6 +685,41 @@ class DefaultStickerPackRepository(
         }
     }
 
+    override suspend fun checkForPackUpdates(
+        packIdentifier: String
+    ): StickerResult<List<SevenTvEmote>> = withContext(dispatcher) {
+        try {
+            val packWithStickers = stickerPackDao.getPackByIdentifier(packIdentifier)
+                ?: return@withContext StickerResult.Failure(StickerError.PackNotFound(packIdentifier))
+
+            val originSetId = packWithStickers.pack.originSetId
+            if (originSetId.isNullOrBlank()) {
+                return@withContext StickerResult.Failure(
+                    StickerError.ValidationError("Este paquete no está vinculado a un conjunto de emotes de 7TV.")
+                )
+            }
+
+            val repo = sevenTvRepository
+                ?: return@withContext StickerResult.Failure(
+                    StickerError.NetworkError(message = "Repositorio de 7TV no disponible")
+                )
+
+            when (val setResult = repo.getEmoteSet(originSetId)) {
+                is StickerResult.Success -> {
+                    val existingEmoteIds = packWithStickers.stickers.map { it.emoteId }.toSet()
+                    val newEmotes = setResult.data.emotes.filter { !existingEmoteIds.contains(it.id) }
+                    StickerResult.Success(newEmotes)
+                }
+                is StickerResult.Failure -> {
+                    StickerResult.Failure(setResult.error)
+                }
+            }
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            StickerResult.Failure(StickerError.StorageIoError("Error al verificar novedades: ${e.message}"))
+        }
+    }
+
     private fun toDomain(packWithStickers: PackWithStickers): StickerPack {
         return StickerPack(
             identifier = packWithStickers.pack.identifier,
@@ -697,7 +740,9 @@ class DefaultStickerPackRepository(
                     sortOrder = entity.sortOrder
                 )
             },
-            createdAt = packWithStickers.pack.createdAt
+            createdAt = packWithStickers.pack.createdAt,
+            originSetId = packWithStickers.pack.originSetId,
+            originStreamerName = packWithStickers.pack.originStreamerName
         )
     }
 
