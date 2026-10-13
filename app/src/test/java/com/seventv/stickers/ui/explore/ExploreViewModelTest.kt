@@ -25,6 +25,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -436,6 +437,78 @@ class ExploreViewModelTest {
     }
 
     @Test
+    fun searchQueryPerformsGlobalSearchWithoutCategoryAndLimit100() = runTest(testDispatcher) {
+        val emote = createSampleEmote("1", "pepe")
+        fakeSevenTvRepository.searchEmotesHandler = { query, page, limit ->
+            assertEquals("pepe", query)
+            assertEquals(1, page)
+            assertEquals(100, limit)
+            StickerResult.Success(listOf(emote))
+        }
+
+        viewModel.onQueryChanged("pepe")
+        advanceTimeBy(400)
+        runCurrent()
+
+        assertEquals(1, fakeSevenTvRepository.searchCallCount)
+        assertNull("Search query must NOT be restricted by category filter", fakeSevenTvRepository.lastSearchCategory)
+        assertEquals(100, fakeSevenTvRepository.lastSearchLimit)
+        assertEquals(1, fakeSevenTvRepository.lastSearchPage)
+    }
+
+    @Test
+    fun loadNextPageAppendsNewEmotesAndUpdatesCurrentPage() = runTest(testDispatcher) {
+        val page1Emotes = (1..100).map { createSampleEmote("p1_$it", "emote_$it") }
+        val page2Emotes = (101..150).map { createSampleEmote("p2_$it", "emote_$it") }
+
+        fakeSevenTvRepository.searchEmotesHandler = { query, page, limit ->
+            when (page) {
+                1 -> StickerResult.Success(page1Emotes)
+                2 -> StickerResult.Success(page2Emotes)
+                else -> StickerResult.Success(emptyList())
+            }
+        }
+
+        viewModel.onQueryChanged("test")
+        advanceTimeBy(400)
+        runCurrent()
+
+        assertEquals(1, viewModel.uiState.value.currentPage)
+        assertTrue(viewModel.uiState.value.hasMorePages)
+        assertEquals(100, (viewModel.uiState.value.searchResults as SearchResultsState.Success).emotes.size)
+
+        // Load next page
+        viewModel.loadNextPage()
+        runCurrent()
+
+        assertEquals(2, viewModel.uiState.value.currentPage)
+        assertFalse("Page 2 returned 50 (< 100), so hasMorePages must be false", viewModel.uiState.value.hasMorePages)
+        assertFalse(viewModel.uiState.value.isLoadingMore)
+        assertEquals(150, (viewModel.uiState.value.searchResults as SearchResultsState.Success).emotes.size)
+    }
+
+    @Test
+    fun loadNextPageDoesNothingWhenHasMorePagesIsFalse() = runTest(testDispatcher) {
+        val page1Emotes = listOf(createSampleEmote("1", "few"))
+        fakeSevenTvRepository.searchEmotesHandler = { _, _, _ ->
+            StickerResult.Success(page1Emotes)
+        }
+
+        viewModel.onQueryChanged("few")
+        advanceTimeBy(400)
+        runCurrent()
+
+        assertEquals(1, fakeSevenTvRepository.searchCallCount)
+        assertFalse(viewModel.uiState.value.hasMorePages)
+
+        // Calling loadNextPage should do nothing
+        viewModel.loadNextPage()
+        runCurrent()
+
+        assertEquals(1, fakeSevenTvRepository.searchCallCount)
+    }
+
+    @Test
     fun factoryCreatesExploreViewModel() {
         val factory = ExploreViewModel.Factory(fakeSevenTvRepository, fakeStickerPackRepository)
         val vm = factory.create(ExploreViewModel::class.java)
@@ -462,6 +535,8 @@ class ExploreViewModelTest {
         var searchCallCount: Int = 0
         var lastSearchQuery: String? = null
         var lastSearchCategory: String? = null
+        var lastSearchPage: Int = 1
+        var lastSearchLimit: Int = 100
 
         override suspend fun searchEmotes(
             query: String,
@@ -472,6 +547,8 @@ class ExploreViewModelTest {
             searchCallCount++
             lastSearchQuery = query
             lastSearchCategory = category
+            lastSearchPage = page
+            lastSearchLimit = limit
             return searchEmotesWithCategoryHandler?.invoke(query, page, limit, category)
                 ?: searchEmotesHandler?.invoke(query, page, limit)
                 ?: StickerResult.Success(emptyList())

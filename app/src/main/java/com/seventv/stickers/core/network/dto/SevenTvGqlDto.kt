@@ -122,7 +122,7 @@ object SevenTvGqlQueries {
     fun searchEmotesRequest(
         query: String,
         page: Int = 1,
-        limit: Int = 30,
+        limit: Int = 100,
         category: String? = null
     ): SevenTvGqlRequest {
         return SevenTvGqlRequest(

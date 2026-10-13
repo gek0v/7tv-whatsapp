@@ -49,10 +49,18 @@ class ExploreViewModel(
      * Loads emotes for a category (TRENDING or TOP) when query is empty.
      */
     fun loadCategoryEmotes(category: ExploreCategory = _uiState.value.selectedCategory) {
-        _uiState.update { it.copy(selectedCategory = category, searchResults = SearchResultsState.Loading) }
+        _uiState.update {
+            it.copy(
+                selectedCategory = category,
+                searchResults = SearchResultsState.Loading,
+                currentPage = 1,
+                hasMorePages = true,
+                isLoadingMore = false
+            )
+        }
         searchJob?.cancel()
         searchJob = viewModelScope.launch {
-            when (val result = sevenTvRepository.searchEmotes(query = "", category = category.apiValue)) {
+            when (val result = sevenTvRepository.searchEmotes(query = "", page = 1, limit = 100, category = category.apiValue)) {
                 is StickerResult.Success -> {
                     _uiState.update { state ->
                         state.copy(
@@ -60,7 +68,8 @@ class ExploreViewModel(
                                 SearchResultsState.Empty(category.label)
                             } else {
                                 SearchResultsState.Success(result.data)
-                            }
+                            },
+                            hasMorePages = result.data.size >= 100
                         )
                     }
                 }
@@ -85,7 +94,7 @@ class ExploreViewModel(
         _uiState.update { it.copy(selectedCategory = category) }
         val currentQuery = _uiState.value.query.trim()
         if (currentQuery.isNotEmpty()) {
-            performSearch(currentQuery, category.apiValue)
+            performSearch(currentQuery, null)
         } else {
             loadCategoryEmotes(category)
         }
@@ -94,6 +103,7 @@ class ExploreViewModel(
     /**
      * Updates the active search query and debounces 400ms before executing the search.
      * An empty or blank query reloads the currently selected category emotes.
+     * Non-empty searches query globally across all 7TV emotes without category constraints.
      */
     fun onQueryChanged(query: String) {
         _uiState.update { it.copy(query = query) }
@@ -106,15 +116,22 @@ class ExploreViewModel(
 
         searchJob = viewModelScope.launch {
             delay(SEARCH_DEBOUNCE_MS)
-            performSearch(query.trim(), _uiState.value.selectedCategory.apiValue)
+            performSearch(query.trim(), null)
         }
     }
 
     private fun performSearch(query: String, category: String?) {
-        _uiState.update { it.copy(searchResults = SearchResultsState.Loading) }
+        _uiState.update {
+            it.copy(
+                searchResults = SearchResultsState.Loading,
+                currentPage = 1,
+                hasMorePages = true,
+                isLoadingMore = false
+            )
+        }
         searchJob?.cancel()
         searchJob = viewModelScope.launch {
-            when (val result = sevenTvRepository.searchEmotes(query = query, category = category)) {
+            when (val result = sevenTvRepository.searchEmotes(query = query, page = 1, limit = 100, category = category)) {
                 is StickerResult.Success -> {
                     _uiState.update { state ->
                         val searchState = if (result.data.isEmpty()) {
@@ -122,7 +139,10 @@ class ExploreViewModel(
                         } else {
                             SearchResultsState.Success(result.data)
                         }
-                        state.copy(searchResults = searchState)
+                        state.copy(
+                            searchResults = searchState,
+                            hasMorePages = result.data.size >= 100
+                        )
                     }
                 }
                 is StickerResult.Failure -> {
@@ -132,6 +152,42 @@ class ExploreViewModel(
                                 result.error.toSearchErrorMessage()
                             )
                         )
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Loads the next page of emotes (for infinite scroll) and appends them to current results.
+     */
+    fun loadNextPage() {
+        val currentState = _uiState.value
+        if (currentState.isLoadingMore || !currentState.hasMorePages) return
+        val currentResults = currentState.searchResults as? SearchResultsState.Success ?: return
+
+        val nextPage = currentState.currentPage + 1
+        _uiState.update { it.copy(isLoadingMore = true) }
+
+        viewModelScope.launch {
+            val query = currentState.query.trim()
+            val category = if (query.isBlank()) currentState.selectedCategory.apiValue else null
+            when (val result = sevenTvRepository.searchEmotes(query = query, page = nextPage, limit = 100, category = category)) {
+                is StickerResult.Success -> {
+                    val newEmotes = result.data
+                    _uiState.update { state ->
+                        val combined = (currentResults.emotes + newEmotes).distinctBy { it.id }
+                        state.copy(
+                            searchResults = SearchResultsState.Success(combined),
+                            currentPage = nextPage,
+                            isLoadingMore = false,
+                            hasMorePages = newEmotes.size >= 100
+                        )
+                    }
+                }
+                is StickerResult.Failure -> {
+                    _uiState.update { state ->
+                        state.copy(isLoadingMore = false)
                     }
                 }
             }

@@ -43,7 +43,10 @@ data class ExploreUiState(
     val emotesToAddToPack: List<SevenTvEmote> = emptyList(),
     val isAddingToPack: Boolean = false,
     val addToPackSuccessMessage: String? = null,
-    val addToPackErrorMessage: String? = null
+    val addToPackErrorMessage: String? = null,
+    val currentPage: Int = 1,
+    val isLoadingMore: Boolean = false,
+    val hasMorePages: Boolean = true
 ) {
     val filteredEmotes: List<SevenTvEmote>
         get() {

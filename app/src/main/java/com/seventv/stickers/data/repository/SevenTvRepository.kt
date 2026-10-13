@@ -11,7 +11,7 @@ interface SevenTvRepository {
     suspend fun searchEmotes(
         query: String,
         page: Int = 1,
-        limit: Int = 30,
+        limit: Int = 100,
         category: String? = null
     ): StickerResult<List<SevenTvEmote>>
     suspend fun getEmote(emoteId: String): StickerResult<SevenTvEmote>

@@ -12,8 +12,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Search
@@ -30,6 +32,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -74,6 +77,21 @@ fun ExploreScreen(
     var showDraftSheet by remember { mutableStateOf(false) }
     var previewEmote by remember { mutableStateOf<SevenTvEmote?>(null) }
     var isSharingSticker by remember { mutableStateOf(false) }
+
+    val gridState = rememberLazyGridState()
+    val shouldLoadMore by remember {
+        derivedStateOf {
+            val lastVisibleIndex = gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+            val totalCount = gridState.layoutInfo.totalItemsCount
+            totalCount > 0 && lastVisibleIndex >= totalCount - 6
+        }
+    }
+
+    LaunchedEffect(shouldLoadMore) {
+        if (shouldLoadMore && uiState.hasMorePages && !uiState.isLoadingMore) {
+            viewModel.loadNextPage()
+        }
+    }
 
     LaunchedEffect(Unit) {
         if (uiState.searchResults is SearchResultsState.Idle) {
@@ -176,25 +194,27 @@ fun ExploreScreen(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // Category selector chips (Trending & Top)
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    FilterChip(
-                        selected = uiState.selectedCategory == ExploreCategory.TRENDING,
-                        onClick = { viewModel.onCategorySelected(ExploreCategory.TRENDING) },
-                        label = { Text("🔥 Tendencias") }
-                    )
-                    FilterChip(
-                        selected = uiState.selectedCategory == ExploreCategory.TOP,
-                        onClick = { viewModel.onCategorySelected(ExploreCategory.TOP) },
-                        label = { Text("⭐ Populares") }
-                    )
-                }
+                // Category selector chips (Trending & Top) - shown when browsing without text query
+                if (uiState.query.isBlank()) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        FilterChip(
+                            selected = uiState.selectedCategory == ExploreCategory.TRENDING,
+                            onClick = { viewModel.onCategorySelected(ExploreCategory.TRENDING) },
+                            label = { Text("🔥 Tendencias") }
+                        )
+                        FilterChip(
+                            selected = uiState.selectedCategory == ExploreCategory.TOP,
+                            onClick = { viewModel.onCategorySelected(ExploreCategory.TOP) },
+                            label = { Text("⭐ Populares") }
+                        )
+                    }
 
-                Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
 
                 // Results / Content View
                 Box(
@@ -310,6 +330,7 @@ fun ExploreScreen(
                                 }
                             } else {
                                 LazyVerticalGrid(
+                                    state = gridState,
                                     columns = GridCells.Adaptive(minSize = 100.dp),
                                     contentPadding = PaddingValues(
                                         top = 8.dp,
@@ -336,6 +357,23 @@ fun ExploreScreen(
                                                 previewEmote = emote
                                             }
                                         )
+                                    }
+
+                                    if (uiState.isLoadingMore) {
+                                        item(span = { GridItemSpan(maxLineSpan) }) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(vertical = 16.dp),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                CircularProgressIndicator(
+                                                    modifier = Modifier.size(32.dp),
+                                                    color = MaterialTheme.colorScheme.primary,
+                                                    strokeWidth = 3.dp
+                                                )
+                                            }
+                                        }
                                     }
                                 }
                             }
