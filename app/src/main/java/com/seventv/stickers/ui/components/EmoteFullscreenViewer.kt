@@ -34,6 +34,7 @@ import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -354,30 +355,23 @@ fun EmoteFullscreenViewer(
                         }
                     }
 
-                    // Direct Share to WhatsApp Action Button
+                    // Share WebP Image Action Button
                     if (onShareSticker != null) {
                         Spacer(modifier = Modifier.height(12.dp))
-                        Button(
+                        OutlinedButton(
                             onClick = onShareSticker,
                             enabled = !isSharingSticker,
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = WhatsAppGreen,
-                                contentColor = Color.White,
-                                disabledContainerColor = WhatsAppGreen.copy(alpha = 0.6f),
-                                disabledContentColor = Color.White.copy(alpha = 0.8f)
-                            ),
                             shape = MaterialTheme.shapes.medium,
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             if (isSharingSticker) {
                                 CircularProgressIndicator(
                                     modifier = Modifier.size(18.dp),
-                                    color = Color.White,
                                     strokeWidth = 2.dp
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    text = "Preparando sticker...",
+                                    text = "Preparando imagen...",
                                     style = MaterialTheme.typography.labelLarge,
                                     fontWeight = FontWeight.Bold
                                 )
@@ -389,7 +383,7 @@ fun EmoteFullscreenViewer(
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    text = "Enviar sticker a WhatsApp",
+                                    text = "Compartir imagen WebP",
                                     style = MaterialTheme.typography.labelLarge,
                                     fontWeight = FontWeight.Bold
                                 )

@@ -75,10 +75,10 @@ class StickerShareManagerTest {
     @Test
     fun createChooserIntent_wrapsBaseIntentWithTitleAndFlags() {
         val testUri = Uri.parse("content://com.seventv.stickers.fileprovider/quick_share/test_123.webp")
-        val chooserIntent = shareManager.createChooserIntent(testUri, title = "Enviar a WhatsApp", targetPackage = "com.whatsapp")
+        val chooserIntent = shareManager.createChooserIntent(testUri)
 
         assertEquals(Intent.ACTION_CHOOSER, chooserIntent.action)
-        assertEquals("Enviar a WhatsApp", chooserIntent.getStringExtra(Intent.EXTRA_TITLE))
+        assertEquals("Compartir imagen WebP", chooserIntent.getStringExtra(Intent.EXTRA_TITLE))
         assertTrue((chooserIntent.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION) != 0)
         assertTrue((chooserIntent.flags and Intent.FLAG_ACTIVITY_NEW_TASK) != 0)
 

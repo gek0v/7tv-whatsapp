@@ -512,18 +512,14 @@ fun StickerInspectorSheet(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // Action: Direct Share to WhatsApp
+            // Action: Share WebP Image
             if (onShareSticker != null) {
-                Button(
+                OutlinedButton(
                     onClick = {
                         onShareSticker()
                         onDismiss()
                     },
                     shape = MaterialTheme.shapes.large,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = WhatsAppGreen,
-                        contentColor = Color.White
-                    ),
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(48.dp)
@@ -535,7 +531,7 @@ fun StickerInspectorSheet(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "Enviar directamente a WhatsApp",
+                        text = "Compartir imagen WebP",
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.Bold
                     )

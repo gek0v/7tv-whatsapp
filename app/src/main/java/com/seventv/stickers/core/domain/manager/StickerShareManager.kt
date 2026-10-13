@@ -120,7 +120,7 @@ class StickerShareManager(
      */
     fun createChooserIntent(
         uri: Uri,
-        title: String = "Enviar sticker",
+        title: String = "Compartir imagen WebP",
         targetPackage: String? = null
     ): Intent {
         val baseIntent = createShareIntent(uri, targetPackage).apply {
@@ -134,27 +134,20 @@ class StickerShareManager(
     }
 
     /**
-     * Attempts to launch direct share to WhatsApp, falling back gracefully to the system chooser
-     * if WhatsApp is not installed or fails to handle the intent.
+     * Launches the system share chooser for the WebP image, allowing the user
+     * to share it as an image/video across messaging apps (WhatsApp, Telegram, etc.).
      */
     fun launchShare(
         context: Context,
         uri: Uri,
-        targetPackage: String? = "com.whatsapp",
-        chooserTitle: String = "Enviar sticker"
+        chooserTitle: String = "Compartir imagen WebP"
     ): Boolean {
-        val shareIntent = createShareIntent(uri, targetPackage)
         return try {
-            context.startActivity(shareIntent)
+            val chooser = createChooserIntent(uri, chooserTitle)
+            context.startActivity(chooser)
             true
         } catch (e: Exception) {
-            try {
-                val chooser = createChooserIntent(uri, chooserTitle)
-                context.startActivity(chooser)
-                true
-            } catch (e2: Exception) {
-                false
-            }
+            false
         }
     }
 }
