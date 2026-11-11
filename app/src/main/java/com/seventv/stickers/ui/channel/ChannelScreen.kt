@@ -370,8 +370,11 @@ fun ChannelScreen(
                             filteredEmotes = viewModel.getFilteredEmotes(),
                             selectedEmoteIds = state.selectedEmoteIds,
                             activeFilter = state.activeFilter,
+                            activeProviderFilter = state.activeProviderFilter,
+                            emotesByProvider = load.emotesByProvider,
                             draftEmotes = state.draftEmotes,
                             onFilterSelected = viewModel::onFilterSelected,
+                            onProviderFilterSelected = viewModel::onProviderFilterSelected,
                             onSelectEmoteSet = viewModel::onSelectEmoteSet,
                             onToggleSelectEmote = viewModel::onToggleSelectEmote,
                             onToggleDraftEmote = viewModel::onToggleDraftEmote,
@@ -653,8 +656,11 @@ private fun ChannelContent(
     filteredEmotes: List<SevenTvEmote>,
     selectedEmoteIds: Set<String>,
     activeFilter: ChannelFilter,
+    activeProviderFilter: ChannelProviderFilter,
+    emotesByProvider: Map<com.seventv.stickers.core.network.model.EmoteProvider, List<SevenTvEmote>>,
     draftEmotes: List<SevenTvEmote>,
     onFilterSelected: (ChannelFilter) -> Unit,
+    onProviderFilterSelected: (ChannelProviderFilter) -> Unit,
     onSelectEmoteSet: (String) -> Unit,
     onToggleSelectEmote: (String) -> Unit,
     onToggleDraftEmote: (SevenTvEmote) -> Unit,
@@ -739,6 +745,21 @@ private fun ChannelContent(
                         fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
+
+                    val providerSummary = remember(emotesByProvider) {
+                        emotesByProvider.filterValues { it.isNotEmpty() }
+                            .map { (p, list) -> "${list.size} ${p.displayName}" }
+                            .joinToString(" • ")
+                    }
+                    if (providerSummary.isNotBlank()) {
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = providerSummary,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = com.seventv.stickers.ui.theme.DarkOnSurfaceVariant
+                        )
+                    }
+
                     Spacer(modifier = Modifier.height(4.dp))
                     Surface(
                         shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
@@ -750,9 +771,9 @@ private fun ChannelContent(
                     ) {
                         Text(
                             text = if (availableSets.size > 1) {
-                                "${availableSets.size} paquetes • $totalEmotes emotes"
+                                "${availableSets.size} paquetes 7TV • $totalEmotes emotes totales"
                             } else {
-                                "$totalEmotes emotes"
+                                "$totalEmotes emotes disponibles"
                             },
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
@@ -811,6 +832,45 @@ private fun ChannelContent(
         }
 
         Spacer(modifier = Modifier.height(8.dp))
+
+        // Provider Filter Chips (Todos, 7TV, BetterTTV, FrankerFaceZ, Twitch)
+        if (emotesByProvider.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(8.dp))
+            LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                contentPadding = PaddingValues(vertical = 2.dp)
+            ) {
+                items(ChannelProviderFilter.entries) { filter ->
+                    val isSelected = activeProviderFilter == filter
+                    val count = if (filter == ChannelProviderFilter.ALL) {
+                        totalEmotes
+                    } else {
+                        emotesByProvider[filter.provider]?.size ?: 0
+                    }
+                    val badgeColor = filter.provider?.let { com.seventv.stickers.ui.components.EmoteCardDefaults.providerColor(it) }
+                        ?: com.seventv.stickers.ui.theme.ElectricCyan
+
+                    FilterChip(
+                        selected = isSelected,
+                        onClick = { onProviderFilterSelected(filter) },
+                        label = {
+                            Text(
+                                text = "${filter.displayName} ($count)",
+                                style = MaterialTheme.typography.labelMedium
+                            )
+                        },
+                        shape = MaterialTheme.shapes.medium,
+                        border = BorderStroke(1.dp, if (isSelected) badgeColor else Color(0x35FFFFFF)),
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = badgeColor.copy(alpha = 0.25f),
+                            selectedLabelColor = badgeColor,
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            labelColor = MaterialTheme.colorScheme.onSurface
+                        )
+                    )
+                }
+            }
+        }
 
         // Primary Button "Importar Canal Completo" / "Importar Pack"
         val importButtonLabel = if (availableSets.size > 1) {
@@ -963,7 +1023,7 @@ private fun ChannelContent(
                         .fillMaxWidth()
                         .weight(1f)
                 ) {
-                    items(filteredEmotes, key = { it.id }) { emote ->
+                    items(filteredEmotes, key = { "${it.provider.name}:${it.id}" }) { emote ->
                         val isSelected = selectedEmoteIds.contains(emote.id)
                         val isInDraft = draftEmotes.any { it.id == emote.id }
                         EmoteCard(

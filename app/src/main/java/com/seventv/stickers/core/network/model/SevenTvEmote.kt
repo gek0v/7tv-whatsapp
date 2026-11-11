@@ -3,7 +3,7 @@ package com.seventv.stickers.core.network.model
 import androidx.compose.runtime.Immutable
 
 /**
- * Domain model representing a 7TV emote with resolved flags and asset URLs.
+ * Domain model representing a 7TV (or bridged provider) emote with resolved flags and asset URLs.
  */
 @Immutable
 data class SevenTvEmote(
@@ -15,5 +15,7 @@ data class SevenTvEmote(
     val bestAssetUrl: String,
     val availableScales: List<String>,
     val previewUrl: String = bestAssetUrl,
-    val gifUrl: String? = null
+    val gifUrl: String? = null,
+    val provider: EmoteProvider = EmoteProvider.SEVENTV,
+    val originalOwner: String? = null
 )

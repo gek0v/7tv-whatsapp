@@ -1,6 +1,7 @@
 package com.seventv.stickers.core.domain.model
 
 import androidx.compose.runtime.Immutable
+import com.seventv.stickers.core.network.model.EmoteProvider
 
 @Immutable
 data class PackSticker(
@@ -11,5 +12,6 @@ data class PackSticker(
     val filePath: String,
     val emojis: List<String> = listOf("💬"),
     val fileLength: Long = 0L,
-    val sortOrder: Int = 0
+    val sortOrder: Int = 0,
+    val provider: EmoteProvider = EmoteProvider.SEVENTV
 )

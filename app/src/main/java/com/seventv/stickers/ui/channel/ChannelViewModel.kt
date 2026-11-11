@@ -7,12 +7,15 @@ import com.seventv.stickers.core.common.result.StickerError
 import com.seventv.stickers.core.common.result.StickerResult
 import com.seventv.stickers.core.domain.engine.PackSplittingEngine
 import com.seventv.stickers.core.domain.engine.SplitPlan
+import com.seventv.stickers.core.domain.manager.PackImportManager
 import com.seventv.stickers.core.domain.model.StickerPack
+import com.seventv.stickers.core.network.model.EmoteProvider
 import com.seventv.stickers.core.network.model.SevenTvEmote
 import com.seventv.stickers.core.network.model.SevenTvEmoteSet
+import com.seventv.stickers.core.network.model.toSevenTvEmote
+import com.seventv.stickers.data.repository.AggregatedEmoteCatalogRepository
 import com.seventv.stickers.data.repository.SevenTvRepository
 import com.seventv.stickers.data.repository.StickerPackRepository
-import com.seventv.stickers.core.domain.manager.PackImportManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -22,7 +25,8 @@ import kotlinx.coroutines.launch
 class ChannelViewModel(
     private val sevenTvRepository: SevenTvRepository,
     private val stickerPackRepository: StickerPackRepository,
-    private val packImportManager: PackImportManager? = null
+    private val packImportManager: PackImportManager? = null,
+    private val aggregatedRepository: AggregatedEmoteCatalogRepository? = null
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ChannelUiState())
@@ -49,32 +53,74 @@ class ChannelViewModel(
                 query = targetQuery,
                 loadState = ChannelLoadState.Loading(targetQuery),
                 selectedEmoteIds = emptySet(),
-                importState = ChannelImportState.Idle
+                importState = ChannelImportState.Idle,
+                activeProviderFilter = ChannelProviderFilter.ALL
             )
         }
 
         viewModelScope.launch {
-            when (val channelResult = sevenTvRepository.getChannelData(targetQuery)) {
-                is StickerResult.Success -> {
-                    val channel = channelResult.data
-                    val set = channel.activeSet
-                    _uiState.update {
-                        it.copy(
-                            loadState = ChannelLoadState.Success(
-                                streamerName = channel.streamerName,
-                                username = channel.username,
-                                avatarUrl = channel.avatarUrl,
-                                availableSets = channel.availableSets,
-                                currentSetId = set.id,
-                                emoteSet = set,
-                                allEmotes = set.emotes.distinctBy { emote -> emote.id }
-                            )
+            if (aggregatedRepository != null) {
+                when (val unifiedResult = aggregatedRepository.getUnifiedChannelEmotes(targetQuery)) {
+                    is StickerResult.Success -> {
+                        val unified = unifiedResult.data
+                        val emotesByProvider = unified.emotesByProvider.mapValues { (_, emotes) ->
+                            emotes.map { it.toSevenTvEmote() }
+                        }
+                        val allEmotes = emotesByProvider.values.flatten().distinctBy { it.id }
+
+                        val sevenTvSet = SevenTvEmoteSet(
+                            id = unified.activeSevenTvSetId ?: targetQuery,
+                            name = unified.channelName,
+                            ownerName = unified.channelName,
+                            emotes = emotesByProvider[EmoteProvider.SEVENTV].orEmpty()
                         )
+
+                        _uiState.update {
+                            it.copy(
+                                loadState = ChannelLoadState.Success(
+                                    streamerName = unified.channelName,
+                                    username = targetQuery,
+                                    avatarUrl = unified.avatarUrl,
+                                    availableSets = unified.sevenTvSets,
+                                    currentSetId = sevenTvSet.id,
+                                    emoteSet = sevenTvSet,
+                                    allEmotes = allEmotes,
+                                    emotesByProvider = emotesByProvider
+                                )
+                            )
+                        }
+                    }
+                    is StickerResult.Failure -> {
+                        _uiState.update {
+                            it.copy(loadState = ChannelLoadState.Error("No se encontraron emotes para '$targetQuery'"))
+                        }
                     }
                 }
-                is StickerResult.Failure -> {
-                    _uiState.update {
-                        it.copy(loadState = ChannelLoadState.Error("No se encontraron emotes para '$targetQuery'"))
+            } else {
+                when (val channelResult = sevenTvRepository.getChannelData(targetQuery)) {
+                    is StickerResult.Success -> {
+                        val channel = channelResult.data
+                        val set = channel.activeSet
+                        val dedupedEmotes = set.emotes.distinctBy { emote -> emote.id }
+                        _uiState.update {
+                            it.copy(
+                                loadState = ChannelLoadState.Success(
+                                    streamerName = channel.streamerName,
+                                    username = channel.username,
+                                    avatarUrl = channel.avatarUrl,
+                                    availableSets = channel.availableSets,
+                                    currentSetId = set.id,
+                                    emoteSet = set,
+                                    allEmotes = dedupedEmotes,
+                                    emotesByProvider = mapOf(EmoteProvider.SEVENTV to dedupedEmotes)
+                                )
+                            )
+                        }
+                    }
+                    is StickerResult.Failure -> {
+                        _uiState.update {
+                            it.copy(loadState = ChannelLoadState.Error("No se encontraron emotes para '$targetQuery'"))
+                        }
                     }
                 }
             }
@@ -105,11 +151,16 @@ class ChannelViewModel(
                     )
                     _uiState.update { state ->
                         val success = state.loadState as? ChannelLoadState.Success ?: return@update state
+                        val newSevenTvEmotes = newSet.emotes.distinctBy { it.id }
+                        val updatedMap = success.emotesByProvider.toMutableMap()
+                        updatedMap[EmoteProvider.SEVENTV] = newSevenTvEmotes
+                        val all = updatedMap.values.flatten().distinctBy { it.id }
                         state.copy(
                             loadState = success.copy(
                                 currentSetId = setId,
                                 emoteSet = newSet,
-                                allEmotes = newSet.emotes.distinctBy { it.id },
+                                allEmotes = all,
+                                emotesByProvider = updatedMap,
                                 isLoadingSet = false
                             )
                         )
@@ -130,6 +181,10 @@ class ChannelViewModel(
 
     fun onFilterSelected(filter: ChannelFilter) {
         _uiState.update { it.copy(activeFilter = filter) }
+    }
+
+    fun onProviderFilterSelected(filter: ChannelProviderFilter) {
+        _uiState.update { it.copy(activeProviderFilter = filter) }
     }
 
     fun onToggleSelectEmote(emoteId: String) {
@@ -191,7 +246,7 @@ class ChannelViewModel(
 
         viewModelScope.launch {
             when (val result = stickerPackRepository.createPacksFromEmotes(
-                basePackName = packName.ifBlank { "7TV Pack" },
+                basePackName = packName.ifBlank { "Sticker Pack" },
                 publisher = resolvedPublisher,
                 emotes = emotesToSave,
                 originSetId = originSetId,
@@ -217,10 +272,23 @@ class ChannelViewModel(
     fun getFilteredEmotes(): List<SevenTvEmote> {
         val state = _uiState.value
         val successState = state.loadState as? ChannelLoadState.Success ?: return emptyList()
+
+        val providerFiltered = when (val filter = state.activeProviderFilter) {
+            ChannelProviderFilter.ALL -> successState.allEmotes
+            else -> {
+                val p = filter.provider
+                if (p != null) {
+                    successState.emotesByProvider[p] ?: successState.allEmotes.filter { it.provider == p }
+                } else {
+                    successState.allEmotes
+                }
+            }
+        }
+
         return when (state.activeFilter) {
-            ChannelFilter.ALL -> successState.allEmotes
-            ChannelFilter.ANIMATED -> successState.allEmotes.filter { it.isAnimated }
-            ChannelFilter.STATIC -> successState.allEmotes.filter { !it.isAnimated }
+            ChannelFilter.ALL -> providerFiltered
+            ChannelFilter.ANIMATED -> providerFiltered.filter { it.isAnimated }
+            ChannelFilter.STATIC -> providerFiltered.filter { !it.isAnimated }
         }
     }
 
@@ -276,10 +344,9 @@ class ChannelViewModel(
     fun onConfirmImport(plans: List<SplitPlan>) {
         val state = _uiState.value
         val successState = state.loadState as? ChannelLoadState.Success
-        val streamerName = successState?.streamerName ?: "7TV Channel"
+        val streamerName = successState?.streamerName ?: "Streaming Channel"
         val currentSetId = successState?.currentSetId
 
-        // Dismiss the modal confirmation dialog immediately so user can freely navigate and use the app
         _uiState.update {
             it.copy(
                 importState = ChannelImportState.Idle,
@@ -292,7 +359,6 @@ class ChannelViewModel(
             return
         }
 
-        // Inline fallback for standalone testing without PackImportManager
         viewModelScope.launch {
             val allCreatedPacks = mutableListOf<StickerPack>()
 
@@ -334,15 +400,15 @@ class ChannelViewModel(
                     }
                     is StickerResult.Failure -> {
                         val errorDetail = when (val err = result.error) {
-                            is com.seventv.stickers.core.common.result.StickerError.ExceedsSizeLimit ->
+                            is StickerError.ExceedsSizeLimit ->
                                 "Uno de los stickers supera el tamaño permitido"
-                            is com.seventv.stickers.core.common.result.StickerError.InsufficientStickers ->
+                            is StickerError.InsufficientStickers ->
                                 "Se necesitan al menos ${err.min} stickers"
-                            is com.seventv.stickers.core.common.result.StickerError.ExceedsPackLimit ->
+                            is StickerError.ExceedsPackLimit ->
                                 "El paquete supera el límite de ${err.max} stickers"
-                            is com.seventv.stickers.core.common.result.StickerError.NetworkError ->
+                            is StickerError.NetworkError ->
                                 err.message
-                            is com.seventv.stickers.core.common.result.StickerError.NativeEncodingFailed ->
+                            is StickerError.NativeEncodingFailed ->
                                 "Fallo en la codificación WebP: ${err.details}"
                             else -> err.toString()
                         }
@@ -442,7 +508,7 @@ class ChannelViewModel(
         StickerError.CorruptedSourceData -> "Datos de imagen no válidos o dañados"
         is StickerError.UnsupportedFormat -> if (mimeType.contains(" ")) mimeType else "Formato no compatible: $mimeType"
         StickerError.ResourceNotFound -> "No se encontró el emote requerido"
-        StickerError.RateLimited -> "Límite de peticiones de 7TV alcanzado"
+        StickerError.RateLimited -> "Límite de peticiones alcanzado"
         is StickerError.PackNotFound -> "Paquete no encontrado: $identifier"
         is StickerError.ValidationError -> message
     }
@@ -450,11 +516,17 @@ class ChannelViewModel(
     class Factory(
         private val sevenTvRepository: SevenTvRepository,
         private val stickerPackRepository: StickerPackRepository,
-        private val packImportManager: PackImportManager? = null
+        private val packImportManager: PackImportManager? = null,
+        private val aggregatedRepository: AggregatedEmoteCatalogRepository? = null
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            return ChannelViewModel(sevenTvRepository, stickerPackRepository, packImportManager) as T
+            return ChannelViewModel(
+                sevenTvRepository = sevenTvRepository,
+                stickerPackRepository = stickerPackRepository,
+                packImportManager = packImportManager,
+                aggregatedRepository = aggregatedRepository
+            ) as T
         }
     }
 }

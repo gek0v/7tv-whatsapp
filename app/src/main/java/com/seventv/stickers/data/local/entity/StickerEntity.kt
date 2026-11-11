@@ -29,5 +29,6 @@ data class StickerEntity(
     val relativeFilePath: String,
     val emojis: List<String>,
     val fileLength: Long,
-    val sortOrder: Int
+    val sortOrder: Int,
+    val provider: String = "SEVENTV"
 )

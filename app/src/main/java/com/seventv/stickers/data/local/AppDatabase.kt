@@ -6,14 +6,13 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import com.seventv.stickers.data.local.converter.EmojiListConverter
 import com.seventv.stickers.data.local.dao.StickerDao
 import com.seventv.stickers.data.local.dao.StickerPackDao
 import com.seventv.stickers.data.local.entity.StickerEntity
 import com.seventv.stickers.data.local.entity.StickerPackEntity
-
-import androidx.room.migration.Migration
-import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
     entities = [StickerPackEntity::class, StickerEntity::class],
@@ -41,6 +40,7 @@ abstract class AppDatabase : RoomDatabase() {
                 db.execSQL("ALTER TABLE sticker_packs ADD COLUMN imageDataVersion INTEGER NOT NULL DEFAULT 1")
                 db.execSQL("ALTER TABLE sticker_packs ADD COLUMN lastSyncedVersion INTEGER NOT NULL DEFAULT 0")
                 db.execSQL("UPDATE sticker_packs SET lastSyncedVersion = 1 WHERE isWhitelisted = 1")
+                db.execSQL("ALTER TABLE stickers ADD COLUMN provider TEXT NOT NULL DEFAULT 'SEVENTV'")
             }
         }
 
@@ -51,8 +51,8 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "seventv_stickers.db"
                 )
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
-                .build().also { INSTANCE = it }
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                    .build().also { INSTANCE = it }
             }
         }
 

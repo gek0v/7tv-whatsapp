@@ -124,6 +124,7 @@ import com.seventv.stickers.ui.components.EmotePeekPayload
 import com.seventv.stickers.ui.components.LocalEmotePeekController
 import com.seventv.stickers.ui.components.emotePeekGesture
 import com.seventv.stickers.ui.components.rememberEmotePeekState
+import com.seventv.stickers.ui.components.EmoteCardDefaults
 import com.seventv.stickers.ui.components.ChatSimulatorBackground
 import com.seventv.stickers.ui.components.ChatSimulatorMode
 import com.seventv.stickers.ui.components.DraftBottomSheetDefaults
@@ -1528,6 +1529,24 @@ private fun PackStickerCell(
                         modifier = Modifier
                             .padding(horizontal = 4.dp, vertical = 2.dp)
                             .size(13.dp)
+                    )
+                }
+            } else {
+                val providerColor = remember(sticker.provider) {
+                    EmoteCardDefaults.providerColor(sticker.provider)
+                }
+                Surface(
+                    shape = RoundedCornerShape(topStart = 16.dp, bottomEnd = 8.dp),
+                    color = Color(0xB80F081D),
+                    border = BorderStroke(0.5.dp, providerColor.copy(alpha = 0.7f)),
+                    modifier = Modifier.align(Alignment.TopStart)
+                ) {
+                    Text(
+                        text = sticker.provider.displayName,
+                        fontSize = 8.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = providerColor,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                     )
                 }
             }

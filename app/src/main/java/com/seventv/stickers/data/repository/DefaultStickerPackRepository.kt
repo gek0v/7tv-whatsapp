@@ -14,6 +14,8 @@ import com.seventv.stickers.core.domain.model.StickerPack
 import com.seventv.stickers.core.media.StickerMediaPipeline
 import com.seventv.stickers.core.media.model.AnimationFrame
 import com.seventv.stickers.core.media.animated.DefaultFrameExtractor
+import com.seventv.stickers.core.network.downloader.EmoteDownloader
+import com.seventv.stickers.core.network.model.EmoteProvider
 import com.seventv.stickers.core.network.model.SevenTvEmote
 import com.seventv.stickers.data.local.AppDatabase
 import com.seventv.stickers.data.local.dao.StickerDao
@@ -57,12 +59,13 @@ class DefaultStickerPackRepository(
         sevenTvRepository: SevenTvRepository,
         splittingEngine: PackSplittingEngine = PackSplittingEngine,
         dispatcher: CoroutineDispatcher = Dispatchers.IO,
-        context: Context? = null
+        context: Context? = null,
+        emoteDownloader: EmoteDownloader? = null
     ) : this(
         stickerPackDao = database.stickerPackDao(),
         stickerDao = database.stickerDao(),
         storageManager = storageManager,
-        emoteBridge = EmoteStickerBridge(sevenTvRepository, mediaPipeline),
+        emoteBridge = EmoteStickerBridge(sevenTvRepository, mediaPipeline, emoteDownloader),
         mediaPipeline = mediaPipeline,
         splittingEngine = splittingEngine,
         dispatcher = dispatcher,
@@ -180,7 +183,8 @@ class DefaultStickerPackRepository(
                                 relativeFilePath = relativePath,
                                 emojis = com.seventv.stickers.core.domain.mapper.EmoteEmojiMapper.mapEmoteNameToEmojis(item.emote.name),
                                 fileLength = savedFile.length(),
-                                sortOrder = item.index
+                                sortOrder = item.index,
+                                provider = item.emote.provider.name
                             )
                         )
                     }
@@ -279,7 +283,8 @@ class DefaultStickerPackRepository(
                             filePath = storageManager.getAbsoluteFile(entity.relativeFilePath).absolutePath,
                             emojis = entity.emojis,
                             fileLength = entity.fileLength,
-                            sortOrder = entity.sortOrder
+                            sortOrder = entity.sortOrder,
+                            provider = EmoteProvider.fromName(entity.provider)
                         )
                     }
 
@@ -446,7 +451,8 @@ class DefaultStickerPackRepository(
                             relativeFilePath = relativePath,
                             emojis = sticker.emojis,
                             fileLength = savedFile.length(),
-                            sortOrder = stickerIndex
+                            sortOrder = stickerIndex,
+                            provider = sticker.provider
                         )
                         newPackStickerEntities.add(entity)
                         newPackStickers.add(
@@ -458,7 +464,8 @@ class DefaultStickerPackRepository(
                                 filePath = savedFile.absolutePath,
                                 emojis = sticker.emojis,
                                 fileLength = savedFile.length(),
-                                sortOrder = stickerIndex
+                                sortOrder = stickerIndex,
+                                provider = EmoteProvider.fromName(sticker.provider)
                             )
                         )
                     }
@@ -646,7 +653,8 @@ class DefaultStickerPackRepository(
                         relativeFilePath = relativePath,
                         emojis = com.seventv.stickers.core.domain.mapper.EmoteEmojiMapper.mapEmoteNameToEmojis(item.emote.name),
                         fileLength = savedFile.length(),
-                        sortOrder = currentCount + item.index
+                        sortOrder = currentCount + item.index,
+                        provider = item.emote.provider.name
                     )
                     stickerDao.insertSticker(entity)
                 }
@@ -722,7 +730,8 @@ class DefaultStickerPackRepository(
                 }
             }
 
-            stickerPackDao.updateWhitelisted(packIdentifier, false)
+            stickerPackDao.incrementImageDataVersion(packIdentifier)
+            notifyPackModified(packIdentifier)
             StickerResult.Success(Unit)
         } catch (e: CancellationException) {
             throw e
@@ -756,7 +765,8 @@ class DefaultStickerPackRepository(
                 }
             }
 
-            stickerPackDao.updateWhitelisted(packIdentifier, false)
+            stickerPackDao.incrementImageDataVersion(packIdentifier)
+            notifyPackModified(packIdentifier)
             StickerResult.Success(Unit)
         } catch (e: CancellationException) {
             throw e
@@ -937,7 +947,8 @@ class DefaultStickerPackRepository(
                     filePath = storageManager.getAbsoluteFile(entity.relativeFilePath).absolutePath,
                     emojis = entity.emojis,
                     fileLength = entity.fileLength,
-                    sortOrder = entity.sortOrder
+                    sortOrder = entity.sortOrder,
+                    provider = EmoteProvider.fromName(entity.provider)
                 )
             },
             createdAt = packWithStickers.pack.createdAt,

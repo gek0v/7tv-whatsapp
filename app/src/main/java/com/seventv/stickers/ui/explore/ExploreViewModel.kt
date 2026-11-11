@@ -5,9 +5,13 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.seventv.stickers.core.common.result.StickerError
 import com.seventv.stickers.core.common.result.StickerResult
+import com.seventv.stickers.core.network.model.EmoteProvider
 import com.seventv.stickers.core.network.model.SevenTvEmote
+import com.seventv.stickers.core.network.model.toSevenTvEmote
+import com.seventv.stickers.data.repository.AggregatedEmoteCatalogRepository
 import com.seventv.stickers.data.repository.SevenTvRepository
 import com.seventv.stickers.data.repository.StickerPackRepository
+import com.seventv.stickers.ui.channel.ChannelProviderFilter
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -21,7 +25,8 @@ import kotlinx.coroutines.launch
  */
 class ExploreViewModel(
     private val sevenTvRepository: SevenTvRepository,
-    private val stickerPackRepository: StickerPackRepository
+    private val stickerPackRepository: StickerPackRepository,
+    private val aggregatedRepository: AggregatedEmoteCatalogRepository? = null
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ExploreUiState())
@@ -60,26 +65,57 @@ class ExploreViewModel(
         }
         searchJob?.cancel()
         searchJob = viewModelScope.launch {
-            when (val result = sevenTvRepository.searchEmotes(query = "", page = 1, limit = 100, category = category.apiValue)) {
-                is StickerResult.Success -> {
-                    _uiState.update { state ->
-                        state.copy(
-                            searchResults = if (result.data.isEmpty()) {
-                                SearchResultsState.Empty(category.label)
-                            } else {
-                                SearchResultsState.Success(result.data)
-                            },
-                            hasMorePages = result.data.size >= 100
-                        )
+            if (category == ExploreCategory.TRENDING && aggregatedRepository != null) {
+                when (val result = aggregatedRepository.searchAllProviders(query = "", page = 1, limit = 50)) {
+                    is StickerResult.Success -> {
+                        val mappedByProvider = result.data.mapValues { (_, list) -> list.map { it.toSevenTvEmote() } }
+                        val interleaved = interleaveByProvider(mappedByProvider)
+                        _uiState.update { state ->
+                            state.copy(
+                                searchResults = if (interleaved.isEmpty()) {
+                                    SearchResultsState.Empty(category.label)
+                                } else {
+                                    SearchResultsState.Success(interleaved, mappedByProvider)
+                                },
+                                hasMorePages = mappedByProvider.values.any { it.size >= 50 }
+                            )
+                        }
+                    }
+                    is StickerResult.Failure -> {
+                        _uiState.update { state ->
+                            state.copy(
+                                searchResults = SearchResultsState.Error(
+                                    result.error.toSearchErrorMessage()
+                                )
+                            )
+                        }
                     }
                 }
-                is StickerResult.Failure -> {
-                    _uiState.update { state ->
-                        state.copy(
-                            searchResults = SearchResultsState.Error(
-                                result.error.toSearchErrorMessage()
+            } else {
+                when (val result = sevenTvRepository.searchEmotes(query = "", page = 1, limit = 100, category = category.apiValue)) {
+                    is StickerResult.Success -> {
+                        _uiState.update { state ->
+                            state.copy(
+                                searchResults = if (result.data.isEmpty()) {
+                                    SearchResultsState.Empty(category.label)
+                                } else {
+                                    SearchResultsState.Success(
+                                        emotes = result.data,
+                                        emotesByProvider = mapOf(EmoteProvider.SEVENTV to result.data)
+                                    )
+                                },
+                                hasMorePages = result.data.size >= 100
                             )
-                        )
+                        }
+                    }
+                    is StickerResult.Failure -> {
+                        _uiState.update { state ->
+                            state.copy(
+                                searchResults = SearchResultsState.Error(
+                                    result.error.toSearchErrorMessage()
+                                )
+                            )
+                        }
                     }
                 }
             }
@@ -131,27 +167,59 @@ class ExploreViewModel(
         }
         searchJob?.cancel()
         searchJob = viewModelScope.launch {
-            when (val result = sevenTvRepository.searchEmotes(query = query, page = 1, limit = 100, category = category)) {
-                is StickerResult.Success -> {
-                    _uiState.update { state ->
-                        val searchState = if (result.data.isEmpty()) {
-                            SearchResultsState.Empty(query)
-                        } else {
-                            SearchResultsState.Success(result.data)
+            if (aggregatedRepository != null && query.isNotBlank()) {
+                when (val result = aggregatedRepository.searchAllProviders(query = query, page = 1, limit = 50)) {
+                    is StickerResult.Success -> {
+                        val mappedByProvider = result.data.mapValues { (_, list) -> list.map { it.toSevenTvEmote() } }
+                        val interleaved = interleaveByProvider(mappedByProvider)
+                        _uiState.update { state ->
+                            val searchState = if (interleaved.isEmpty()) {
+                                SearchResultsState.Empty(query)
+                            } else {
+                                SearchResultsState.Success(interleaved, mappedByProvider)
+                            }
+                            state.copy(
+                                searchResults = searchState,
+                                hasMorePages = mappedByProvider.values.any { it.size >= 50 }
+                            )
                         }
-                        state.copy(
-                            searchResults = searchState,
-                            hasMorePages = result.data.size >= 100
-                        )
+                    }
+                    is StickerResult.Failure -> {
+                        _uiState.update { state ->
+                            state.copy(
+                                searchResults = SearchResultsState.Error(
+                                    result.error.toSearchErrorMessage()
+                                )
+                            )
+                        }
                     }
                 }
-                is StickerResult.Failure -> {
-                    _uiState.update { state ->
-                        state.copy(
-                            searchResults = SearchResultsState.Error(
-                                result.error.toSearchErrorMessage()
+            } else {
+                when (val result = sevenTvRepository.searchEmotes(query = query, page = 1, limit = 100, category = category)) {
+                    is StickerResult.Success -> {
+                        _uiState.update { state ->
+                            val searchState = if (result.data.isEmpty()) {
+                                SearchResultsState.Empty(query)
+                            } else {
+                                SearchResultsState.Success(
+                                    emotes = result.data,
+                                    emotesByProvider = mapOf(EmoteProvider.SEVENTV to result.data)
+                                )
+                            }
+                            state.copy(
+                                searchResults = searchState,
+                                hasMorePages = result.data.size >= 100
                             )
-                        )
+                        }
+                    }
+                    is StickerResult.Failure -> {
+                        _uiState.update { state ->
+                            state.copy(
+                                searchResults = SearchResultsState.Error(
+                                    result.error.toSearchErrorMessage()
+                                )
+                            )
+                        }
                     }
                 }
             }
@@ -171,23 +239,48 @@ class ExploreViewModel(
 
         viewModelScope.launch {
             val query = currentState.query.trim()
-            val category = if (query.isBlank()) currentState.selectedCategory.apiValue else null
-            when (val result = sevenTvRepository.searchEmotes(query = query, page = nextPage, limit = 100, category = category)) {
-                is StickerResult.Success -> {
-                    val newEmotes = result.data
-                    _uiState.update { state ->
-                        val combined = (currentResults.emotes + newEmotes).distinctBy { it.id }
-                        state.copy(
-                            searchResults = SearchResultsState.Success(combined),
-                            currentPage = nextPage,
-                            isLoadingMore = false,
-                            hasMorePages = newEmotes.size >= 100
-                        )
+            val useAggregated = aggregatedRepository != null &&
+                (query.isNotBlank() || currentState.selectedCategory == ExploreCategory.TRENDING)
+
+            if (useAggregated) {
+                when (val result = aggregatedRepository.searchAllProviders(query = query, page = nextPage, limit = 50)) {
+                    is StickerResult.Success -> {
+                        val mappedByProvider = result.data.mapValues { (_, list) -> list.map { it.toSevenTvEmote() } }
+                        val newEmotes = interleaveByProvider(mappedByProvider)
+                        _uiState.update { state ->
+                            val combined = (currentResults.emotes + newEmotes).distinctBy { "${it.provider.name}:${it.id}" }
+                            val mergedMap = combined.groupBy { it.provider }
+                            state.copy(
+                                searchResults = SearchResultsState.Success(combined, mergedMap),
+                                currentPage = nextPage,
+                                isLoadingMore = false,
+                                hasMorePages = mappedByProvider.values.any { it.size >= 50 }
+                            )
+                        }
+                    }
+                    is StickerResult.Failure -> {
+                        _uiState.update { state -> state.copy(isLoadingMore = false) }
                     }
                 }
-                is StickerResult.Failure -> {
-                    _uiState.update { state ->
-                        state.copy(isLoadingMore = false)
+            } else {
+                val category = if (query.isBlank()) currentState.selectedCategory.apiValue else null
+                when (val result = sevenTvRepository.searchEmotes(query = query, page = nextPage, limit = 100, category = category)) {
+                    is StickerResult.Success -> {
+                        val newEmotes = result.data
+                        _uiState.update { state ->
+                            val combined = (currentResults.emotes + newEmotes).distinctBy { "${it.provider.name}:${it.id}" }
+                            state.copy(
+                                searchResults = SearchResultsState.Success(combined, combined.groupBy { it.provider }),
+                                currentPage = nextPage,
+                                isLoadingMore = false,
+                                hasMorePages = newEmotes.size >= 100
+                            )
+                        }
+                    }
+                    is StickerResult.Failure -> {
+                        _uiState.update { state ->
+                            state.copy(isLoadingMore = false)
+                        }
                     }
                 }
             }
@@ -199,6 +292,30 @@ class ExploreViewModel(
      */
     fun onFilterSelected(filter: EmoteFilter) {
         _uiState.update { it.copy(activeFilter = filter) }
+    }
+
+    fun onProviderFilterSelected(filter: ChannelProviderFilter) {
+        _uiState.update { it.copy(activeProviderFilter = filter) }
+    }
+
+    private fun interleaveByProvider(
+        map: Map<EmoteProvider, List<SevenTvEmote>>
+    ): List<SevenTvEmote> {
+        val queues = EmoteProvider.entries.mapNotNull { provider ->
+            map[provider]?.takeIf { it.isNotEmpty() }?.iterator()
+        }
+        val result = mutableListOf<SevenTvEmote>()
+        var addedAny: Boolean
+        do {
+            addedAny = false
+            for (iterator in queues) {
+                if (iterator.hasNext()) {
+                    result.add(iterator.next())
+                    addedAny = true
+                }
+            }
+        } while (addedAny)
+        return result.distinctBy { "${it.provider.name}:${it.id}" }
     }
 
     /**
@@ -431,11 +548,12 @@ class ExploreViewModel(
 
     class Factory(
         private val sevenTvRepository: SevenTvRepository,
-        private val stickerPackRepository: StickerPackRepository
+        private val stickerPackRepository: StickerPackRepository,
+        private val aggregatedRepository: AggregatedEmoteCatalogRepository? = null
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            return ExploreViewModel(sevenTvRepository, stickerPackRepository) as T
+            return ExploreViewModel(sevenTvRepository, stickerPackRepository, aggregatedRepository) as T
         }
     }
 }

@@ -1059,7 +1059,9 @@ class DefaultStickerPackRepositoryTest {
             trayImageRelativePath = "sticker_packs/$packId/tray_icon.png",
             isAnimated = false,
             isWhitelisted = true,
-            createdAt = 1000L
+            createdAt = 1000L,
+            imageDataVersion = 1L,
+            lastSyncedVersion = 1L
         )
         val stickers = listOf(
             StickerEntity("s1", packId, "e1", "Red", "sticker_packs/$packId/${s1File.name}", listOf("??"), s1File.length(), 0),
@@ -1073,7 +1075,11 @@ class DefaultStickerPackRepositoryTest {
 
         val updatedPack = packDao.getPackByIdentifier(packId)
         assertNotNull(updatedPack)
-        assertFalse("Whitelist should reset after reorder", updatedPack!!.pack.isWhitelisted)
+        assertTrue("Whitelist should stay true on reorder", updatedPack!!.pack.isWhitelisted)
+        assertEquals(2L, updatedPack.pack.imageDataVersion)
+        assertEquals(1L, updatedPack.pack.lastSyncedVersion)
+        val domainPack = (repository.getPack(packId) as StickerResult.Success).data
+        assertTrue("Pack should report pending changes after reorder", domainPack.hasPendingChanges)
 
         val sortedIds = updatedPack.stickers.sortedBy { it.sortOrder }.map { it.id }
         assertEquals(listOf("s3", "s1", "s2"), sortedIds)
@@ -1135,7 +1141,9 @@ class DefaultStickerPackRepositoryTest {
             trayImageRelativePath = "sticker_packs/$packId/tray_icon.png",
             isAnimated = false,
             isWhitelisted = true,
-            createdAt = 1000L
+            createdAt = 1000L,
+            imageDataVersion = 1L,
+            lastSyncedVersion = 1L
         )
         val stickers = listOf(
             StickerEntity("s1", packId, "e1", "Red", "sticker_packs/$packId/${s1File.name}", listOf("??"), s1File.length(), 0),
@@ -1148,7 +1156,11 @@ class DefaultStickerPackRepositoryTest {
         assertTrue("Expected Success, got $result", result is StickerResult.Success)
 
         val updatedPack = packDao.getPackByIdentifier(packId)!!
-        assertFalse(updatedPack.pack.isWhitelisted)
+        assertTrue(updatedPack.pack.isWhitelisted)
+        assertEquals(2L, updatedPack.pack.imageDataVersion)
+        assertEquals(1L, updatedPack.pack.lastSyncedVersion)
+        val domainPack = (repository.getPack(packId) as StickerResult.Success).data
+        assertTrue(domainPack.hasPendingChanges)
         assertEquals(listOf("s2", "s1", "s3"), updatedPack.stickers.sortedBy { it.sortOrder }.map { it.id })
 
         val regeneratedTray = BitmapFactory.decodeFile(trayFile.absolutePath)

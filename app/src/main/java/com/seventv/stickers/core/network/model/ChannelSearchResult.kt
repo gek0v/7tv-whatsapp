@@ -19,5 +19,6 @@ data class ChannelSearchResult(
     val username: String,
     val avatarUrl: String? = null,
     val availableSets: List<ChannelEmoteSetSummary>,
-    val activeSet: SevenTvEmoteSet
+    val activeSet: SevenTvEmoteSet,
+    val twitchId: String? = null
 )

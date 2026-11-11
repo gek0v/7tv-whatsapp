@@ -452,6 +452,21 @@ class StickerDatabaseTest {
                         """.trimIndent()
                     )
                     db.execSQL(
+                        """
+                        CREATE TABLE IF NOT EXISTS stickers (
+                            id TEXT NOT NULL PRIMARY KEY,
+                            packIdentifier TEXT NOT NULL,
+                            emoteId TEXT NOT NULL,
+                            emoteName TEXT NOT NULL,
+                            relativeFilePath TEXT NOT NULL,
+                            emojis TEXT NOT NULL,
+                            fileLength INTEGER NOT NULL,
+                            sortOrder INTEGER NOT NULL,
+                            FOREIGN KEY(packIdentifier) REFERENCES sticker_packs(identifier) ON UPDATE NO ACTION ON DELETE CASCADE
+                        )
+                        """.trimIndent()
+                    )
+                    db.execSQL(
                         "INSERT INTO sticker_packs VALUES ('wl-pack', 'WL', '7TV', 't.png', 0, 1, 1000, NULL, NULL)"
                     )
                     db.execSQL(

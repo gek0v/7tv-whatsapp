@@ -1,7 +1,9 @@
 package com.seventv.stickers.ui.explore
 
 import com.seventv.stickers.core.domain.model.StickerPack
+import com.seventv.stickers.core.network.model.EmoteProvider
 import com.seventv.stickers.core.network.model.SevenTvEmote
+import com.seventv.stickers.ui.channel.ChannelProviderFilter
 
 enum class EmoteFilter {
     ALL,
@@ -12,7 +14,10 @@ enum class EmoteFilter {
 sealed interface SearchResultsState {
     data object Idle : SearchResultsState
     data object Loading : SearchResultsState
-    data class Success(val emotes: List<SevenTvEmote>) : SearchResultsState
+    data class Success(
+        val emotes: List<SevenTvEmote>,
+        val emotesByProvider: Map<EmoteProvider, List<SevenTvEmote>> = emptyMap()
+    ) : SearchResultsState
     data class Empty(val query: String) : SearchResultsState
     data class Error(val message: String) : SearchResultsState
 }
@@ -32,6 +37,7 @@ enum class ExploreCategory(val apiValue: String, val label: String) {
 data class ExploreUiState(
     val query: String = "",
     val activeFilter: EmoteFilter = EmoteFilter.ALL,
+    val activeProviderFilter: ChannelProviderFilter = ChannelProviderFilter.ALL,
     val selectedCategory: ExploreCategory = ExploreCategory.TRENDING,
     val searchResults: SearchResultsState = SearchResultsState.Idle,
     val draftEmotes: List<SevenTvEmote> = emptyList(),
@@ -51,13 +57,20 @@ data class ExploreUiState(
     val filteredEmotes: List<SevenTvEmote>
         get() {
             val all = when (val res = searchResults) {
-                is SearchResultsState.Success -> res.emotes.distinctBy { it.id }
+                is SearchResultsState.Success -> res.emotes.distinctBy { "${it.provider.name}:${it.id}" }
                 else -> emptyList()
             }
+            val providerFiltered = when (val pFilter = activeProviderFilter) {
+                ChannelProviderFilter.ALL -> all
+                else -> {
+                    val target = pFilter.provider
+                    if (target != null) all.filter { it.provider == target } else all
+                }
+            }
             return when (activeFilter) {
-                EmoteFilter.ALL -> all
-                EmoteFilter.ANIMATED -> all.filter { it.isAnimated }
-                EmoteFilter.STATIC -> all.filter { !it.isAnimated }
+                EmoteFilter.ALL -> providerFiltered
+                EmoteFilter.ANIMATED -> providerFiltered.filter { it.isAnimated }
+                EmoteFilter.STATIC -> providerFiltered.filter { !it.isAnimated }
             }
         }
 
