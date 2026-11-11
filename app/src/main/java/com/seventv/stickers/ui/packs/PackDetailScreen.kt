@@ -89,6 +89,7 @@ import coil.request.ImageRequest
 import com.seventv.stickers.SevenTvApplication
 import com.seventv.stickers.core.common.result.StickerResult
 import com.seventv.stickers.core.domain.model.PackSticker
+import com.seventv.stickers.ui.components.EmoteCardDefaults
 import com.seventv.stickers.ui.components.ChatSimulatorBackground
 import com.seventv.stickers.ui.components.ChatSimulatorMode
 import com.seventv.stickers.ui.components.DraftBottomSheetDefaults
@@ -1125,6 +1126,24 @@ private fun PackStickerCell(
                         fontWeight = FontWeight.Bold,
                         color = SunsetYellow,
                         fontSize = 9.sp,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+                }
+            } else {
+                val providerColor = remember(sticker.provider) {
+                    EmoteCardDefaults.providerColor(sticker.provider)
+                }
+                Surface(
+                    shape = RoundedCornerShape(topStart = 16.dp, bottomEnd = 8.dp),
+                    color = Color(0xB80F081D),
+                    border = BorderStroke(0.5.dp, providerColor.copy(alpha = 0.7f)),
+                    modifier = Modifier.align(Alignment.TopStart)
+                ) {
+                    Text(
+                        text = sticker.provider.displayName,
+                        fontSize = 8.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = providerColor,
                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                     )
                 }

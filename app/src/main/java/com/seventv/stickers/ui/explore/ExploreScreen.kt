@@ -57,7 +57,14 @@ import com.seventv.stickers.ui.components.SevenTvSearchBar
 import com.seventv.stickers.ui.components.SevenTvSearchBarDefaults
 import kotlinx.coroutines.launch
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.graphics.Color
+import com.seventv.stickers.ui.channel.ChannelProviderFilter
+import com.seventv.stickers.ui.components.EmoteCardDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.foundation.layout.statusBars
@@ -240,6 +247,39 @@ fun ExploreScreen(
                     Spacer(modifier = Modifier.height(8.dp))
                 }
 
+                // Provider filter chips (Todos, 7TV, BetterTTV, FrankerFaceZ, Twitch)
+                val successResults = uiState.searchResults as? SearchResultsState.Success
+                if (successResults != null && successResults.emotesByProvider.size > 1) {
+                    LazyRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        contentPadding = PaddingValues(vertical = 2.dp)
+                    ) {
+                        items(ChannelProviderFilter.entries) { filter ->
+                            val isSelected = uiState.activeProviderFilter == filter
+                            val badgeColor = filter.provider?.let { EmoteCardDefaults.providerColor(it) }
+                                ?: com.seventv.stickers.ui.theme.ElectricCyan
+                            FilterChip(
+                                selected = isSelected,
+                                onClick = { viewModel.onProviderFilterSelected(filter) },
+                                label = { Text(filter.displayName) },
+                                shape = RoundedCornerShape(16.dp),
+                                border = BorderStroke(
+                                    1.dp,
+                                    if (isSelected) badgeColor else Color(0x35FFFFFF)
+                                ),
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = badgeColor.copy(alpha = 0.25f),
+                                    selectedLabelColor = badgeColor,
+                                    containerColor = com.seventv.stickers.ui.theme.GlassSurfaceDark,
+                                    labelColor = com.seventv.stickers.ui.theme.DarkOnSurfaceVariant
+                                )
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
+                }
+
                 // Results / Content View
                 Box(
                     modifier = Modifier
@@ -366,7 +406,7 @@ fun ExploreScreen(
                                 ) {
                                     items(
                                         items = emotes,
-                                        key = { it.id },
+                                        key = { "${it.provider.name}:${it.id}" },
                                         contentType = { "emote" }
                                     ) { emote ->
                                         val isInDraft = uiState.draftEmotes.any { it.id == emote.id }
