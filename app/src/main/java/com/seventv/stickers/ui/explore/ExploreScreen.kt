@@ -54,7 +54,9 @@ import com.seventv.stickers.ui.components.DraftBottomSheet
 import com.seventv.stickers.ui.components.EmoteCard
 import com.seventv.stickers.ui.components.EmoteFullscreenViewer
 import com.seventv.stickers.ui.components.SevenTvSearchBar
+import com.seventv.stickers.core.updater.AppUpdateManager
 import com.seventv.stickers.ui.components.SevenTvSearchBarDefaults
+import com.seventv.stickers.ui.components.UpdateNotificationBanner
 import kotlinx.coroutines.launch
 
 import androidx.compose.foundation.layout.Row
@@ -66,6 +68,7 @@ import androidx.compose.foundation.layout.statusBars
 fun ExploreScreen(
     viewModel: ExploreViewModel,
     onNavigateToPacks: () -> Unit = {},
+    updateManager: AppUpdateManager? = null,
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -162,6 +165,13 @@ fun ExploreScreen(
                     .padding(horizontal = 16.dp)
             ) {
                 Spacer(modifier = Modifier.height(16.dp))
+
+                if (updateManager != null) {
+                    UpdateNotificationBanner(
+                        updateManager = updateManager,
+                        modifier = Modifier.padding(bottom = 12.dp)
+                    )
+                }
 
                 // M3 Expressive SearchBar with filter chips
                 val selectedFilterText = when (uiState.activeFilter) {

@@ -36,6 +36,14 @@ import com.seventv.stickers.ui.explore.ExploreViewModel
 import com.seventv.stickers.ui.packs.PackDetailScreen
 import com.seventv.stickers.ui.packs.PacksScreen
 import com.seventv.stickers.ui.packs.PacksViewModel
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import com.seventv.stickers.ui.components.UpdateChangelogDialog
+import com.seventv.stickers.ui.components.UpdateSettingsDialog
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Box
@@ -76,6 +84,24 @@ fun AppNavigation(
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
     val isBottomBarVisible = bottomNavItems.any { it.route == currentRoute }
+    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+
+    LaunchedEffect(Unit) {
+        container.appUpdateManager.checkForUpdatesIfNeeded()
+    }
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                container.appUpdateManager.onResumeCheckInstallPermission(context)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
 
     Scaffold(
         bottomBar = {
@@ -168,6 +194,7 @@ fun AppNavigation(
                 )
                 ExploreScreen(
                     viewModel = exploreViewModel,
+                    updateManager = container.appUpdateManager,
                     onNavigateToPacks = {
                         navController.navigate(Screen.Packs.route) {
                             popUpTo(navController.graph.findStartDestination().id) {
@@ -209,6 +236,7 @@ fun AppNavigation(
                 )
                 PacksScreen(
                     viewModel = packsViewModel,
+                    updateManager = container.appUpdateManager,
                     onNavigateToPackDetail = { packId ->
                         navController.navigate(Screen.PackDetail.createRoute(packId))
                     },
@@ -245,5 +273,7 @@ fun AppNavigation(
                 )
             }
         }
+        UpdateChangelogDialog(updateManager = container.appUpdateManager)
+        UpdateSettingsDialog(updateManager = container.appUpdateManager)
     }
 }

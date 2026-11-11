@@ -45,6 +45,7 @@ class AppContainerTest {
         assertNotNull("sevenTvRepository must not be null", container.sevenTvRepository)
         assertNotNull("stickerPackRepository must not be null", container.stickerPackRepository)
         assertNotNull("packImportManager must not be null", container.packImportManager)
+        assertNotNull("appUpdateManager must not be null", container.appUpdateManager)
 
         assertTrue(container.storageManager is DefaultStickerStorageManager)
         assertTrue(container.sevenTvRepository is DefaultSevenTvRepository)
@@ -56,6 +57,7 @@ class AppContainerTest {
         assertSame(container.sevenTvRepository, container.sevenTvRepository)
         assertSame(container.stickerPackRepository, container.stickerPackRepository)
         assertSame(container.packImportManager, container.packImportManager)
+        assertSame(container.appUpdateManager, container.appUpdateManager)
     }
 
     @Test
@@ -68,5 +70,6 @@ class AppContainerTest {
         assertNotNull(application.appContainer.sevenTvRepository)
         assertNotNull(application.appContainer.stickerPackRepository)
         assertNotNull(application.appContainer.packImportManager)
+        assertNotNull(application.appContainer.appUpdateManager)
     }
 }

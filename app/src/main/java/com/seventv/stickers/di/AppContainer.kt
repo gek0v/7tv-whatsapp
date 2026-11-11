@@ -4,6 +4,11 @@ import android.content.Context
 import com.seventv.stickers.core.media.DefaultStickerMediaPipeline
 import com.seventv.stickers.core.network.api.SevenTvNetworkFactory
 import com.seventv.stickers.core.network.downloader.DefaultEmoteDownloader
+import com.seventv.stickers.core.updater.AppUpdateChecker
+import com.seventv.stickers.core.updater.AppUpdateManager
+import com.seventv.stickers.core.updater.DataStoreUpdatePreferencesRepository
+import com.seventv.stickers.core.updater.GitHubReleaseService
+import com.seventv.stickers.core.updater.OkHttpChecksumAssetFetcher
 import com.seventv.stickers.data.local.AppDatabase
 import com.seventv.stickers.data.local.storage.DefaultStickerStorageManager
 import com.seventv.stickers.data.local.storage.StickerStorageManager
@@ -20,6 +25,7 @@ interface AppContainer {
     val database: AppDatabase
     val packImportManager: com.seventv.stickers.core.domain.manager.PackImportManager
     val stickerShareManager: com.seventv.stickers.core.domain.manager.StickerShareManager
+    val appUpdateManager: AppUpdateManager
 }
 
 class DefaultAppContainer(private val context: Context) : AppContainer {
@@ -70,6 +76,34 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
             context = context,
             emoteStickerBridge = emoteStickerBridge,
             sevenTvRepository = sevenTvRepository
+        )
+    }
+
+    private val gitHubReleaseService by lazy {
+        GitHubReleaseService.create()
+    }
+
+    private val updatePreferences by lazy {
+        DataStoreUpdatePreferencesRepository(context)
+    }
+
+    private val checksumAssetFetcher by lazy {
+        OkHttpChecksumAssetFetcher(GitHubReleaseService.createOkHttpClient())
+    }
+
+    private val appUpdateChecker by lazy {
+        AppUpdateChecker(
+            releaseService = gitHubReleaseService,
+            preferences = updatePreferences,
+            checksumAssetFetcher = checksumAssetFetcher
+        )
+    }
+
+    override val appUpdateManager: AppUpdateManager by lazy {
+        AppUpdateManager(
+            context = context,
+            checker = appUpdateChecker,
+            preferences = updatePreferences
         )
     }
 }
