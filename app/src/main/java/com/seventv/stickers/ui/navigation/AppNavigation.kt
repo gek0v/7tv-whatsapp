@@ -30,7 +30,9 @@ import androidx.navigation.navArgument
 import com.seventv.stickers.di.AppContainer
 import com.seventv.stickers.ui.channel.ChannelScreen
 import com.seventv.stickers.ui.channel.ChannelViewModel
+import com.seventv.stickers.ui.components.EmotePeekHost
 import com.seventv.stickers.ui.components.ImportProgressBanner
+import com.seventv.stickers.ui.components.rememberEmotePeekState
 import com.seventv.stickers.ui.explore.ExploreScreen
 import com.seventv.stickers.ui.explore.ExploreViewModel
 import com.seventv.stickers.ui.packs.PackDetailScreen
@@ -76,7 +78,9 @@ fun AppNavigation(
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
     val isBottomBarVisible = bottomNavItems.any { it.route == currentRoute }
+    val peekState = rememberEmotePeekState()
 
+    EmotePeekHost(state = peekState, modifier = modifier) {
     Scaffold(
         bottomBar = {
             Column {
@@ -151,8 +155,7 @@ fun AppNavigation(
                 }
             }
         },
-        contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        modifier = modifier
+        contentWindowInsets = WindowInsets(0, 0, 0, 0)
     ) { innerPadding ->
         NavHost(
             navController = navController,
@@ -245,5 +248,6 @@ fun AppNavigation(
                 )
             }
         }
+    }
     }
 }

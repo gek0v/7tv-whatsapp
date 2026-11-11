@@ -1,4 +1,4 @@
-package com.seventv.stickers.ui.components
+﻿package com.seventv.stickers.ui.components
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
@@ -38,6 +38,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -50,7 +52,6 @@ import com.seventv.stickers.ui.theme.DarkOnSurfaceVariant
 import com.seventv.stickers.ui.theme.ElectricCyan
 import com.seventv.stickers.ui.theme.GlassBorder
 import com.seventv.stickers.ui.theme.GlassSurfaceCard
-import com.seventv.stickers.ui.theme.NeonFuchsia
 import com.seventv.stickers.ui.theme.WhatsAppGlow
 
 object EmoteCardDefaults {
@@ -62,7 +63,8 @@ object EmoteCardDefaults {
 
 /**
  * Vaporwave + Glassmorphism grid card displaying an individual 7TV emote thumbnail
- * with translucent glass surface, subtle glowing border, frosted badge, and neon draft toggle.
+ * with translucent glass surface, subtle glowing border, frosted badge, neon draft toggle,
+ * and optional peek & pop gesture preview.
  */
 @Composable
 fun EmoteCard(
@@ -71,13 +73,27 @@ fun EmoteCard(
     onToggleDraft: () -> Unit,
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,
-    onPreviewClick: (() -> Unit)? = null
+    onPreviewClick: (() -> Unit)? = null,
+    onPeekStart: ((Rect) -> Unit)? = null,
+    onPeekMove: ((Offset) -> Unit)? = null,
+    onPeekRelease: (() -> Unit)? = null
 ) {
-    val cardModifier = if (onClick != null) {
-        modifier.clickable(onClick = onClick)
+    val peekModifier = if (onPeekStart != null && onPeekMove != null && onPeekRelease != null) {
+        Modifier.emotePeekGesture(
+            key = emote.id,
+            onPeekStart = onPeekStart,
+            onPeekMove = onPeekMove,
+            onPeekRelease = onPeekRelease
+        )
     } else {
-        modifier
+        Modifier
     }
+
+    val cardModifier = modifier
+        .then(peekModifier)
+        .let { base ->
+            if (onClick != null) base.clickable(onClick = onClick) else base
+        }
 
     Card(
         modifier = cardModifier,
@@ -113,6 +129,7 @@ fun EmoteCard(
                     model = ImageRequest.Builder(LocalContext.current)
                         .data(emote.previewUrl)
                         .size(128, 128)
+                        .memoryCacheKey(CoilSetup.emotePreviewCacheKey(emote.id))
                         .crossfade(true)
                         .build(),
                     contentDescription = emote.name,
@@ -188,7 +205,7 @@ fun EmoteCard(
                         ) { inDraft ->
                             Icon(
                                 imageVector = if (inDraft) Icons.Default.Check else Icons.Default.Add,
-                                contentDescription = if (inDraft) "Quitar del borrador" else "Añadir al borrador",
+                                contentDescription = if (inDraft) "Quitar del borrador" else "AÃ±adir al borrador",
                                 tint = tintColor,
                                 modifier = Modifier.size(18.dp)
                             )

@@ -1,4 +1,4 @@
-package com.seventv.stickers.ui.components
+﻿package com.seventv.stickers.ui.components
 
 import android.content.Context
 import android.os.Build
@@ -12,6 +12,9 @@ import coil.memory.MemoryCache
  * Global Coil setup for animated WebP and GIF decoding.
  */
 object CoilSetup {
+    fun emotePreviewCacheKey(emoteId: String): String = "emote_preview_$emoteId"
+    fun packStickerPreviewCacheKey(stickerId: String): String = "pack_sticker_preview_$stickerId"
+
     fun createImageLoader(context: Context): ImageLoader {
         return ImageLoader.Builder(context)
             .allowHardware(true)
