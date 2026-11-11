@@ -367,12 +367,13 @@ fun ChannelScreen(
                             currentSetName = load.emoteSet.name,
                             isLoadingSet = load.isLoadingSet,
                             totalEmotes = load.allEmotes.size,
-                            filteredEmotes = viewModel.getFilteredEmotes(),
+                            filteredEmotes = state.filteredEmotes,
                             selectedEmoteIds = state.selectedEmoteIds,
                             activeFilter = state.activeFilter,
                             activeProviderFilter = state.activeProviderFilter,
                             emotesByProvider = load.emotesByProvider,
                             draftEmotes = state.draftEmotes,
+                            draftEmoteIds = state.draftEmoteIds,
                             onFilterSelected = viewModel::onFilterSelected,
                             onProviderFilterSelected = viewModel::onProviderFilterSelected,
                             onSelectEmoteSet = viewModel::onSelectEmoteSet,
@@ -385,7 +386,7 @@ fun ChannelScreen(
                             onPreviewEmote = { previewEmote = it },
                             isPeekActive = peekState.isActive,
                             onPeekEmote = { emote, bounds ->
-                                val isInDraft = state.draftEmotes.any { it.id == emote.id }
+                                val isInDraft = emote.id in state.draftEmoteIds
                                 peekState.show(
                                     EmotePeekPayload(
                                         id = emote.id,
@@ -512,7 +513,7 @@ fun ChannelScreen(
             // Fullscreen Emote Viewer
             if (previewEmote != null) {
                 val emote = previewEmote!!
-                val isInDraft = state.draftEmotes.any { it.id == emote.id }
+                val isInDraft = emote.id in state.draftEmoteIds
                 EmoteFullscreenViewer(
                     name = emote.name,
                     isAnimated = emote.isAnimated,
@@ -659,6 +660,7 @@ private fun ChannelContent(
     activeProviderFilter: ChannelProviderFilter,
     emotesByProvider: Map<com.seventv.stickers.core.network.model.EmoteProvider, List<SevenTvEmote>>,
     draftEmotes: List<SevenTvEmote>,
+    draftEmoteIds: Set<String> = emptySet(),
     onFilterSelected: (ChannelFilter) -> Unit,
     onProviderFilterSelected: (ChannelProviderFilter) -> Unit,
     onSelectEmoteSet: (String) -> Unit,
@@ -1025,7 +1027,7 @@ private fun ChannelContent(
                 ) {
                     items(filteredEmotes, key = { "${it.provider.name}:${it.id}" }) { emote ->
                         val isSelected = selectedEmoteIds.contains(emote.id)
-                        val isInDraft = draftEmotes.any { it.id == emote.id }
+                        val isInDraft = emote.id in draftEmoteIds
                         EmoteCard(
                             emote = emote,
                             isInDraft = isInDraft,

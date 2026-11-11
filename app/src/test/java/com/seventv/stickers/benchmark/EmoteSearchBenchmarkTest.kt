@@ -297,9 +297,10 @@ class EmoteSearchBenchmarkTest {
                         activeProviderFilter = providerFilter
                     )
                     val filtered = updatedState.filteredEmotes
+                    val draftIds = updatedState.draftEmoteIds
                     var draftedCount = 0
                     for (emote in filtered) {
-                        if (updatedState.draftEmotes.any { it.id == emote.id }) {
+                        if (emote.id in draftIds) {
                             draftedCount++
                         }
                     }

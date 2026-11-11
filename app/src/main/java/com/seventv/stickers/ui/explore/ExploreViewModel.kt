@@ -1,4 +1,4 @@
-﻿package com.seventv.stickers.ui.explore
+package com.seventv.stickers.ui.explore
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -86,7 +86,7 @@ class ExploreViewModel(
                                 receivedNonEmpty = true
                                 _uiState.update { state ->
                                     state.copy(
-                                        searchResults = SearchResultsState.Success(interleaved, mappedByProvider),
+                                        searchResults = SearchResultsState.Success(interleaved, mappedByProvider, isDeduplicated = true),
                                         hasMorePages = mappedByProvider.values.any { it.size >= 50 }
                                     )
                                 }
@@ -208,7 +208,7 @@ class ExploreViewModel(
                                 receivedNonEmpty = true
                                 _uiState.update { state ->
                                     state.copy(
-                                        searchResults = SearchResultsState.Success(interleaved, mappedByProvider),
+                                        searchResults = SearchResultsState.Success(interleaved, mappedByProvider, isDeduplicated = true),
                                         hasMorePages = mappedByProvider.values.any { it.size >= 50 }
                                     )
                                 }
@@ -295,7 +295,7 @@ class ExploreViewModel(
                         val mappedByProvider = result.data.mapValues { (_, list) -> list.map { it.toSevenTvEmote() } }
                         val newEmotes = interleaveByProvider(mappedByProvider)
                         _uiState.update { state ->
-                            val combined = (currentResults.emotes + newEmotes).distinctBy { "${it.provider.name}:${it.id}" }
+                            val combined = (currentResults.emotes + newEmotes).distinctBy { it.provider to it.id }
                             val mergedMap = combined.groupBy { it.provider }
                             state.copy(
                                 searchResults = SearchResultsState.Success(combined, mergedMap),
@@ -317,7 +317,7 @@ class ExploreViewModel(
                     is StickerResult.Success -> {
                         val newEmotes = result.data
                         _uiState.update { state ->
-                            val combined = (currentResults.emotes + newEmotes).distinctBy { "${it.provider.name}:${it.id}" }
+                            val combined = (currentResults.emotes + newEmotes).distinctBy { it.provider to it.id }
                             state.copy(
                                 searchResults = SearchResultsState.Success(combined, combined.groupBy { it.provider }),
                                 currentPage = nextPage,
@@ -369,18 +369,23 @@ class ExploreViewModel(
         val queues = EmoteProvider.entries.mapNotNull { provider ->
             map[provider]?.takeIf { it.isNotEmpty() }?.iterator()
         }
-        val result = mutableListOf<SevenTvEmote>()
+        val totalSize = map.values.sumOf { it.size }
+        val result = ArrayList<SevenTvEmote>(totalSize)
+        val seen = HashSet<Pair<EmoteProvider, String>>(totalSize * 2)
         var addedAny: Boolean
         do {
             addedAny = false
             for (iterator in queues) {
                 if (iterator.hasNext()) {
-                    result.add(iterator.next())
+                    val item = iterator.next()
+                    if (seen.add(item.provider to item.id)) {
+                        result.add(item)
+                    }
                     addedAny = true
                 }
             }
         } while (addedAny)
-        return result.distinctBy { "${it.provider.name}:${it.id}" }
+        return result
     }
 
     /**

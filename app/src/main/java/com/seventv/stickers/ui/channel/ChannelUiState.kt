@@ -6,6 +6,7 @@ import com.seventv.stickers.core.network.model.ChannelEmoteSetSummary
 import com.seventv.stickers.core.network.model.EmoteProvider
 import com.seventv.stickers.core.network.model.SevenTvEmote
 import com.seventv.stickers.core.network.model.SevenTvEmoteSet
+import java.util.concurrent.ConcurrentHashMap
 
 enum class ChannelFilter {
     ALL,
@@ -34,7 +35,32 @@ sealed interface ChannelLoadState {
         val allEmotes: List<SevenTvEmote>,
         val emotesByProvider: Map<EmoteProvider, List<SevenTvEmote>> = emptyMap(),
         val isLoadingSet: Boolean = false
-    ) : ChannelLoadState
+    ) : ChannelLoadState {
+        @Transient
+        private val filterCache = ConcurrentHashMap<Int, List<SevenTvEmote>>()
+
+        fun getFiltered(providerFilter: ChannelProviderFilter, filter: ChannelFilter): List<SevenTvEmote> {
+            val key = (providerFilter.ordinal shl 4) or filter.ordinal
+            return filterCache.computeIfAbsent(key) {
+                val providerFiltered = when (providerFilter) {
+                    ChannelProviderFilter.ALL -> allEmotes
+                    else -> {
+                        val p = providerFilter.provider
+                        if (p != null) {
+                            emotesByProvider[p] ?: allEmotes.filter { it.provider == p }
+                        } else {
+                            allEmotes
+                        }
+                    }
+                }
+                when (filter) {
+                    ChannelFilter.ALL -> providerFiltered
+                    ChannelFilter.ANIMATED -> providerFiltered.filter { it.isAnimated }
+                    ChannelFilter.STATIC -> providerFiltered.filter { !it.isAnimated }
+                }
+            }
+        }
+    }
     data class Error(val message: String) : ChannelLoadState
 }
 
@@ -70,4 +96,20 @@ data class ChannelUiState(
     val isAddingToPack: Boolean = false,
     val addToPackSuccessMessage: String? = null,
     val addToPackErrorMessage: String? = null
-)
+) {
+    val draftEmoteIds: Set<String> by lazy(LazyThreadSafetyMode.NONE) {
+        if (draftEmotes.isEmpty()) emptySet()
+        else {
+            val set = HashSet<String>(draftEmotes.size * 2)
+            for (i in draftEmotes.indices) {
+                set.add(draftEmotes[i].id)
+            }
+            set
+        }
+    }
+
+    val filteredEmotes: List<SevenTvEmote>
+        get() = (loadState as? ChannelLoadState.Success)
+            ?.getFiltered(activeProviderFilter, activeFilter)
+            ?: emptyList()
+}

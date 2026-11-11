@@ -460,7 +460,7 @@ fun ExploreScreen(
                                         key = { "${it.provider.name}:${it.id}" },
                                         contentType = { "emote" }
                                     ) { emote ->
-                                        val isInDraft = uiState.draftEmotes.any { it.id == emote.id }
+                                        val isInDraft = emote.id in uiState.draftEmoteIds
                                         EmoteCard(
                                             emote = emote,
                                             isInDraft = isInDraft,
@@ -657,7 +657,7 @@ fun ExploreScreen(
             // Fullscreen Emote Viewer
             if (previewEmote != null) {
                 val emote = previewEmote!!
-                val isInDraft = uiState.draftEmotes.any { it.id == emote.id }
+                val isInDraft = emote.id in uiState.draftEmoteIds
                 EmoteFullscreenViewer(
                     name = emote.name,
                     isAnimated = emote.isAnimated,

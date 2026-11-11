@@ -279,26 +279,7 @@ class ChannelViewModel(
     }
 
     fun getFilteredEmotes(): List<SevenTvEmote> {
-        val state = _uiState.value
-        val successState = state.loadState as? ChannelLoadState.Success ?: return emptyList()
-
-        val providerFiltered = when (val filter = state.activeProviderFilter) {
-            ChannelProviderFilter.ALL -> successState.allEmotes
-            else -> {
-                val p = filter.provider
-                if (p != null) {
-                    successState.emotesByProvider[p] ?: successState.allEmotes.filter { it.provider == p }
-                } else {
-                    successState.allEmotes
-                }
-            }
-        }
-
-        return when (state.activeFilter) {
-            ChannelFilter.ALL -> providerFiltered
-            ChannelFilter.ANIMATED -> providerFiltered.filter { it.isAnimated }
-            ChannelFilter.STATIC -> providerFiltered.filter { !it.isAnimated }
-        }
+        return _uiState.value.filteredEmotes
     }
 
     fun onStartChannelImport(useOnlySelected: Boolean = false) {
