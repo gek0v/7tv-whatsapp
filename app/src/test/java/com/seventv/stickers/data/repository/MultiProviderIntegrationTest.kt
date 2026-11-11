@@ -355,6 +355,8 @@ class MultiProviderIntegrationTest {
         override suspend fun deleteStickerFromPack(packIdentifier: String, stickerId: String) = StickerResult.Success(Unit)
         override suspend fun addEmotesToPack(packIdentifier: String, emotes: List<SevenTvEmote>) = StickerResult.Success(Unit)
         override suspend fun updateStickerEmojis(stickerId: String, emojis: List<String>) = StickerResult.Success(Unit)
+        override suspend fun reorderStickers(packIdentifier: String, orderedStickerIds: List<String>) = StickerResult.Success(Unit)
+        override suspend fun setStickerAsTrayIcon(packIdentifier: String, stickerId: String) = StickerResult.Success(Unit)
         override suspend fun updatePackWhitelisted(identifier: String, isWhitelisted: Boolean) = StickerResult.Success(Unit)
         override suspend fun syncWhitelistStatus(context: android.content.Context, packIdentifier: String) = StickerResult.Success(false)
         override suspend fun checkForPackUpdates(packIdentifier: String) = StickerResult.Success(emptyList<SevenTvEmote>())
