@@ -97,7 +97,7 @@ fun AppNavigation(
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
-                container.appUpdateManager.onResumeCheckInstallPermission(context)
+                container.appUpdateManager.onAppResumed(context)
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)

@@ -1,6 +1,9 @@
 package com.seventv.stickers.di
 
 import android.content.Context
+import android.content.pm.PackageManager
+import android.os.Build
+import com.seventv.stickers.BuildConfig
 import com.seventv.stickers.core.media.DefaultStickerMediaPipeline
 import com.seventv.stickers.core.network.api.SevenTvNetworkFactory
 import com.seventv.stickers.core.network.downloader.DefaultEmoteDownloader
@@ -154,11 +157,27 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
         OkHttpChecksumAssetFetcher(GitHubReleaseService.createOkHttpClient())
     }
 
+    private fun resolveInstalledVersionName(): String {
+        return runCatching {
+            val packageInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                context.packageManager.getPackageInfo(
+                    context.packageName,
+                    PackageManager.PackageInfoFlags.of(0L)
+                )
+            } else {
+                @Suppress("DEPRECATION")
+                context.packageManager.getPackageInfo(context.packageName, 0)
+            }
+            packageInfo.versionName?.takeIf { it.isNotBlank() }
+        }.getOrNull() ?: BuildConfig.VERSION_NAME
+    }
+
     private val appUpdateChecker by lazy {
         AppUpdateChecker(
             releaseService = gitHubReleaseService,
             preferences = updatePreferences,
-            checksumAssetFetcher = checksumAssetFetcher
+            checksumAssetFetcher = checksumAssetFetcher,
+            currentVersionProvider = ::resolveInstalledVersionName
         )
     }
 
@@ -166,7 +185,8 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
         AppUpdateManager(
             context = context,
             checker = appUpdateChecker,
-            preferences = updatePreferences
+            preferences = updatePreferences,
+            currentVersionProvider = ::resolveInstalledVersionName
         )
     }
 }
