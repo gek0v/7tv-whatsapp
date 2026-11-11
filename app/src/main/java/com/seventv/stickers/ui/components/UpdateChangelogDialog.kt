@@ -46,6 +46,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.seventv.stickers.core.updater.AppUpdateInfo
 import com.seventv.stickers.core.updater.AppUpdateManager
+import com.seventv.stickers.core.updater.SemVer
 import com.seventv.stickers.core.updater.UpdateStatus
 import com.seventv.stickers.ui.theme.DarkOnSurface
 import com.seventv.stickers.ui.theme.DarkOnSurfaceVariant
@@ -76,6 +77,10 @@ fun UpdateChangelogDialog(
         is UpdateStatus.AwaitingInstallPermission -> status.info
         is UpdateStatus.Error -> status.lastAvailableInfo ?: return
         else -> return
+    }
+
+    if (!SemVer.isUpdateAvailable(state.currentVersion, info.latestVersion)) {
+        return
     }
 
     Dialog(onDismissRequest = { updateManager.closeChangelogDialog() }) {

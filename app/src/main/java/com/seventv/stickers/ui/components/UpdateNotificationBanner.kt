@@ -42,6 +42,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.seventv.stickers.core.updater.AppUpdateManager
+import com.seventv.stickers.core.updater.SemVer
 import com.seventv.stickers.core.updater.UpdateStatus
 import com.seventv.stickers.ui.theme.DarkOnSurface
 import com.seventv.stickers.ui.theme.DarkOnSurfaceVariant
@@ -61,12 +62,15 @@ fun UpdateNotificationBanner(
     val state by updateManager.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
-    val isVisible = !state.isBannerDismissedInSession && when (state.status) {
-        is UpdateStatus.Available,
-        is UpdateStatus.Downloading,
-        is UpdateStatus.ReadyToInstall,
-        is UpdateStatus.AwaitingInstallPermission -> true
-        is UpdateStatus.Error -> (state.status as UpdateStatus.Error).lastAvailableInfo != null
+    val isVisible = !state.isBannerDismissedInSession && when (val status = state.status) {
+        is UpdateStatus.Available -> SemVer.isUpdateAvailable(state.currentVersion, status.info.latestVersion)
+        is UpdateStatus.Downloading -> SemVer.isUpdateAvailable(state.currentVersion, status.info.latestVersion)
+        is UpdateStatus.ReadyToInstall -> SemVer.isUpdateAvailable(state.currentVersion, status.info.latestVersion)
+        is UpdateStatus.AwaitingInstallPermission -> SemVer.isUpdateAvailable(state.currentVersion, status.info.latestVersion)
+        is UpdateStatus.Error -> {
+            val lastInfo = status.lastAvailableInfo
+            lastInfo != null && SemVer.isUpdateAvailable(state.currentVersion, lastInfo.latestVersion)
+        }
         else -> false
     }
 

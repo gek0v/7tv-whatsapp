@@ -85,6 +85,7 @@ import androidx.compose.material3.Badge
 import androidx.compose.material3.IconButton
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.seventv.stickers.core.updater.AppUpdateManager
+import com.seventv.stickers.core.updater.SemVer
 import com.seventv.stickers.core.updater.UpdateStatus
 import com.seventv.stickers.ui.components.PackMenuAction
 import com.seventv.stickers.ui.components.UpdateNotificationBanner
@@ -239,8 +240,17 @@ fun PacksScreen(
                             }
                         }
                         if (updateManager != null) {
-                            val hasUpdateBadge = updateState?.status is UpdateStatus.Available ||
-                                updateState?.status is UpdateStatus.ReadyToInstall
+                            val hasUpdateBadge = when (val status = updateState?.status) {
+                                is UpdateStatus.Available -> SemVer.isUpdateAvailable(
+                                    updateState.currentVersion,
+                                    status.info.latestVersion
+                                )
+                                is UpdateStatus.ReadyToInstall -> SemVer.isUpdateAvailable(
+                                    updateState.currentVersion,
+                                    status.info.latestVersion
+                                )
+                                else -> false
+                            }
                             IconButton(onClick = { updateManager.openSettingsDialog() }) {
                                 BadgedBox(
                                     badge = {
