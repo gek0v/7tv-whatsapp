@@ -79,7 +79,16 @@ import com.seventv.stickers.core.domain.model.PackSticker
 import com.seventv.stickers.ui.components.EmoteFullscreenViewer
 import com.seventv.stickers.ui.components.EmoteFullscreenViewerDefaults
 import com.seventv.stickers.ui.components.PackHeroCard
+import androidx.compose.material.icons.filled.SystemUpdate
+import androidx.compose.material3.BadgedBox
+import androidx.compose.material3.Badge
+import androidx.compose.material3.IconButton
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.seventv.stickers.core.updater.AppUpdateManager
+import com.seventv.stickers.core.updater.UpdateStatus
 import com.seventv.stickers.ui.components.PackMenuAction
+import com.seventv.stickers.ui.components.UpdateNotificationBanner
+import com.seventv.stickers.ui.theme.SunsetYellow
 import com.seventv.stickers.whatsapp.WhatsAppIntentHelper
 import kotlinx.coroutines.launch
 import java.io.File
@@ -90,6 +99,7 @@ fun PacksScreen(
     viewModel: PacksViewModel,
     onNavigateToPackDetail: (String) -> Unit = {},
     onCreatePackClick: () -> Unit = {},
+    updateManager: AppUpdateManager? = null,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -171,6 +181,7 @@ fun PacksScreen(
     }
 
     val currentPacks = (state.loadState as? PacksLoadState.Success)?.packs.orEmpty()
+    val updateState = updateManager?.state?.collectAsStateWithLifecycle()?.value
 
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
@@ -217,13 +228,33 @@ fun PacksScreen(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
-                    } else if (currentPacks.isNotEmpty()) {
-                        TextButton(onClick = { viewModel.onToggleSelectionMode() }) {
-                            Text(
-                                text = "Seleccionar",
-                                color = MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.SemiBold
-                            )
+                    } else {
+                        if (currentPacks.isNotEmpty()) {
+                            TextButton(onClick = { viewModel.onToggleSelectionMode() }) {
+                                Text(
+                                    text = "Seleccionar",
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        }
+                        if (updateManager != null) {
+                            val hasUpdateBadge = updateState?.status is UpdateStatus.Available ||
+                                updateState?.status is UpdateStatus.ReadyToInstall
+                            IconButton(onClick = { updateManager.openSettingsDialog() }) {
+                                BadgedBox(
+                                    badge = {
+                                        if (hasUpdateBadge) {
+                                            Badge(containerColor = SunsetYellow)
+                                        }
+                                    }
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.SystemUpdate,
+                                        contentDescription = "Actualizaciones"
+                                    )
+                                }
+                            }
                         }
                     }
                 },
@@ -327,11 +358,22 @@ fun PacksScreen(
         containerColor = MaterialTheme.colorScheme.background,
         modifier = modifier.fillMaxSize()
     ) { innerPadding ->
-        Box(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
+            if (updateManager != null) {
+                UpdateNotificationBanner(
+                    updateManager = updateManager,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                )
+            }
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+            ) {
             when (val load = state.loadState) {
                 is PacksLoadState.Loading -> {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -495,6 +537,7 @@ fun PacksScreen(
                     }
                 }
             }
+        }
         }
     }
 
