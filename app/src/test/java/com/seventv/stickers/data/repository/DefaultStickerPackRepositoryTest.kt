@@ -412,7 +412,7 @@ class DefaultStickerPackRepositoryTest {
     }
 
     @Test
-    fun renamePackUpdatesNameAndResetsWhitelist() = runTest(testDispatcher) {
+    fun renamePackUpdatesNameAndIncrementsVersion() = runTest(testDispatcher) {
         val packIdentifier = "pack-rename-test"
         val packEntity = StickerPackEntity(
             identifier = packIdentifier,
@@ -421,7 +421,9 @@ class DefaultStickerPackRepositoryTest {
             trayImageRelativePath = "tray.webp",
             isAnimated = false,
             isWhitelisted = true,
-            createdAt = 1000L
+            createdAt = 1000L,
+            imageDataVersion = 1L,
+            lastSyncedVersion = 1L
         )
         packDao.insertPackWithStickers(packEntity, emptyList())
 
@@ -431,7 +433,12 @@ class DefaultStickerPackRepositoryTest {
         val updated = packDao.getPackByIdentifier(packIdentifier)
         assertNotNull(updated)
         assertEquals("New Brand Name", updated!!.pack.name)
-        assertFalse("Whitelist should be reset on edit", updated.pack.isWhitelisted)
+        assertTrue("Whitelist should stay true on edit", updated.pack.isWhitelisted)
+        assertEquals(2L, updated.pack.imageDataVersion)
+        assertEquals(1L, updated.pack.lastSyncedVersion)
+
+        val domain = (repository.getPack(packIdentifier) as StickerResult.Success).data
+        assertTrue("Pack should report pending changes", domain.hasPendingChanges)
     }
 
     @Test
@@ -462,7 +469,19 @@ class DefaultStickerPackRepositoryTest {
         val sFile = File(packDir, "sticker_${stickerId}.webp").apply { writeBytes(byteArrayOf(1, 2, 3)) }
         assertTrue(sFile.exists())
 
-        packDao.insertPack(StickerPackEntity(packId, "P", "Pub", "t.webp", false, true, 1L))
+        packDao.insertPack(
+            StickerPackEntity(
+                identifier = packId,
+                name = "P",
+                publisher = "Pub",
+                trayImageRelativePath = "t.webp",
+                isAnimated = false,
+                isWhitelisted = true,
+                createdAt = 1L,
+                imageDataVersion = 1L,
+                lastSyncedVersion = 1L
+            )
+        )
         stickerDao.insertSticker(StickerEntity(stickerId, packId, "e1", "Emote", "path.webp", listOf("💬"), 3L, 0))
 
         val result = repository.deleteStickerFromPack(packId, stickerId)
@@ -472,7 +491,12 @@ class DefaultStickerPackRepositoryTest {
         assertNotNull(updated)
         assertEquals(0, updated!!.stickers.size)
         assertFalse("File must be deleted", sFile.exists())
-        assertFalse("Whitelist should be reset", updated.pack.isWhitelisted)
+        assertTrue("Whitelist stays true so WhatsApp knows pack is installed", updated.pack.isWhitelisted)
+        assertEquals(2L, updated.pack.imageDataVersion)
+        assertEquals(1L, updated.pack.lastSyncedVersion)
+
+        val domain = (repository.getPack(packId) as StickerResult.Success).data
+        assertTrue("Pack should report pending changes after deleting sticker", domain.hasPendingChanges)
     }
 
     @Test
@@ -812,7 +836,9 @@ class DefaultStickerPackRepositoryTest {
             trayImageRelativePath = "tray.png",
             isAnimated = false,
             isWhitelisted = true,
-            createdAt = 1000L
+            createdAt = 1000L,
+            imageDataVersion = 1L,
+            lastSyncedVersion = 1L
         )
         val existingSticker = StickerEntity(
             id = "s0",
@@ -848,7 +874,11 @@ class DefaultStickerPackRepositoryTest {
         val updatedPack = packDao.getPackByIdentifier("add-pack-1")
         assertNotNull(updatedPack)
         assertEquals(6, updatedPack!!.stickers.size)
-        assertFalse("Pack whitelisted should be reset to false after adding emotes", updatedPack.pack.isWhitelisted)
+        assertTrue("Pack whitelisted should remain true after adding emotes", updatedPack.pack.isWhitelisted)
+        assertEquals(2L, updatedPack.pack.imageDataVersion)
+        assertEquals(1L, updatedPack.pack.lastSyncedVersion)
+        val domainPack = (repository.getPack("add-pack-1") as StickerResult.Success).data
+        assertTrue("hasPendingChanges should be true after adding emotes", domainPack.hasPendingChanges)
 
         val sortedStickers = updatedPack.stickers.sortedBy { it.sortOrder }
         for ((idx, sticker) in sortedStickers.withIndex()) {
@@ -858,6 +888,100 @@ class DefaultStickerPackRepositoryTest {
                 assertEquals("NewEmote$idx", sticker.emoteName)
             }
         }
+    }
+
+    @Test
+    fun whatsappPackSyncLifecycle_tracksVersionAndPendingChangesEndToEnd() = runTest(testDispatcher) {
+        val context: Context = RuntimeEnvironment.getApplication()
+        val packId = "sync-lifecycle-pack"
+        val sampleBytes = createSamplePngBytes(100, 100)
+        val packEntity = StickerPackEntity(
+            identifier = packId,
+            name = "Lifecycle Pack",
+            publisher = "7TV",
+            trayImageRelativePath = "tray.png",
+            isAnimated = false,
+            isWhitelisted = false,
+            createdAt = 1000L,
+            imageDataVersion = 1L,
+            lastSyncedVersion = 0L
+        )
+        val s0 = StickerEntity(
+            id = "s0",
+            packIdentifier = packId,
+            emoteId = "e0",
+            emoteName = "Emote0",
+            relativeFilePath = "s0.webp",
+            emojis = listOf("😀"),
+            fileLength = 100L,
+            sortOrder = 0
+        )
+        packDao.insertPackWithStickers(packEntity, listOf(s0))
+
+        // 1. Initial: not exported -> hasPendingChanges = false
+        var domain = (repository.getPack(packId) as StickerResult.Success).data
+        assertFalse(domain.isWhitelisted)
+        assertFalse(domain.hasPendingChanges)
+
+        // 2. Mark synced after export -> isWhitelisted = true, lastSyncedVersion = 1, hasPendingChanges = false
+        assertTrue(repository.markPackSynced(packId) is StickerResult.Success)
+        domain = (repository.getPack(packId) as StickerResult.Success).data
+        assertTrue(domain.isWhitelisted)
+        assertEquals(1L, domain.imageDataVersion)
+        assertEquals(1L, domain.lastSyncedVersion)
+        assertFalse(domain.hasPendingChanges)
+
+        // 3. Add emote -> imageDataVersion increments to 2, hasPendingChanges becomes true
+        fakeSevenTvRepo.downloadHandler = { emote ->
+            StickerResult.Success(
+                DownloadedEmoteAsset(emote.id, emote.name, sampleBytes, false, "PNG")
+            )
+        }
+        assertTrue(repository.addEmotesToPack(packId, listOf(createSampleEmote("e1", "Emote1", false))) is StickerResult.Success)
+        domain = (repository.getPack(packId) as StickerResult.Success).data
+        assertEquals(2L, domain.imageDataVersion)
+        assertEquals(1L, domain.lastSyncedVersion)
+        assertTrue(domain.hasPendingChanges)
+
+        // 4. syncWhitelistStatus returns true from WhatsApp -> MUST NOT clear hasPendingChanges
+        MockWhitelistContentProvider.cursorToReturn = MatrixCursor(arrayOf(WhatsAppConstants.WHITELIST_QUERY_RESULT_COLUMN)).apply {
+            addRow(arrayOf(1))
+        }
+        val syncTrueRes = repository.syncWhitelistStatus(context, packId)
+        assertTrue((syncTrueRes as StickerResult.Success).data)
+        domain = (repository.getPack(packId) as StickerResult.Success).data
+        assertTrue(domain.isWhitelisted)
+        assertEquals(2L, domain.imageDataVersion)
+        assertEquals(1L, domain.lastSyncedVersion)
+        assertTrue("syncWhitelistStatus must NOT overwrite lastSyncedVersion", domain.hasPendingChanges)
+
+        // 5. Update sticker emojis & delete sticker & rename -> each increments imageDataVersion
+        assertTrue(repository.updateStickerEmojis("s0", listOf("🔥")) is StickerResult.Success)
+        assertTrue(repository.deleteStickerFromPack(packId, "s0") is StickerResult.Success)
+        assertTrue(repository.renamePack(packId, "Renamed Pack") is StickerResult.Success)
+        domain = (repository.getPack(packId) as StickerResult.Success).data
+        assertEquals(5L, domain.imageDataVersion)
+        assertEquals(1L, domain.lastSyncedVersion)
+        assertTrue(domain.hasPendingChanges)
+
+        // 6. Re-export to WhatsApp succeeds -> markPackSynced sets lastSyncedVersion = 5
+        assertTrue(repository.markPackSynced(packId) is StickerResult.Success)
+        domain = (repository.getPack(packId) as StickerResult.Success).data
+        assertTrue(domain.isWhitelisted)
+        assertEquals(5L, domain.imageDataVersion)
+        assertEquals(5L, domain.lastSyncedVersion)
+        assertFalse(domain.hasPendingChanges)
+
+        // 7. WhatsApp reports pack removed (false) -> resets isWhitelisted = false and lastSyncedVersion = 0
+        MockWhitelistContentProvider.cursorToReturn = MatrixCursor(arrayOf(WhatsAppConstants.WHITELIST_QUERY_RESULT_COLUMN)).apply {
+            addRow(arrayOf(0))
+        }
+        val syncFalseRes = repository.syncWhitelistStatus(context, packId)
+        assertFalse((syncFalseRes as StickerResult.Success).data)
+        domain = (repository.getPack(packId) as StickerResult.Success).data
+        assertFalse(domain.isWhitelisted)
+        assertEquals(0L, domain.lastSyncedVersion)
+        assertFalse(domain.hasPendingChanges)
     }
 
     @Test

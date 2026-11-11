@@ -14,5 +14,7 @@ data class StickerPackEntity(
     val isWhitelisted: Boolean = false,
     val createdAt: Long = System.currentTimeMillis(),
     val originSetId: String? = null,
-    val originStreamerName: String? = null
+    val originStreamerName: String? = null,
+    val imageDataVersion: Long = 1L,
+    val lastSyncedVersion: Long = 0L
 )

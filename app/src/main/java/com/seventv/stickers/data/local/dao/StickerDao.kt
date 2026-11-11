@@ -22,4 +22,7 @@ interface StickerDao {
 
     @Query("SELECT COUNT(*) FROM stickers WHERE packIdentifier = :packIdentifier")
     suspend fun getStickerCount(packIdentifier: String): Int
+
+    @Query("SELECT packIdentifier FROM stickers WHERE id = :stickerId LIMIT 1")
+    suspend fun getPackIdentifierForSticker(stickerId: String): String?
 }

@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -27,15 +28,22 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.seventv.stickers.ui.theme.ElectricCyan
+import com.seventv.stickers.ui.theme.NeonFuchsia
+import com.seventv.stickers.ui.theme.SunsetYellow
 import com.seventv.stickers.ui.theme.WhatsAppGlow
 import com.seventv.stickers.ui.theme.WhatsAppGreen
 
 data class WhatsAppAddButtonState(
     val isWhitelisted: Boolean,
-    val isLoading: Boolean = false
+    val isLoading: Boolean = false,
+    val hasPendingChanges: Boolean = false
 ) {
     val buttonText: String
-        get() = if (isWhitelisted) "Añadido a WhatsApp" else "Añadir a WhatsApp"
+        get() = when {
+            !isWhitelisted -> "Añadir a WhatsApp"
+            hasPendingChanges -> "Actualizar en WhatsApp"
+            else -> "Añadido a WhatsApp"
+        }
 
     val isClickable: Boolean
         get() = !isLoading
@@ -44,15 +52,29 @@ data class WhatsAppAddButtonState(
         get() = isLoading
 
     val showCheckmark: Boolean
-        get() = !isLoading && isWhitelisted
+        get() = !isLoading && isWhitelisted && !hasPendingChanges
+
+    val showUpdateIcon: Boolean
+        get() = !isLoading && isWhitelisted && hasPendingChanges
 }
 
 object WhatsAppAddButtonDefaults {
-    fun buttonText(isWhitelisted: Boolean): String =
-        if (isWhitelisted) "Añadido a WhatsApp" else "Añadir a WhatsApp"
+    fun buttonText(isWhitelisted: Boolean, hasPendingChanges: Boolean = false): String = when {
+        !isWhitelisted -> "Añadir a WhatsApp"
+        hasPendingChanges -> "Actualizar en WhatsApp"
+        else -> "Añadido a WhatsApp"
+    }
 
-    fun evaluateState(isWhitelisted: Boolean, isLoading: Boolean): WhatsAppAddButtonState =
-        WhatsAppAddButtonState(isWhitelisted = isWhitelisted, isLoading = isLoading)
+    fun evaluateState(
+        isWhitelisted: Boolean,
+        isLoading: Boolean,
+        hasPendingChanges: Boolean = false
+    ): WhatsAppAddButtonState =
+        WhatsAppAddButtonState(
+            isWhitelisted = isWhitelisted,
+            isLoading = isLoading,
+            hasPendingChanges = hasPendingChanges
+        )
 }
 
 /**
@@ -63,29 +85,50 @@ object WhatsAppAddButtonDefaults {
 fun WhatsAppAddButton(
     isWhitelisted: Boolean,
     isLoading: Boolean = false,
+    hasPendingChanges: Boolean = false,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val state = WhatsAppAddButtonDefaults.evaluateState(isWhitelisted, isLoading)
+    val state = WhatsAppAddButtonDefaults.evaluateState(isWhitelisted, isLoading, hasPendingChanges)
     val buttonShape = RoundedCornerShape(24.dp)
+    val isPendingUpdate = isWhitelisted && hasPendingChanges
 
-    val gradientBrush = if (isWhitelisted) {
-        Brush.horizontalGradient(
-            listOf(
-                Color(0x3505FFA1),
-                Color(0x3501CDFE)
+    val gradientBrush = when {
+        isPendingUpdate -> {
+            Brush.horizontalGradient(
+                listOf(
+                    SunsetYellow,
+                    NeonFuchsia
+                )
             )
-        )
-    } else {
-        Brush.horizontalGradient(
-            listOf(
-                WhatsAppGlow,
-                ElectricCyan
+        }
+        isWhitelisted -> {
+            Brush.horizontalGradient(
+                listOf(
+                    Color(0x3505FFA1),
+                    Color(0x3501CDFE)
+                )
             )
-        )
+        }
+        else -> {
+            Brush.horizontalGradient(
+                listOf(
+                    WhatsAppGlow,
+                    ElectricCyan
+                )
+            )
+        }
     }
 
-    val contentColor = if (isWhitelisted) WhatsAppGlow else Color(0xFF0F081D)
+    val contentColor = if (isWhitelisted && !isPendingUpdate) WhatsAppGlow else Color(0xFF0F081D)
+
+    val borderStroke = when {
+        isPendingUpdate -> androidx.compose.foundation.BorderStroke(1.5.dp, SunsetYellow)
+        isWhitelisted -> androidx.compose.foundation.BorderStroke(1.5.dp, WhatsAppGlow)
+        else -> null
+    }
+
+    val shadowElevation = if (isWhitelisted && !isPendingUpdate) 2.dp else 8.dp
 
     Surface(
         modifier = modifier
@@ -93,8 +136,8 @@ fun WhatsAppAddButton(
             .clickable(enabled = state.isClickable, onClick = onClick),
         shape = buttonShape,
         color = Color.Transparent,
-        border = if (isWhitelisted) androidx.compose.foundation.BorderStroke(1.5.dp, WhatsAppGlow) else null,
-        shadowElevation = if (isWhitelisted) 2.dp else 8.dp
+        border = borderStroke,
+        shadowElevation = shadowElevation
     ) {
         Box(
             modifier = Modifier
@@ -115,6 +158,14 @@ fun WhatsAppAddButton(
                     if (state.showCheckmark) {
                         Icon(
                             imageVector = Icons.Default.Check,
+                            contentDescription = null,
+                            tint = contentColor,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                    } else if (state.showUpdateIcon) {
+                        Icon(
+                            imageVector = Icons.Default.Refresh,
                             contentDescription = null,
                             tint = contentColor,
                             modifier = Modifier.size(20.dp)

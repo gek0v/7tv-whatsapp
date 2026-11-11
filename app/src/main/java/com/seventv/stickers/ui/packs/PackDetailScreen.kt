@@ -131,8 +131,12 @@ fun PackDetailScreen(
                     snackbarHostState.showSnackbar("Error de WhatsApp: $validationError")
                 }
             }
+            viewModel.syncWhitelist(context, packId)
+        } else if (result.resultCode == android.app.Activity.RESULT_OK) {
+            viewModel.markPackSynced(packId)
+        } else {
+            viewModel.syncWhitelist(context, packId)
         }
-        viewModel.syncWhitelist(context, packId)
     }
 
     LaunchedEffect(packId) {
@@ -268,10 +272,22 @@ fun PackDetailScreen(
                         }
                         FilledTonalButton(
                             onClick = { viewModel.onAddPackToWhatsApp(context, pack) },
+                            colors = if (pack.isWhitelisted && pack.hasPendingChanges) {
+                                ButtonDefaults.filledTonalButtonColors(
+                                    containerColor = SunsetYellow,
+                                    contentColor = Color(0xFF0F081D)
+                                )
+                            } else {
+                                ButtonDefaults.filledTonalButtonColors()
+                            },
                             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
                         ) {
                             Text(
-                                text = if (pack.isWhitelisted) "Sincronizado" else "Añadir a WA",
+                                text = when {
+                                    !pack.isWhitelisted -> "Añadir a WA"
+                                    pack.hasPendingChanges -> "Actualizar WA"
+                                    else -> "Sincronizado"
+                                },
                                 style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.Bold
                             )
@@ -546,6 +562,7 @@ fun PackDetailScreen(
                 // Bottom Export Button
                 WhatsAppAddButton(
                     isWhitelisted = pack.isWhitelisted,
+                    hasPendingChanges = pack.hasPendingChanges,
                     onClick = { viewModel.onAddPackToWhatsApp(context, pack) },
                     modifier = Modifier
                         .fillMaxWidth()

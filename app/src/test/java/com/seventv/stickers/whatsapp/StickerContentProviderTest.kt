@@ -139,6 +139,36 @@ class StickerContentProviderTest {
     }
 
     @Test
+    fun queryMetadata_servesDynamicImageDataVersion() {
+        val pack = StickerPackEntity(
+            identifier = "pack-versioned",
+            name = "Versioned Pack",
+            publisher = "7TV",
+            trayImageRelativePath = "sticker_packs/pack-versioned/tray_icon.png",
+            isAnimated = false,
+            isWhitelisted = true,
+            createdAt = 1000L,
+            imageDataVersion = 7L,
+            lastSyncedVersion = 5L
+        )
+        runBlocking {
+            db.stickerPackDao().insertPack(pack)
+        }
+
+        val allCursor = provider.query(Uri.parse("content://$authority/metadata"), null, null, null, null)!!
+        allCursor.use { c ->
+            assertTrue(c.moveToFirst())
+            assertEquals("7", c.getString(c.getColumnIndexOrThrow(WhatsAppConstants.IMAGE_DATA_VERSION)))
+        }
+
+        val singleCursor = provider.query(Uri.parse("content://$authority/metadata/pack-versioned"), null, null, null, null)!!
+        singleCursor.use { c ->
+            assertTrue(c.moveToFirst())
+            assertEquals("7", c.getString(c.getColumnIndexOrThrow(WhatsAppConstants.IMAGE_DATA_VERSION)))
+        }
+    }
+
+    @Test
     fun queryMetadataByPackId_returnsSingleRowForExistingPack_andZeroRowsForUnknownPack() {
         val pack = StickerPackEntity(
             identifier = "pack-single",

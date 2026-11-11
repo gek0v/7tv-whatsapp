@@ -26,5 +26,6 @@ interface StickerPackRepository {
     suspend fun updateStickerEmojis(stickerId: String, emojis: List<String>): StickerResult<Unit>
     suspend fun updatePackWhitelisted(identifier: String, isWhitelisted: Boolean): StickerResult<Unit>
     suspend fun syncWhitelistStatus(context: Context, packIdentifier: String): StickerResult<Boolean>
+    suspend fun markPackSynced(packIdentifier: String): StickerResult<Unit> = StickerResult.Success(Unit)
     suspend fun checkForPackUpdates(packIdentifier: String): StickerResult<List<SevenTvEmote>>
 }

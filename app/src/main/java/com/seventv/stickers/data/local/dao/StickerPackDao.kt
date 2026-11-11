@@ -40,8 +40,17 @@ interface StickerPackDao {
         insertStickers(stickers)
     }
 
-    @Query("UPDATE sticker_packs SET isWhitelisted = :isWhitelisted WHERE identifier = :identifier")
+    @Query("UPDATE sticker_packs SET isWhitelisted = :isWhitelisted, lastSyncedVersion = CASE WHEN :isWhitelisted = 0 THEN 0 ELSE lastSyncedVersion END WHERE identifier = :identifier")
     suspend fun updateWhitelisted(identifier: String, isWhitelisted: Boolean)
+
+    @Query("UPDATE sticker_packs SET isWhitelisted = 0, lastSyncedVersion = 0 WHERE identifier = :identifier")
+    suspend fun resetWhitelistStatus(identifier: String)
+
+    @Query("UPDATE sticker_packs SET isWhitelisted = 1, lastSyncedVersion = imageDataVersion WHERE identifier = :identifier")
+    suspend fun markPackSynced(identifier: String)
+
+    @Query("UPDATE sticker_packs SET imageDataVersion = imageDataVersion + 1 WHERE identifier = :identifier")
+    suspend fun incrementImageDataVersion(identifier: String)
 
     @Query("UPDATE sticker_packs SET name = :newName WHERE identifier = :identifier")
     suspend fun updatePackName(identifier: String, newName: String)

@@ -3,6 +3,8 @@ package com.seventv.stickers.data.repository
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.net.Uri
+import com.seventv.stickers.whatsapp.StickerContentProvider
 import com.seventv.stickers.core.common.result.StickerError
 import com.seventv.stickers.core.common.result.StickerResult
 import com.seventv.stickers.whatsapp.WhatsAppWhitelistChecker
@@ -44,7 +46,8 @@ class DefaultStickerPackRepository(
     private val mediaPipeline: StickerMediaPipeline,
     private val splittingEngine: PackSplittingEngine = PackSplittingEngine,
     private val dispatcher: CoroutineDispatcher = Dispatchers.IO,
-    private val sevenTvRepository: SevenTvRepository? = null
+    private val sevenTvRepository: SevenTvRepository? = null,
+    private val context: Context? = null
 ) : StickerPackRepository {
 
     constructor(
@@ -53,7 +56,8 @@ class DefaultStickerPackRepository(
         mediaPipeline: StickerMediaPipeline,
         sevenTvRepository: SevenTvRepository,
         splittingEngine: PackSplittingEngine = PackSplittingEngine,
-        dispatcher: CoroutineDispatcher = Dispatchers.IO
+        dispatcher: CoroutineDispatcher = Dispatchers.IO,
+        context: Context? = null
     ) : this(
         stickerPackDao = database.stickerPackDao(),
         stickerDao = database.stickerDao(),
@@ -62,7 +66,8 @@ class DefaultStickerPackRepository(
         mediaPipeline = mediaPipeline,
         splittingEngine = splittingEngine,
         dispatcher = dispatcher,
-        sevenTvRepository = sevenTvRepository
+        sevenTvRepository = sevenTvRepository,
+        context = context?.applicationContext
     )
 
     override fun observeAllPacks(): Flow<List<StickerPack>> {
@@ -324,6 +329,7 @@ class DefaultStickerPackRepository(
         try {
             stickerPackDao.deletePack(identifier)
             storageManager.deletePackDirectory(identifier)
+            notifyPackModified(identifier)
             StickerResult.Success(Unit)
         } catch (e: CancellationException) {
             throw e
@@ -337,6 +343,7 @@ class DefaultStickerPackRepository(
             stickerPackDao.deletePacks(identifiers)
             for (id in identifiers) {
                 storageManager.deletePackDirectory(id)
+                notifyPackModified(id)
             }
             StickerResult.Success(Unit)
         } catch (e: CancellationException) {
@@ -349,7 +356,8 @@ class DefaultStickerPackRepository(
     override suspend fun renamePack(identifier: String, newName: String): StickerResult<Unit> = withContext(dispatcher) {
         try {
             stickerPackDao.updatePackName(identifier, newName)
-            stickerPackDao.updateWhitelisted(identifier, false)
+            stickerPackDao.incrementImageDataVersion(identifier)
+            notifyPackModified(identifier)
             StickerResult.Success(Unit)
         } catch (e: CancellationException) {
             throw e
@@ -561,7 +569,8 @@ class DefaultStickerPackRepository(
         try {
             stickerDao.deleteSticker(stickerId)
             storageManager.deleteStickerFile(packIdentifier, stickerId)
-            stickerPackDao.updateWhitelisted(packIdentifier, false)
+            stickerPackDao.incrementImageDataVersion(packIdentifier)
+            notifyPackModified(packIdentifier)
             StickerResult.Success(Unit)
         } catch (e: CancellationException) {
             throw e
@@ -643,7 +652,8 @@ class DefaultStickerPackRepository(
                 }
 
                 stagingDir.deleteRecursively()
-                stickerPackDao.updateWhitelisted(packIdentifier, false)
+                stickerPackDao.incrementImageDataVersion(packIdentifier)
+                notifyPackModified(packIdentifier)
                 StickerResult.Success(Unit)
             } catch (e: Exception) {
                 stagingDir.deleteRecursively()
@@ -662,7 +672,12 @@ class DefaultStickerPackRepository(
         emojis: List<String>
     ): StickerResult<Unit> = withContext(dispatcher) {
         try {
+            val packIdentifier = stickerDao.getPackIdentifierForSticker(stickerId)
             stickerDao.updateEmojis(stickerId, emojis)
+            if (packIdentifier != null) {
+                stickerPackDao.incrementImageDataVersion(packIdentifier)
+                notifyPackModified(packIdentifier)
+            }
             StickerResult.Success(Unit)
         } catch (e: CancellationException) {
             throw e
@@ -696,6 +711,47 @@ class DefaultStickerPackRepository(
         } catch (e: Exception) {
             if (e is CancellationException) throw e
             StickerResult.Failure(StickerError.StorageIoError("Failed to sync whitelist: ${e.message}"))
+        }
+    }
+
+    override suspend fun markPackSynced(
+        packIdentifier: String
+    ): StickerResult<Unit> = withContext(dispatcher) {
+        try {
+            stickerPackDao.markPackSynced(packIdentifier)
+            StickerResult.Success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            StickerResult.Failure(StickerError.StorageIoError(e))
+        }
+    }
+
+    private fun notifyPackModified(packIdentifier: String) {
+        val resolver = context?.contentResolver ?: return
+        try {
+            val metadataUri = Uri.Builder()
+                .scheme("content")
+                .authority(StickerContentProvider.AUTHORITY)
+                .appendPath("metadata")
+                .build()
+            val packMetadataUri = Uri.Builder()
+                .scheme("content")
+                .authority(StickerContentProvider.AUTHORITY)
+                .appendPath("metadata")
+                .appendPath(packIdentifier)
+                .build()
+            val stickersUri = Uri.Builder()
+                .scheme("content")
+                .authority(StickerContentProvider.AUTHORITY)
+                .appendPath("stickers")
+                .appendPath(packIdentifier)
+                .build()
+
+            resolver.notifyChange(metadataUri, null)
+            resolver.notifyChange(packMetadataUri, null)
+            resolver.notifyChange(stickersUri, null)
+        } catch (_: Exception) {
         }
     }
 
@@ -756,7 +812,9 @@ class DefaultStickerPackRepository(
             },
             createdAt = packWithStickers.pack.createdAt,
             originSetId = packWithStickers.pack.originSetId,
-            originStreamerName = packWithStickers.pack.originStreamerName
+            originStreamerName = packWithStickers.pack.originStreamerName,
+            imageDataVersion = packWithStickers.pack.imageDataVersion,
+            lastSyncedVersion = packWithStickers.pack.lastSyncedVersion
         )
     }
 

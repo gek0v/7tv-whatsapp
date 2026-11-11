@@ -76,7 +76,7 @@ object PackHeroCardDefaults {
         else -> PackSyncStatus.NOT_EXPORTED
     }
 
-    fun syncStatus(pack: StickerPack, hasPendingChanges: Boolean = false): PackSyncStatus =
+    fun syncStatus(pack: StickerPack, hasPendingChanges: Boolean = pack.hasPendingChanges): PackSyncStatus =
         syncStatus(pack.isWhitelisted, hasPendingChanges)
 
     fun statusLabel(status: PackSyncStatus): String = when (status) {
@@ -127,7 +127,7 @@ fun PackHeroCard(
     var menuExpanded by remember { mutableStateOf(false) }
     val displayStickers = if (stickers.isNotEmpty()) stickers else pack.stickers
     val stickerCount = displayStickers.size
-    val syncStatus = PackHeroCardDefaults.syncStatus(pack)
+    val syncStatus = PackHeroCardDefaults.syncStatus(pack, pack.hasPendingChanges)
     val statusColor = PackHeroCardDefaults.statusColor(syncStatus, MaterialTheme.colorScheme)
 
     Card(
@@ -316,6 +316,7 @@ fun PackHeroCard(
             ) {
                 WhatsAppAddButton(
                     isWhitelisted = pack.isWhitelisted,
+                    hasPendingChanges = pack.hasPendingChanges,
                     onClick = onExportToWhatsApp,
                     modifier = Modifier.weight(1f)
                 )

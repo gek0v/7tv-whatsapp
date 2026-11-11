@@ -104,9 +104,25 @@ class ComponentsTest {
         assertTrue(loadingState.showProgress)
         assertFalse(loadingState.showCheckmark)
 
+        // Case 4: Whitelisted with pending changes -> update CTA, clickable, update icon shown
+        val pendingState = WhatsAppAddButtonDefaults.evaluateState(
+            isWhitelisted = true,
+            isLoading = false,
+            hasPendingChanges = true
+        )
+        assertEquals("Actualizar en WhatsApp", pendingState.buttonText)
+        assertTrue(pendingState.isClickable)
+        assertFalse(pendingState.showProgress)
+        assertFalse(pendingState.showCheckmark)
+        assertTrue(pendingState.showUpdateIcon)
+
         // Direct helper tests
         assertEquals("Añadir a WhatsApp", WhatsAppAddButtonDefaults.buttonText(isWhitelisted = false))
         assertEquals("Añadido a WhatsApp", WhatsAppAddButtonDefaults.buttonText(isWhitelisted = true))
+        assertEquals(
+            "Actualizar en WhatsApp",
+            WhatsAppAddButtonDefaults.buttonText(isWhitelisted = true, hasPendingChanges = true)
+        )
     }
 
     @Test
@@ -262,6 +278,24 @@ class ComponentsTest {
         assertEquals("🟢 Sincronizado", PackHeroCardDefaults.statusChipText(PackSyncStatus.SYNCED))
         assertEquals("🟡 Pendiente", PackHeroCardDefaults.statusChipText(PackSyncStatus.PENDING))
         assertEquals("⚪ No exportado", PackHeroCardDefaults.statusChipText(PackSyncStatus.NOT_EXPORTED))
+
+        // Domain model helper
+        val pendingPack = StickerPack(
+            identifier = "p1",
+            name = "Pending",
+            publisher = "7TV",
+            trayImagePath = "tray.png",
+            isAnimated = false,
+            isWhitelisted = true,
+            imageDataVersion = 3L,
+            lastSyncedVersion = 1L
+        )
+        assertTrue(pendingPack.hasPendingChanges)
+        assertEquals(PackSyncStatus.PENDING, PackHeroCardDefaults.syncStatus(pendingPack))
+
+        val syncedPack = pendingPack.copy(lastSyncedVersion = 3L)
+        assertFalse(syncedPack.hasPendingChanges)
+        assertEquals(PackSyncStatus.SYNCED, PackHeroCardDefaults.syncStatus(syncedPack))
 
         // Counter text format
         assertEquals("5 / 30", PackHeroCardDefaults.counterText(5))

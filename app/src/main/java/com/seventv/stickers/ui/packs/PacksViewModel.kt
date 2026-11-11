@@ -214,6 +214,12 @@ class PacksViewModel(
         }
     }
 
+    fun markPackSynced(packIdentifier: String) {
+        viewModelScope.launch {
+            stickerPackRepository.markPackSynced(packIdentifier)
+        }
+    }
+
     // --- Single Pack Delete ---
     fun onOpenDeleteDialog(pack: StickerPack) {
         _uiState.update { it.copy(isDeleteConfirmDialogOpen = true, packToDelete = pack) }

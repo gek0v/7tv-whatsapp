@@ -112,7 +112,7 @@ class StickerContentProvider : ContentProvider() {
                             null,
                             null,
                             null,
-                            "1",
+                            pack.pack.imageDataVersion.toString(),
                             0,
                             if (pack.pack.isAnimated) 1 else 0
                         )
@@ -137,7 +137,7 @@ class StickerContentProvider : ContentProvider() {
                             null,
                             null,
                             null,
-                            "1",
+                            pack.pack.imageDataVersion.toString(),
                             0,
                             if (pack.pack.isAnimated) 1 else 0
                         )

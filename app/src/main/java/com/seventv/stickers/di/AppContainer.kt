@@ -57,7 +57,8 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
             database = database,
             storageManager = storageManager,
             mediaPipeline = mediaPipeline,
-            sevenTvRepository = sevenTvRepository
+            sevenTvRepository = sevenTvRepository,
+            context = context
         )
     }
 

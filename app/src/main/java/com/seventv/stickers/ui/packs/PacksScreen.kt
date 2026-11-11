@@ -115,7 +115,11 @@ fun PacksScreen(
             }
         }
         pendingExportPackId?.let { packId ->
-            viewModel.syncWhitelist(context, packId)
+            if (result.resultCode == android.app.Activity.RESULT_OK && validationError.isNullOrBlank()) {
+                viewModel.markPackSynced(packId)
+            } else {
+                viewModel.syncWhitelist(context, packId)
+            }
             pendingExportPackId = null
             viewModel.onAdvanceExportQueue(context)
         }
@@ -135,6 +139,7 @@ fun PacksScreen(
                 try {
                     addPackLauncher.launch(intent)
                 } catch (e: Exception) {
+                    pendingExportPackId = null
                     snackbarHostState.showSnackbar("Error al abrir WhatsApp: ${e.message}")
                 }
                 viewModel.onClearExportEvent()
@@ -150,10 +155,11 @@ fun PacksScreen(
     }
 
     // Sync whitelist for all visible packs
-    LaunchedEffect(state.loadState) {
-        val success = state.loadState as? PacksLoadState.Success ?: return@LaunchedEffect
-        success.packs.forEach { pack ->
-            viewModel.syncWhitelist(context, pack.identifier)
+    val loadedPackIds = (state.loadState as? PacksLoadState.Success)?.packs?.map { it.identifier }
+    LaunchedEffect(loadedPackIds) {
+        val ids = loadedPackIds ?: return@LaunchedEffect
+        ids.forEach { packId ->
+            viewModel.syncWhitelist(context, packId)
         }
     }
 

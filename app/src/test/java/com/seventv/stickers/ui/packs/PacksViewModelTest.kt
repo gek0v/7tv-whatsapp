@@ -167,6 +167,48 @@ class PacksViewModelTest {
     }
 
     @Test
+    fun markPackSynced_updatesVersionAndClearsPendingChanges() = runTest(testDispatcher) {
+        val pack = createSamplePack("pack_sync", "Pack Sync", isWhitelisted = true).copy(
+            imageDataVersion = 3L,
+            lastSyncedVersion = 1L
+        )
+        assertTrue(pack.hasPendingChanges)
+        fakeStickerPackRepository.packsFlow.value = listOf(pack)
+        advanceUntilIdle()
+
+        viewModel.markPackSynced("pack_sync")
+        advanceUntilIdle()
+
+        assertEquals("pack_sync", fakeStickerPackRepository.lastMarkedSyncedIdentifier)
+        val updated = (viewModel.uiState.value.loadState as PacksLoadState.Success).packs.first()
+        assertTrue(updated.isWhitelisted)
+        assertEquals(3L, updated.lastSyncedVersion)
+        assertFalse(updated.hasPendingChanges)
+    }
+
+    @Test
+    fun onAddPackToWhatsApp_whenHasPendingChanges_emitsLaunchIntentEvent() {
+        val packageManager = shadowOf(context.packageManager)
+        packageManager.installPackage(
+            PackageInfo().apply {
+                packageName = WhatsAppConstants.PACKAGE_WHATSAPP
+            }
+        )
+
+        val pack = createSamplePack("pack_pending", "Pending Pack", isWhitelisted = true).copy(
+            imageDataVersion = 2L,
+            lastSyncedVersion = 1L
+        )
+        assertTrue(pack.hasPendingChanges)
+
+        viewModel.onAddPackToWhatsApp(context, pack)
+
+        val event = viewModel.uiState.value.exportEvent
+        assertTrue("Expected LaunchIntent even when already whitelisted", event is WhatsAppExportEvent.LaunchIntent)
+        assertEquals("pack_pending", (event as WhatsAppExportEvent.LaunchIntent).pack.identifier)
+    }
+
+    @Test
     fun syncWhitelistCallsRepository() = runTest(testDispatcher) {
         viewModel.syncWhitelist(context, "pack_123")
         advanceUntilIdle()
@@ -648,6 +690,7 @@ class PacksViewModelTest {
         val packsFlow = MutableStateFlow<List<StickerPack>>(emptyList())
         var lastDeletedIdentifier: String? = null
         var lastSyncedIdentifier: String? = null
+        var lastMarkedSyncedIdentifier: String? = null
         var checkForUpdatesHandler: (suspend (String) -> StickerResult<List<SevenTvEmote>>)? = null
 
         override fun observeAllPacks(): Flow<List<StickerPack>> = packsFlow.asStateFlow()
@@ -743,6 +786,16 @@ class PacksViewModelTest {
         override suspend fun syncWhitelistStatus(context: Context, packIdentifier: String): StickerResult<Boolean> {
             lastSyncedIdentifier = packIdentifier
             return StickerResult.Success(true)
+        }
+
+        override suspend fun markPackSynced(packIdentifier: String): StickerResult<Unit> {
+            lastMarkedSyncedIdentifier = packIdentifier
+            packsFlow.value = packsFlow.value.map {
+                if (it.identifier == packIdentifier) {
+                    it.copy(isWhitelisted = true, lastSyncedVersion = it.imageDataVersion)
+                } else it
+            }
+            return StickerResult.Success(Unit)
         }
     }
 }

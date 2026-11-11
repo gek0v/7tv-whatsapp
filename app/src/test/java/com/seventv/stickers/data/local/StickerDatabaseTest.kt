@@ -425,6 +425,105 @@ class StickerDatabaseTest {
         assertEquals("ibai", retrieved?.pack?.originStreamerName)
     }
 
+    @Test
+    fun migration2To3_addsVersionColumnsAndInitializesLastSyncedForWhitelisted() {
+        val context: Context = RuntimeEnvironment.getApplication()
+        val dbFile = context.getDatabasePath("test_migration_2_3.db")
+        dbFile.delete()
+
+        val factory = androidx.sqlite.db.framework.FrameworkSQLiteOpenHelperFactory()
+        val config = androidx.sqlite.db.SupportSQLiteOpenHelper.Configuration.builder(context)
+            .name(dbFile.name)
+            .callback(object : androidx.sqlite.db.SupportSQLiteOpenHelper.Callback(2) {
+                override fun onCreate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                    db.execSQL(
+                        """
+                        CREATE TABLE IF NOT EXISTS sticker_packs (
+                            identifier TEXT NOT NULL PRIMARY KEY,
+                            name TEXT NOT NULL,
+                            publisher TEXT NOT NULL,
+                            trayImageRelativePath TEXT NOT NULL,
+                            isAnimated INTEGER NOT NULL,
+                            isWhitelisted INTEGER NOT NULL,
+                            createdAt INTEGER NOT NULL,
+                            originSetId TEXT DEFAULT NULL,
+                            originStreamerName TEXT DEFAULT NULL
+                        )
+                        """.trimIndent()
+                    )
+                    db.execSQL(
+                        "INSERT INTO sticker_packs VALUES ('wl-pack', 'WL', '7TV', 't.png', 0, 1, 1000, NULL, NULL)"
+                    )
+                    db.execSQL(
+                        "INSERT INTO sticker_packs VALUES ('local-pack', 'Local', '7TV', 't.png', 0, 0, 2000, NULL, NULL)"
+                    )
+                }
+
+                override fun onUpgrade(db: androidx.sqlite.db.SupportSQLiteDatabase, oldVersion: Int, newVersion: Int) {}
+            })
+            .build()
+
+        val helper = factory.create(config)
+        try {
+            val sqliteDb = helper.writableDatabase
+            AppDatabase.MIGRATION_2_3.migrate(sqliteDb)
+
+            sqliteDb.query("SELECT identifier, imageDataVersion, lastSyncedVersion FROM sticker_packs ORDER BY identifier").use { cursor ->
+                assertEquals(2, cursor.count)
+
+                assertTrue(cursor.moveToNext())
+                assertEquals("local-pack", cursor.getString(0))
+                assertEquals(1L, cursor.getLong(1))
+                assertEquals(0L, cursor.getLong(2))
+
+                assertTrue(cursor.moveToNext())
+                assertEquals("wl-pack", cursor.getString(0))
+                assertEquals(1L, cursor.getLong(1))
+                assertEquals(1L, cursor.getLong(2))
+            }
+        } finally {
+            helper.close()
+            dbFile.delete()
+        }
+    }
+
+    @Test
+    fun daoVersioningAndSyncQueries_behaveCorrectly() = runTest {
+        val pack = StickerPackEntity(
+            identifier = "pack-ver",
+            name = "Version Pack",
+            publisher = "7TV",
+            trayImageRelativePath = "tray.png",
+            isAnimated = false,
+            isWhitelisted = false,
+            createdAt = 1000L
+        )
+        packDao.insertPack(pack)
+
+        packDao.incrementImageDataVersion("pack-ver")
+        packDao.incrementImageDataVersion("pack-ver")
+        var loaded = packDao.getPackByIdentifier("pack-ver")!!.pack
+        assertEquals(3L, loaded.imageDataVersion)
+        assertEquals(0L, loaded.lastSyncedVersion)
+
+        packDao.markPackSynced("pack-ver")
+        loaded = packDao.getPackByIdentifier("pack-ver")!!.pack
+        assertTrue(loaded.isWhitelisted)
+        assertEquals(3L, loaded.imageDataVersion)
+        assertEquals(3L, loaded.lastSyncedVersion)
+
+        packDao.incrementImageDataVersion("pack-ver")
+        packDao.updateWhitelisted("pack-ver", true)
+        loaded = packDao.getPackByIdentifier("pack-ver")!!.pack
+        assertEquals(4L, loaded.imageDataVersion)
+        assertEquals(3L, loaded.lastSyncedVersion)
+
+        packDao.updateWhitelisted("pack-ver", false)
+        loaded = packDao.getPackByIdentifier("pack-ver")!!.pack
+        assertFalse(loaded.isWhitelisted)
+        assertEquals(0L, loaded.lastSyncedVersion)
+    }
+
     private fun countStickersInDb(packIdentifier: String): Int {
         val cursor = db.openHelper.readableDatabase.query(
             "SELECT COUNT(*) FROM stickers WHERE packIdentifier = ?",
