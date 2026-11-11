@@ -48,6 +48,20 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.seventv.stickers.SevenTvApplication
 import com.seventv.stickers.core.common.result.StickerResult
 import com.seventv.stickers.core.network.model.SevenTvEmote
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.ZoomIn
+import androidx.compose.ui.platform.LocalHapticFeedback
+import com.seventv.stickers.ui.components.CoilSetup
+import com.seventv.stickers.ui.components.EmotePeekAction
+import com.seventv.stickers.ui.components.EmotePeekHost
+import com.seventv.stickers.ui.components.EmotePeekPayload
+import com.seventv.stickers.ui.components.LocalEmotePeekController
+import com.seventv.stickers.ui.components.rememberEmotePeekState
+import com.seventv.stickers.ui.theme.ElectricCyan
+import com.seventv.stickers.ui.theme.NeonFuchsia
+import com.seventv.stickers.ui.theme.WhatsAppGlow
 import com.seventv.stickers.ui.components.AddToExistingPackDialog
 import com.seventv.stickers.ui.components.DockedDraftPill
 import com.seventv.stickers.ui.components.DraftBottomSheet
@@ -77,6 +91,31 @@ fun ExploreScreen(
     var showDraftSheet by remember { mutableStateOf(false) }
     var previewEmote by remember { mutableStateOf<SevenTvEmote?>(null) }
     var isSharingSticker by remember { mutableStateOf(false) }
+    val externalPeekController = LocalEmotePeekController.current
+    val localPeekState = rememberEmotePeekState()
+    val peekState = externalPeekController ?: localPeekState
+    val haptic = LocalHapticFeedback.current
+
+    val shareEmote: (SevenTvEmote) -> Unit = { emote ->
+        coroutineScope.launch {
+            isSharingSticker = true
+            try {
+                val shareManager = (context.applicationContext as SevenTvApplication).container.stickerShareManager
+                when (val result = shareManager.prepareEmoteForShare(emote)) {
+                    is StickerResult.Success -> {
+                        shareManager.launchShare(context, result.data)
+                    }
+                    is StickerResult.Failure -> {
+                        snackbarHostState.showSnackbar("Error al preparar sticker para compartir")
+                    }
+                }
+            } catch (e: Exception) {
+                snackbarHostState.showSnackbar("Error al compartir: ${e.message}")
+            } finally {
+                isSharingSticker = false
+            }
+        }
+    }
 
     val gridState = rememberLazyGridState()
     val shouldLoadMore by remember {
@@ -145,6 +184,7 @@ fun ExploreScreen(
         }
     }
 
+    val screenBody: @Composable () -> Unit = {
     Scaffold(
         modifier = modifier.fillMaxSize(),
         containerColor = MaterialTheme.colorScheme.background,
@@ -355,6 +395,7 @@ fun ExploreScreen(
                             } else {
                                 LazyVerticalGrid(
                                     state = gridState,
+                                    userScrollEnabled = !peekState.isActive,
                                     columns = GridCells.Adaptive(minSize = 100.dp),
                                     contentPadding = PaddingValues(
                                         top = 8.dp,
@@ -379,7 +420,46 @@ fun ExploreScreen(
                                             },
                                             onPreviewClick = {
                                                 previewEmote = emote
-                                            }
+                                            },
+                                            onPeekStart = { bounds ->
+                                                peekState.show(
+                                                    EmotePeekPayload(
+                                                        id = emote.id,
+                                                        name = emote.name,
+                                                        isAnimated = emote.isAnimated,
+                                                        imageModel = emote.bestAssetUrl.ifBlank { emote.previewUrl },
+                                                        placeholderCacheKey = CoilSetup.emotePreviewCacheKey(emote.id),
+                                                        sourceLabel = "7TV • Explorar",
+                                                        sourceBoundsInRoot = bounds,
+                                                        actions = listOf(
+                                                            EmotePeekAction(
+                                                                id = "draft",
+                                                                label = if (isInDraft) "En borrador" else "Borrador",
+                                                                icon = if (isInDraft) Icons.Default.Check else Icons.Default.Add,
+                                                                accentColor = WhatsAppGlow,
+                                                                isActive = isInDraft,
+                                                                onClick = { viewModel.onToggleDraftEmote(emote) }
+                                                            ),
+                                                            EmotePeekAction(
+                                                                id = "inspect",
+                                                                label = "Inspeccionar",
+                                                                icon = Icons.Default.ZoomIn,
+                                                                accentColor = ElectricCyan,
+                                                                onClick = { previewEmote = emote }
+                                                            ),
+                                                            EmotePeekAction(
+                                                                id = "share",
+                                                                label = "Compartir",
+                                                                icon = Icons.Default.Share,
+                                                                accentColor = NeonFuchsia,
+                                                                onClick = { shareEmote(emote) }
+                                                            )
+                                                        )
+                                                    )
+                                                )
+                                            },
+                                            onPeekMove = { pos -> peekState.updatePointer(pos) },
+                                            onPeekRelease = { peekState.onRelease(haptic) }
                                         )
                                     }
 
@@ -535,29 +615,19 @@ fun ExploreScreen(
                     onDismiss = { previewEmote = null },
                     isInDraft = isInDraft,
                     onToggleDraft = { viewModel.onToggleDraftEmote(emote) },
-                    onShareSticker = {
-                        coroutineScope.launch {
-                            isSharingSticker = true
-                            try {
-                                val shareManager = (context.applicationContext as SevenTvApplication).container.stickerShareManager
-                                when (val result = shareManager.prepareEmoteForShare(emote)) {
-                                    is StickerResult.Success -> {
-                                        shareManager.launchShare(context, result.data)
-                                    }
-                                    is StickerResult.Failure -> {
-                                        snackbarHostState.showSnackbar("Error al preparar sticker para compartir")
-                                    }
-                                }
-                            } catch (e: Exception) {
-                                snackbarHostState.showSnackbar("Error al compartir: ${e.message}")
-                            } finally {
-                                isSharingSticker = false
-                            }
-                        }
-                    },
+                    onShareSticker = { shareEmote(emote) },
                     isSharingSticker = isSharingSticker
                 )
             }
         }
+    }
+    }
+
+    if (externalPeekController == null) {
+        EmotePeekHost(state = localPeekState) {
+            screenBody()
+        }
+    } else {
+        screenBody()
     }
 }

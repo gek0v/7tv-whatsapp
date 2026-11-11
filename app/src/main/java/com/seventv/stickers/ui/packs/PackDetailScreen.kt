@@ -15,7 +15,6 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -114,6 +113,17 @@ import coil.request.ImageRequest
 import com.seventv.stickers.SevenTvApplication
 import com.seventv.stickers.core.common.result.StickerResult
 import com.seventv.stickers.core.domain.model.PackSticker
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.ZoomIn
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.platform.LocalHapticFeedback
+import com.seventv.stickers.ui.components.CoilSetup
+import com.seventv.stickers.ui.components.EmotePeekAction
+import com.seventv.stickers.ui.components.EmotePeekHost
+import com.seventv.stickers.ui.components.EmotePeekPayload
+import com.seventv.stickers.ui.components.LocalEmotePeekController
+import com.seventv.stickers.ui.components.emotePeekGesture
+import com.seventv.stickers.ui.components.rememberEmotePeekState
 import com.seventv.stickers.ui.components.ChatSimulatorBackground
 import com.seventv.stickers.ui.components.ChatSimulatorMode
 import com.seventv.stickers.ui.components.DraftBottomSheetDefaults
@@ -143,6 +153,24 @@ fun PackDetailScreen(
     val gridState = rememberLazyGridState()
     val slotZeroFlashAnim = remember { Animatable(0f) }
     var dragStartFirstStickerId by remember { mutableStateOf<String?>(null) }
+    val externalPeekController = LocalEmotePeekController.current
+    val localPeekState = rememberEmotePeekState()
+    val peekState = externalPeekController ?: localPeekState
+    val haptic = LocalHapticFeedback.current
+
+    val shareSticker: (PackSticker, Boolean) -> Unit = { targetSticker, isAnimated ->
+        val shareManager = (context.applicationContext as SevenTvApplication).container.stickerShareManager
+        coroutineScope.launch {
+            when (val result = shareManager.prepareStickerForShare(targetSticker, isAnimated = isAnimated)) {
+                is StickerResult.Success -> {
+                    shareManager.launchShare(context, result.data)
+                }
+                is StickerResult.Failure -> {
+                    snackbarHostState.showSnackbar("Error al preparar sticker: ${result.error}")
+                }
+            }
+        }
+    }
 
     val addPackLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
@@ -223,6 +251,7 @@ fun PackDetailScreen(
 
     val pack = state.selectedPackDetail
 
+    val screenBody: @Composable () -> Unit = {
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
@@ -682,6 +711,7 @@ fun PackDetailScreen(
                     ) {
                         LazyVerticalGrid(
                             state = gridState,
+                            userScrollEnabled = !peekState.isActive && !dragDropState.isDragging,
                             columns = GridCells.Fixed(3),
                             contentPadding = PaddingValues(12.dp),
                             horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -691,19 +721,6 @@ fun PackDetailScreen(
                                 .pointerInput(pack.identifier, state.isReorderMode) {
                                     if (state.isReorderMode) {
                                         detectDragGestures(
-                                            onDragStart = { offset ->
-                                                dragStartFirstStickerId = currentStickers.firstOrNull()?.id
-                                                dragDropState.onStartDrag(offset)
-                                            },
-                                            onDrag = { change, dragAmount ->
-                                                change.consume()
-                                                dragDropState.onDragBy(dragAmount)
-                                            },
-                                            onDragEnd = { dragDropState.onFinishDrag() },
-                                            onDragCancel = { dragDropState.onCancelDrag() }
-                                        )
-                                    } else {
-                                        detectDragGesturesAfterLongPress(
                                             onDragStart = { offset ->
                                                 dragStartFirstStickerId = currentStickers.firstOrNull()?.id
                                                 dragDropState.onStartDrag(offset)
@@ -785,7 +802,49 @@ fun PackDetailScreen(
                                                 viewModel.onOpenDeleteStickerDialog(sticker)
                                             }
                                         },
-                                        onIssueClick = { viewModel.onOpenDiagnosticDialog() }
+                                        onIssueClick = { viewModel.onOpenDiagnosticDialog() },
+                                        onPeekStart = { bounds ->
+                                            val file = File(sticker.filePath).let { f ->
+                                                if (f.isAbsolute && f.exists()) f else File(context.filesDir, sticker.filePath)
+                                            }
+                                            peekState.show(
+                                                EmotePeekPayload(
+                                                    id = sticker.id,
+                                                    name = sticker.emoteName,
+                                                    isAnimated = pack.isAnimated,
+                                                    imageModel = if (file.exists()) file else sticker.filePath,
+                                                    placeholderCacheKey = CoilSetup.packStickerPreviewCacheKey(sticker.id),
+                                                    sourceLabel = pack.name,
+                                                    metadataText = EmoteFullscreenViewerDefaults.formatFileSize(sticker.fileLength),
+                                                    sourceBoundsInRoot = bounds,
+                                                    actions = listOf(
+                                                        EmotePeekAction(
+                                                            id = "remove",
+                                                            label = "Quitar",
+                                                            icon = Icons.Default.Delete,
+                                                            accentColor = ErrorNeonRed,
+                                                            onClick = { viewModel.onOpenDeleteStickerDialog(sticker) }
+                                                        ),
+                                                        EmotePeekAction(
+                                                            id = "inspect",
+                                                            label = "Inspeccionar",
+                                                            icon = Icons.Default.ZoomIn,
+                                                            accentColor = ElectricCyan,
+                                                            onClick = { inspectedSticker = sticker }
+                                                        ),
+                                                        EmotePeekAction(
+                                                            id = "share",
+                                                            label = "Compartir",
+                                                            icon = Icons.Default.Share,
+                                                            accentColor = NeonFuchsia,
+                                                            onClick = { shareSticker(sticker, pack.isAnimated) }
+                                                        )
+                                                    )
+                                                )
+                                            )
+                                        },
+                                        onPeekMove = { pos -> peekState.updatePointer(pos) },
+                                        onPeekRelease = { peekState.onRelease(haptic) }
                                     )
                                 }
                             }
@@ -1271,6 +1330,15 @@ fun PackDetailScreen(
             }
         )
     }
+    }
+
+    if (externalPeekController == null) {
+        EmotePeekHost(state = localPeekState) {
+            screenBody()
+        }
+    } else {
+        screenBody()
+    }
 }
 
 @Composable
@@ -1284,7 +1352,10 @@ private fun PackStickerCell(
     onClick: () -> Unit = {},
     onPreviewClick: () -> Unit = {},
     onDeleteClick: () -> Unit = {},
-    onIssueClick: () -> Unit = {}
+    onIssueClick: () -> Unit = {},
+    onPeekStart: ((Rect) -> Unit)? = null,
+    onPeekMove: ((Offset) -> Unit)? = null,
+    onPeekRelease: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
     val file = remember(sticker.filePath) {
@@ -1323,6 +1394,19 @@ private fun PackStickerCell(
                 Modifier
             }
         )
+        .let { base ->
+            if (!isReorderActive && !isDragged && onPeekStart != null && onPeekMove != null && onPeekRelease != null) {
+                base.emotePeekGesture(
+                    key = sticker.id,
+                    enabled = !isReorderActive && !isDragged,
+                    onPeekStart = onPeekStart,
+                    onPeekMove = onPeekMove,
+                    onPeekRelease = onPeekRelease
+                )
+            } else {
+                base
+            }
+        }
         .then(
             if (!isReorderActive) {
                 Modifier.clickable {
@@ -1368,6 +1452,7 @@ private fun PackStickerCell(
                     model = ImageRequest.Builder(context)
                         .data(if (file.exists()) file else sticker.filePath)
                         .size(160, 160)
+                        .memoryCacheKey(CoilSetup.packStickerPreviewCacheKey(sticker.id))
                         .crossfade(true)
                         .build(),
                     contentDescription = sticker.emoteName,
