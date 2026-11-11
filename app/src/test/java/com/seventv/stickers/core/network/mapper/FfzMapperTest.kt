@@ -77,7 +77,7 @@ class FfzMapperTest {
     @Test
     fun toRoomEmotes_prioritizesPrimarySetFiltersHiddenAndDeduplicates() {
         val response = FfzRoomResponseDto(
-            room = FfzRoomDto(id = 1L, twitchId = 123L, displayName = "Rubius", set = 20L),
+            room = FfzRoomDto(id = "rubius", internalId = 1L, twitchId = 123L, displayName = "Rubius", set = 20L),
             sets = mapOf(
                 "10" to FfzEmoteSetDto(
                     id = 10L,

@@ -33,10 +33,11 @@ class BttvProviderRepository(
         val trimmed = query.trim()
         val safeLimit = limit.coerceIn(1, 100)
         val offset = ((page - 1).coerceAtLeast(0)) * safeLimit
+        val queryOffset = offset.takeIf { it > 0 }
 
         if (trimmed.isBlank()) {
             return@withContext safeApiCall(
-                call = { bttvApi.getTrendingEmotes(offset = offset, limit = safeLimit) },
+                call = { bttvApi.getTrendingEmotes(offset = queryOffset, limit = safeLimit) },
                 transform = { list -> list.map { BttvMapper.toDomain(it) } }
             )
         }
@@ -54,7 +55,7 @@ class BttvProviderRepository(
         }
 
         safeApiCall(
-            call = { bttvApi.searchEmotes(query = trimmed, offset = offset, limit = safeLimit) },
+            call = { bttvApi.searchEmotes(query = trimmed, offset = queryOffset, limit = safeLimit) },
             transform = { list -> list.map { BttvMapper.toDomain(it) } }
         )
     }

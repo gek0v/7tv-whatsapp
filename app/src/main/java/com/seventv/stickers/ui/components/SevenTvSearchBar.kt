@@ -40,8 +40,13 @@ object SevenTvSearchBarDefaults {
 
     fun extractEmoteIdFromUrl(query: String): String? {
         val trimmed = query.trim()
-        val regex = Regex("""(?:https?://)?(?:www\.)?7tv\.app/emotes/([a-fA-F0-9]{24}|[a-zA-Z0-9_-]+)""")
-        return regex.find(trimmed)?.groupValues?.get(1)
+        val sevenTvRegex = Regex("""(?:https?://)?(?:www\.)?7tv\.app/emotes/([a-fA-F0-9]{24}|[a-zA-Z0-9_-]+)""")
+        val bttvRegex = Regex("""(?:https?://)?(?:www\.)?betterttv\.com/emotes/([a-fA-F0-9]{24})""")
+        val ffzRegex = Regex("""(?:https?://)?(?:www\.)?frankerfacez\.com/emoticon/(\d+)""")
+
+        return sevenTvRegex.find(trimmed)?.groupValues?.get(1)
+            ?: bttvRegex.find(trimmed)?.groupValues?.get(1)
+            ?: ffzRegex.find(trimmed)?.groupValues?.get(1)
     }
 
     fun isDirectEmoteUrl(query: String): Boolean {

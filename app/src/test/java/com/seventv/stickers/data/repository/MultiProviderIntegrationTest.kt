@@ -24,6 +24,7 @@ import com.seventv.stickers.ui.channel.ChannelLoadState
 import com.seventv.stickers.ui.channel.ChannelProviderFilter
 import com.seventv.stickers.ui.channel.ChannelViewModel
 import com.seventv.stickers.ui.components.EmoteCardDefaults
+import com.seventv.stickers.ui.explore.ExploreCategory
 import com.seventv.stickers.ui.explore.ExploreViewModel
 import com.seventv.stickers.ui.explore.SearchResultsState
 import kotlinx.coroutines.Dispatchers
@@ -264,6 +265,15 @@ class MultiProviderIntegrationTest {
 
         vm.onProviderFilterSelected(ChannelProviderFilter.FRANKERFACEZ)
         assertEquals(listOf("pepeF"), vm.uiState.value.filteredEmotes.map { it.name })
+
+        // Category TOP also uses aggregatedRepository when available
+        vm.onProviderFilterSelected(ChannelProviderFilter.ALL)
+        vm.onCategorySelected(ExploreCategory.TOP)
+        runCurrent()
+        assertEquals(ExploreCategory.TOP, vm.uiState.value.selectedCategory)
+        assertEquals(3, vm.uiState.value.filteredEmotes.size)
+        vm.onProviderFilterSelected(ChannelProviderFilter.BETTERTTV)
+        assertEquals(listOf("pepeB"), vm.uiState.value.filteredEmotes.map { it.name })
     }
 
     @Test

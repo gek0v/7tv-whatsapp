@@ -3,6 +3,8 @@ package com.seventv.stickers.core.network.mapper
 import com.seventv.stickers.core.network.dto.TwitchChannelEmotesResponseDto
 import com.seventv.stickers.core.network.dto.TwitchEmoteDto
 import com.seventv.stickers.core.network.dto.TwitchEmoteSetDto
+import com.seventv.stickers.core.network.dto.TwitchLocalEmoteGroupDto
+import com.seventv.stickers.core.network.dto.TwitchSubProductDto
 import com.seventv.stickers.core.network.model.EmoteProvider
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -56,5 +58,57 @@ class TwitchMapperTest {
         assertEquals(3, result.size)
         assertEquals(listOf("1", "2", "3"), result.map { it.id })
         assertTrue(result.all { it.originalOwner == "IlloJuan" })
+    }
+
+    @Test
+    fun toChannelEmotes_parsesIvrSubProductsAndLocalEmotes() {
+        val response = TwitchChannelEmotesResponseDto(
+            channelName = "xQc",
+            channelLogin = "xqc",
+            subProducts = listOf(
+                TwitchSubProductDto(
+                    id = "1000",
+                    tier = "1000",
+                    emotes = listOf(
+                        TwitchEmoteDto(id = "300", code = "xqcL", assetType = "STATIC")
+                    )
+                )
+            ),
+            localEmotes = listOf(
+                TwitchLocalEmoteGroupDto(
+                    id = "follower",
+                    type = "FOLLOWER",
+                    emotes = listOf(
+                        TwitchEmoteDto(id = "301", code = "xqcDance", assetType = "ANIMATED"),
+                        TwitchEmoteDto(id = "300", code = "xqcL_dup", assetType = "STATIC")
+                    )
+                )
+            ),
+            bitEmotes = listOf(
+                TwitchEmoteDto(id = "302", code = "xqcBit", assetType = "STATIC")
+            )
+        )
+
+        val result = TwitchMapper.toChannelEmotes(response)
+        assertEquals(listOf("300", "301", "302"), result.map { it.id })
+        assertTrue(result[1].isAnimated)
+        assertTrue(result.all { it.originalOwner == "xQc" })
+    }
+
+    @Test
+    fun toGlobalEmotes_parsesEmoteListFromIvrSetsEndpoint() {
+        val sets = listOf(
+            TwitchEmoteSetDto(
+                setID = "0",
+                emoteList = listOf(
+                    TwitchEmoteDto(id = "25", code = "Kappa", assetType = "STATIC"),
+                    TwitchEmoteDto(id = "425618", code = "LUL", assetType = "STATIC")
+                )
+            )
+        )
+
+        val result = TwitchMapper.toGlobalEmotes(sets)
+        assertEquals(listOf("25", "425618"), result.map { it.id })
+        assertTrue(result.all { it.originalOwner == "Twitch" })
     }
 }

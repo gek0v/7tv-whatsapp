@@ -19,14 +19,14 @@ interface BttvApi {
 
     @GET("3/emotes/shared/trending")
     suspend fun getTrendingEmotes(
-        @Query("offset") offset: Int = 0,
+        @Query("offset") offset: Int? = null,
         @Query("limit") limit: Int = 50
     ): Response<List<BttvTrendingEmoteDto>>
 
     @GET("3/emotes/shared/search")
     suspend fun searchEmotes(
         @Query("query") query: String,
-        @Query("offset") offset: Int = 0,
+        @Query("offset") offset: Int? = null,
         @Query("limit") limit: Int = 50
     ): Response<List<BttvEmoteDto>>
 }

@@ -192,7 +192,8 @@ fun AppNavigation(
                 val exploreViewModel: ExploreViewModel = viewModel(
                     factory = ExploreViewModel.Factory(
                         sevenTvRepository = container.sevenTvRepository,
-                        stickerPackRepository = container.stickerPackRepository
+                        stickerPackRepository = container.stickerPackRepository,
+                        aggregatedRepository = container.aggregatedEmoteCatalogRepository
                     )
                 )
                 ExploreScreen(
@@ -214,7 +215,8 @@ fun AppNavigation(
                     factory = ChannelViewModel.Factory(
                         sevenTvRepository = container.sevenTvRepository,
                         stickerPackRepository = container.stickerPackRepository,
-                        packImportManager = container.packImportManager
+                        packImportManager = container.packImportManager,
+                        aggregatedRepository = container.aggregatedEmoteCatalogRepository
                     )
                 )
                 ChannelScreen(
