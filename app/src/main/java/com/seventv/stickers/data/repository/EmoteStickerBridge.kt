@@ -5,35 +5,50 @@ import com.seventv.stickers.core.common.result.StickerResult
 import com.seventv.stickers.core.media.StickerMediaPipeline
 import com.seventv.stickers.core.media.model.ProcessedSticker
 import com.seventv.stickers.core.media.model.RawMediaInput
+import com.seventv.stickers.core.network.downloader.EmoteDownloader
+import com.seventv.stickers.core.network.model.EmoteProvider
 import com.seventv.stickers.core.network.model.SevenTvEmote
+import com.seventv.stickers.core.network.model.UnifiedEmote
+import com.seventv.stickers.core.network.model.toSevenTvEmote
+import com.seventv.stickers.core.network.model.toUnifiedEmote
 import kotlinx.coroutines.CancellationException
 import java.io.File
 
 /**
- * Bridge between SevenTvRepository and StickerMediaPipeline.
- * Coordinates downloading emote binary assets and processing them into compliant WhatsApp stickers,
- * with optional static fallback for oversized animated emotes.
+ * Bridge between emote repositories/downloader and StickerMediaPipeline.
+ * Coordinates downloading emote binary assets from any supported provider (7TV, BTTV, FFZ, Twitch)
+ * and processing them into compliant WhatsApp stickers, with optional static fallback for oversized animated emotes.
  */
 class EmoteStickerBridge(
     private val repository: SevenTvRepository,
-    private val mediaPipeline: StickerMediaPipeline
+    private val mediaPipeline: StickerMediaPipeline,
+    private val emoteDownloader: EmoteDownloader? = null
 ) {
 
-    /**
-     * Downloads and converts a 7TV emote into a WhatsApp-compliant sticker.
-     *
-     * @param emote The emote domain model to download and convert.
-     * @param outputDir Destination directory for the generated sticker WebP file.
-     * @param allowStaticFallback If true, an animated emote failing size constraints will fall back to a static sticker.
-     * @return [StickerResult.Success] containing the [ProcessedSticker], or [StickerResult.Failure].
-     */
     suspend fun convertEmoteToSticker(
         emote: SevenTvEmote,
         outputDir: File,
         allowStaticFallback: Boolean = true
     ): StickerResult<ProcessedSticker> {
+        return convertEmoteToSticker(
+            emote = emote.toUnifiedEmote(),
+            outputDir = outputDir,
+            allowStaticFallback = allowStaticFallback
+        )
+    }
+
+    suspend fun convertEmoteToSticker(
+        emote: UnifiedEmote,
+        outputDir: File,
+        allowStaticFallback: Boolean = true
+    ): StickerResult<ProcessedSticker> {
         return try {
-            val downloadResult = repository.downloadEmote(emote)
+            val downloadResult = if (emote.provider != EmoteProvider.SEVENTV && emoteDownloader != null) {
+                emoteDownloader.downloadEmote(emote)
+            } else {
+                repository.downloadEmote(emote.toSevenTvEmote())
+            }
+
             val asset = when (downloadResult) {
                 is StickerResult.Success -> downloadResult.data
                 is StickerResult.Failure -> return downloadResult
@@ -42,6 +57,7 @@ class EmoteStickerBridge(
             val mimeType = when (asset.format.uppercase()) {
                 "GIF" -> "image/gif"
                 "PNG" -> "image/png"
+                "JPEG", "JPG" -> "image/jpeg"
                 else -> "image/webp"
             }
 

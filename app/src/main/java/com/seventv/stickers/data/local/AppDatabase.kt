@@ -6,18 +6,17 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import com.seventv.stickers.data.local.converter.EmojiListConverter
 import com.seventv.stickers.data.local.dao.StickerDao
 import com.seventv.stickers.data.local.dao.StickerPackDao
 import com.seventv.stickers.data.local.entity.StickerEntity
 import com.seventv.stickers.data.local.entity.StickerPackEntity
 
-import androidx.room.migration.Migration
-import androidx.sqlite.db.SupportSQLiteDatabase
-
 @Database(
     entities = [StickerPackEntity::class, StickerEntity::class],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 @TypeConverters(EmojiListConverter::class)
@@ -36,6 +35,12 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE stickers ADD COLUMN provider TEXT NOT NULL DEFAULT 'SEVENTV'")
+            }
+        }
+
         fun getInstance(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(
@@ -43,8 +48,8 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "seventv_stickers.db"
                 )
-                .addMigrations(MIGRATION_1_2)
-                .build().also { INSTANCE = it }
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                    .build().also { INSTANCE = it }
             }
         }
 
