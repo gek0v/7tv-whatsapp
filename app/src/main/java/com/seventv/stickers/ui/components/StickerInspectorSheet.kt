@@ -125,6 +125,7 @@ fun StickerInspectorSheet(
     onDeleteSticker: () -> Unit = {},
     onSetAsTrayIcon: () -> Unit = {},
     isAnimated: Boolean = false,
+    isTrayIcon: Boolean = false,
     onFullscreenClick: (() -> Unit)? = null,
     onShareSticker: (() -> Unit)? = null,
     modifier: Modifier = Modifier
@@ -604,8 +605,13 @@ fun StickerInspectorSheet(
                         onSetAsTrayIcon()
                         onDismiss()
                     },
+                    enabled = !isTrayIcon,
                     shape = RoundedCornerShape(16.dp),
-                    border = BorderStroke(1.2.dp, SunsetYellow.copy(alpha = 0.8f)),
+                    border = BorderStroke(
+                        1.2.dp,
+                        if (isTrayIcon) SunsetYellow else SunsetYellow.copy(alpha = 0.8f)
+                    ),
+                    contentPadding = PaddingValues(horizontal = 8.dp),
                     modifier = Modifier
                         .weight(1f)
                         .height(48.dp)
@@ -614,14 +620,16 @@ fun StickerInspectorSheet(
                         imageVector = Icons.Default.Star,
                         contentDescription = null,
                         tint = SunsetYellow,
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(16.dp)
                     )
-                    Spacer(modifier = Modifier.width(6.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
                     Text(
-                        text = "Icono del pack",
-                        style = MaterialTheme.typography.labelLarge,
+                        text = if (isTrayIcon) "Portada actual" else "Fijar como portada",
+                        style = MaterialTheme.typography.labelMedium,
                         color = SunsetYellow,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
 

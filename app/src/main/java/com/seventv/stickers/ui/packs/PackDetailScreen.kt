@@ -2,7 +2,20 @@ package com.seventv.stickers.ui.packs
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -15,6 +28,7 @@ import com.seventv.stickers.ui.theme.SunsetYellow
 import com.seventv.stickers.ui.theme.ErrorNeonRed
 import com.seventv.stickers.ui.theme.GlassSurfaceCard
 import com.seventv.stickers.ui.theme.GlassBorder
+import com.seventv.stickers.ui.theme.GlassGlowFuchsia
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -33,12 +47,16 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.DragIndicator
+import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Refresh
@@ -75,10 +93,17 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.zIndex
+import kotlinx.coroutines.delay
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -101,7 +126,7 @@ import com.seventv.stickers.whatsapp.WhatsAppIntentHelper
 import kotlinx.coroutines.launch
 import java.io.File
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun PackDetailScreen(
     packId: String,
@@ -115,6 +140,9 @@ fun PackDetailScreen(
     val coroutineScope = rememberCoroutineScope()
     var inspectedSticker by remember { mutableStateOf<PackSticker?>(null) }
     var fullscreenSticker by remember { mutableStateOf<PackSticker?>(null) }
+    val gridState = rememberLazyGridState()
+    val slotZeroFlashAnim = remember { Animatable(0f) }
+    var dragStartFirstStickerId by remember { mutableStateOf<String?>(null) }
 
     val addPackLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
@@ -243,6 +271,29 @@ fun PackDetailScreen(
                 },
                 actions = {
                     if (pack != null) {
+                        if (pack.stickers.size > 1) {
+                            FilledTonalButton(
+                                onClick = { viewModel.onToggleReorderMode() },
+                                colors = ButtonDefaults.filledTonalButtonColors(
+                                    containerColor = if (state.isReorderMode) SunsetYellow else ElectricCyan.copy(alpha = 0.2f),
+                                    contentColor = if (state.isReorderMode) Color(0xFF160D2E) else ElectricCyan
+                                ),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                modifier = Modifier.padding(end = 4.dp)
+                            ) {
+                                Icon(
+                                    imageVector = if (state.isReorderMode) Icons.Default.Check else Icons.Default.SwapVert,
+                                    contentDescription = if (state.isReorderMode) "Terminar de ordenar" else "Ordenar stickers",
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = if (state.isReorderMode) "Listo" else "Ordenar",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
                         if (pack.originSetId != null) {
                             IconButton(
                                 onClick = { viewModel.onCheckPackUpdates(pack) },
@@ -515,6 +566,98 @@ fun PackDetailScreen(
                     }
                 }
 
+                val currentStickers by rememberUpdatedState(pack.stickers)
+                val dragDropState = rememberGridDragDropState(
+                    gridState = gridState,
+                    onMove = { fromIndex, toIndex ->
+                        viewModel.onMoveSticker(pack.identifier, fromIndex, toIndex)
+                    },
+                    onDragStart = {
+                        viewModel.onDragStarted()
+                    },
+                    onDragEnd = {
+                        val changedSlotZero = dragStartFirstStickerId != null &&
+                            currentStickers.firstOrNull()?.id != dragStartFirstStickerId
+                        viewModel.onPersistStickerOrder(
+                            packIdentifier = pack.identifier,
+                            orderedStickerIds = currentStickers.map { it.id }
+                        )
+                        if (changedSlotZero) {
+                            coroutineScope.launch {
+                                slotZeroFlashAnim.snapTo(1f)
+                                slotZeroFlashAnim.animateTo(0f, tween(durationMillis = 700))
+                            }
+                        }
+                    },
+                    onDragCancel = {
+                        viewModel.onDragCancelled(pack.identifier)
+                    }
+                )
+                dragDropState.updateCallbacks(
+                    onMove = { fromIndex, toIndex ->
+                        viewModel.onMoveSticker(pack.identifier, fromIndex, toIndex)
+                    },
+                    onDragStart = {
+                        viewModel.onDragStarted()
+                    },
+                    onDragEnd = {
+                        val changedSlotZero = dragStartFirstStickerId != null &&
+                            currentStickers.firstOrNull()?.id != dragStartFirstStickerId
+                        viewModel.onPersistStickerOrder(
+                            packIdentifier = pack.identifier,
+                            orderedStickerIds = currentStickers.map { it.id }
+                        )
+                        if (changedSlotZero) {
+                            coroutineScope.launch {
+                                slotZeroFlashAnim.snapTo(1f)
+                                slotZeroFlashAnim.animateTo(0f, tween(durationMillis = 700))
+                            }
+                        }
+                    },
+                    onDragCancel = {
+                        viewModel.onDragCancelled(pack.identifier)
+                    },
+                    onSlotZeroChanged = {}
+                )
+
+                LaunchedEffect(dragDropState.isDragging) {
+                    while (dragDropState.isDragging) {
+                        dragDropState.performAutoscrollStepIfNeeded()
+                        delay(16L)
+                    }
+                }
+
+                val isReorderActive = state.isReorderMode || dragDropState.isDragging
+                val infiniteTransition = rememberInfiniteTransition(label = "reorderWobble")
+                val wobbleAngle by infiniteTransition.animateFloat(
+                    initialValue = -1.1f,
+                    targetValue = 1.1f,
+                    animationSpec = infiniteRepeatable(
+                        animation = tween(durationMillis = 220),
+                        repeatMode = RepeatMode.Reverse
+                    ),
+                    label = "wobbleAngle"
+                )
+
+                AnimatedVisibility(visible = isReorderActive) {
+                    Surface(
+                        shape = RoundedCornerShape(14.dp),
+                        color = SunsetYellow.copy(alpha = 0.14f),
+                        border = BorderStroke(1.dp, SunsetYellow.copy(alpha = 0.55f)),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 4.dp)
+                    ) {
+                        Text(
+                            text = "? El sticker #1 es la portada de WhatsApp ? Arrastra para mover",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = SunsetYellow,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp)
+                        )
+                    }
+                }
+
                 // Sticker Grid wrapped in Chat Simulator Background with glass frame
                 Box(
                     modifier = Modifier
@@ -538,22 +681,113 @@ fun PackDetailScreen(
                         modifier = Modifier.fillMaxSize()
                     ) {
                         LazyVerticalGrid(
+                            state = gridState,
                             columns = GridCells.Fixed(3),
                             contentPadding = PaddingValues(12.dp),
                             horizontalArrangement = Arrangement.spacedBy(10.dp),
                             verticalArrangement = Arrangement.spacedBy(10.dp),
-                            modifier = Modifier.fillMaxSize()
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .pointerInput(pack.identifier, state.isReorderMode) {
+                                    if (state.isReorderMode) {
+                                        detectDragGestures(
+                                            onDragStart = { offset ->
+                                                dragStartFirstStickerId = currentStickers.firstOrNull()?.id
+                                                dragDropState.onStartDrag(offset)
+                                            },
+                                            onDrag = { change, dragAmount ->
+                                                change.consume()
+                                                dragDropState.onDragBy(dragAmount)
+                                            },
+                                            onDragEnd = { dragDropState.onFinishDrag() },
+                                            onDragCancel = { dragDropState.onCancelDrag() }
+                                        )
+                                    } else {
+                                        detectDragGesturesAfterLongPress(
+                                            onDragStart = { offset ->
+                                                dragStartFirstStickerId = currentStickers.firstOrNull()?.id
+                                                dragDropState.onStartDrag(offset)
+                                            },
+                                            onDrag = { change, dragAmount ->
+                                                change.consume()
+                                                dragDropState.onDragBy(dragAmount)
+                                            },
+                                            onDragEnd = { dragDropState.onFinishDrag() },
+                                            onDragCancel = { dragDropState.onCancelDrag() }
+                                        )
+                                    }
+                                }
                         ) {
                             itemsIndexed(pack.stickers, key = { _, sticker -> sticker.id }) { index, sticker ->
-                                PackStickerCell(
-                                    sticker = sticker,
-                                    isTrayIcon = index == 0,
-                                    issue = state.stickerIssues[sticker.id],
-                                    onClick = { inspectedSticker = sticker },
-                                    onPreviewClick = { fullscreenSticker = sticker },
-                                    onDeleteClick = { viewModel.onOpenDeleteStickerDialog(sticker) },
-                                    onIssueClick = { viewModel.onOpenDiagnosticDialog() }
+                                val isDragged = dragDropState.draggingItemKey == sticker.id
+                                val targetScale = if (isDragged) 1.08f else 1f
+                                val animatedScale by animateFloatAsState(
+                                    targetValue = targetScale,
+                                    animationSpec = spring(
+                                        dampingRatio = Spring.DampingRatioNoBouncy,
+                                        stiffness = Spring.StiffnessMedium
+                                    ),
+                                    label = "dragScale"
                                 )
+                                val translation = if (isDragged) {
+                                    dragDropState.currentItemTranslation(sticker.id)
+                                } else {
+                                    Offset.Zero
+                                }
+                                val itemWobble = if (isReorderActive && !isDragged) {
+                                    if (index % 2 == 0) wobbleAngle else -wobbleAngle
+                                } else {
+                                    0f
+                                }
+
+                                Box(
+                                    modifier = Modifier
+                                        .then(
+                                            if (!isDragged) {
+                                                Modifier.animateItemPlacement(
+                                                    animationSpec = spring(
+                                                        dampingRatio = Spring.DampingRatioNoBouncy,
+                                                        stiffness = Spring.StiffnessMediumLow
+                                                    )
+                                                )
+                                            } else {
+                                                Modifier
+                                            }
+                                        )
+                                        .zIndex(if (isDragged) 10f else 0f)
+                                        .graphicsLayer {
+                                            translationX = translation.x
+                                            translationY = translation.y
+                                            scaleX = animatedScale
+                                            scaleY = animatedScale
+                                            rotationZ = itemWobble
+                                        }
+                                ) {
+                                    PackStickerCell(
+                                        sticker = sticker,
+                                        isTrayIcon = index == 0,
+                                        isDragged = isDragged,
+                                        isReorderActive = isReorderActive,
+                                        trayFlashAlpha = if (index == 0) slotZeroFlashAnim.value else 0f,
+                                        issue = state.stickerIssues[sticker.id],
+                                        onClick = {
+                                            if (!state.isReorderMode && !dragDropState.isDragging) {
+                                                inspectedSticker = sticker
+                                            }
+                                        },
+                                        onPreviewClick = {
+                                            if (!state.isReorderMode && !dragDropState.isDragging) {
+                                                fullscreenSticker = sticker
+                                            }
+                                        },
+                                        onDeleteClick = {
+                                            if (!dragDropState.isDragging) {
+                                                viewModel.onOpenDeleteStickerDialog(sticker)
+                                            }
+                                        },
+                                        onIssueClick = { viewModel.onOpenDiagnosticDialog() }
+                                    )
+                                }
                             }
                         }
                     }
@@ -586,10 +820,16 @@ fun PackDetailScreen(
                 viewModel.onOpenDeleteStickerDialog(toDelete)
             },
             onSetAsTrayIcon = {
-                viewModel.onSetStickerAsTrayIcon(pack.identifier, inspectedSticker!!.id)
+                val targetId = inspectedSticker!!.id
                 inspectedSticker = null
+                viewModel.onSetStickerAsTrayIcon(pack.identifier, targetId)
+                coroutineScope.launch {
+                    slotZeroFlashAnim.snapTo(1f)
+                    slotZeroFlashAnim.animateTo(0f, tween(durationMillis = 700))
+                }
             },
             isAnimated = pack.isAnimated,
+            isTrayIcon = pack.stickers.firstOrNull()?.id == inspectedSticker!!.id,
             onFullscreenClick = {
                 fullscreenSticker = inspectedSticker
             },
@@ -1037,6 +1277,9 @@ fun PackDetailScreen(
 private fun PackStickerCell(
     sticker: PackSticker,
     isTrayIcon: Boolean = false,
+    isDragged: Boolean = false,
+    isReorderActive: Boolean = false,
+    trayFlashAlpha: Float = 0f,
     issue: StickerIssue? = null,
     onClick: () -> Unit = {},
     onPreviewClick: () -> Unit = {},
@@ -1049,33 +1292,78 @@ private fun PackStickerCell(
         if (f.isAbsolute && f.exists()) f else File(context.filesDir, sticker.filePath)
     }
 
+    val cardBorder = when {
+        isDragged -> BorderStroke(
+            width = 2.dp,
+            brush = Brush.linearGradient(listOf(NeonFuchsia, ElectricCyan))
+        )
+        issue != null -> BorderStroke(1.5.dp, ErrorNeonRed)
+        isTrayIcon -> BorderStroke(2.dp, SunsetYellow)
+        isReorderActive -> BorderStroke(1.dp, ElectricCyan.copy(alpha = 0.55f))
+        else -> BorderStroke(1.dp, Color(0x35FFFFFF))
+    }
+
+    val containerColor = when {
+        isDragged -> GlassGlowFuchsia.copy(alpha = 0.45f)
+        issue != null -> ErrorNeonRed.copy(alpha = 0.2f)
+        else -> GlassSurfaceCard
+    }
+
+    val cardModifier = Modifier
+        .fillMaxWidth()
+        .then(
+            if (isDragged) {
+                Modifier.shadow(
+                    elevation = 18.dp,
+                    shape = RoundedCornerShape(18.dp),
+                    ambientColor = NeonFuchsia,
+                    spotColor = ElectricCyan
+                )
+            } else {
+                Modifier
+            }
+        )
+        .then(
+            if (!isReorderActive) {
+                Modifier.clickable {
+                    if (issue != null) onIssueClick() else onClick()
+                }
+            } else {
+                Modifier
+            }
+        )
+
     Card(
         shape = RoundedCornerShape(18.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = if (issue != null) {
-                ErrorNeonRed.copy(alpha = 0.2f)
-            } else {
-                GlassSurfaceCard
-            }
-        ),
-        border = if (issue != null) {
-            BorderStroke(1.5.dp, ErrorNeonRed)
-        } else {
-            BorderStroke(1.dp, Color(0x35FFFFFF))
-        },
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable {
-                if (issue != null) onIssueClick() else onClick()
-            }
+        colors = CardDefaults.cardColors(containerColor = containerColor),
+        border = cardBorder,
+        modifier = cardModifier
     ) {
         Box(modifier = Modifier.fillMaxWidth()) {
+            if (trayFlashAlpha > 0f && isTrayIcon) {
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .background(SunsetYellow.copy(alpha = 0.35f * trayFlashAlpha))
+                )
+            }
+
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(8.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
+                val imageModifier = Modifier
+                    .size(72.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .then(
+                        if (!isReorderActive) {
+                            Modifier.clickable(onClick = onPreviewClick)
+                        } else {
+                            Modifier
+                        }
+                    )
                 AsyncImage(
                     model = ImageRequest.Builder(context)
                         .data(if (file.exists()) file else sticker.filePath)
@@ -1083,10 +1371,7 @@ private fun PackStickerCell(
                         .crossfade(true)
                         .build(),
                     contentDescription = sticker.emoteName,
-                    modifier = Modifier
-                        .size(72.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .clickable(onClick = onPreviewClick)
+                    modifier = imageModifier
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
@@ -1122,7 +1407,7 @@ private fun PackStickerCell(
                     modifier = Modifier.align(Alignment.TopStart)
                 ) {
                     Text(
-                        text = "⚠️ ERROR",
+                        text = "?? ERROR",
                         color = Color.White,
                         fontSize = 8.sp,
                         fontWeight = FontWeight.Bold,
@@ -1132,17 +1417,32 @@ private fun PackStickerCell(
             } else if (isTrayIcon) {
                 Surface(
                     shape = RoundedCornerShape(topStart = 16.dp, bottomEnd = 8.dp),
-                    color = SunsetYellow.copy(alpha = 0.25f),
-                    border = BorderStroke(1.dp, SunsetYellow.copy(alpha = 0.8f)),
+                    color = SunsetYellow.copy(alpha = 0.28f),
+                    border = BorderStroke(1.dp, SunsetYellow),
                     modifier = Modifier.align(Alignment.TopStart)
                 ) {
                     Text(
-                        text = "★ Tray",
+                        text = "? Portada",
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold,
                         color = SunsetYellow,
                         fontSize = 9.sp,
                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+                }
+            } else if (isReorderActive) {
+                Surface(
+                    shape = RoundedCornerShape(topStart = 16.dp, bottomEnd = 8.dp),
+                    color = ElectricCyan.copy(alpha = 0.2f),
+                    modifier = Modifier.align(Alignment.TopStart)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.DragIndicator,
+                        contentDescription = "Arrastrar",
+                        tint = ElectricCyan,
+                        modifier = Modifier
+                            .padding(horizontal = 4.dp, vertical = 2.dp)
+                            .size(13.dp)
                     )
                 }
             }

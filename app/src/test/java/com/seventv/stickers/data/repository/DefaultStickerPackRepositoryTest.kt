@@ -7,6 +7,8 @@ import android.content.pm.ProviderInfo
 import android.database.Cursor
 import android.database.MatrixCursor
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Color
 import android.net.Uri
 import androidx.room.Room
 import com.seventv.stickers.core.common.result.StickerError
@@ -1030,6 +1032,153 @@ class DefaultStickerPackRepositoryTest {
         val newEmotes = (result as StickerResult.Success).data
         assertEquals(2, newEmotes.size)
         assertEquals(listOf("e2", "e3"), newEmotes.map { it.id })
+    }
+
+    private fun createSolidColorImageBytes(color: Int, width: Int = 120, height: Int = 120): ByteArray {
+        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        bitmap.eraseColor(color)
+        val baos = ByteArrayOutputStream()
+        bitmap.compress(Bitmap.CompressFormat.PNG, 100, baos)
+        bitmap.recycle()
+        return baos.toByteArray()
+    }
+
+    @Test
+    fun reorderStickersUpdatesSortOrderInRoomAndRegeneratesTrayIconWhenSlotZeroChanges() = runTest(testDispatcher) {
+        val packId = "reorder-pack-1"
+        val s1File = storageManager.saveStickerFile(packId, "s1", createSolidColorImageBytes(Color.RED))
+        val s2File = storageManager.saveStickerFile(packId, "s2", createSolidColorImageBytes(Color.GREEN))
+        val s3File = storageManager.saveStickerFile(packId, "s3", createSolidColorImageBytes(Color.BLUE))
+        val initialTray = createSolidColorImageBytes(Color.RED, 96, 96)
+        val trayFile = storageManager.saveTrayIcon(packId, initialTray)
+
+        val packEntity = StickerPackEntity(
+            identifier = packId,
+            name = "Reorder Pack",
+            publisher = "Tester",
+            trayImageRelativePath = "sticker_packs/$packId/tray_icon.png",
+            isAnimated = false,
+            isWhitelisted = true,
+            createdAt = 1000L
+        )
+        val stickers = listOf(
+            StickerEntity("s1", packId, "e1", "Red", "sticker_packs/$packId/${s1File.name}", listOf("??"), s1File.length(), 0),
+            StickerEntity("s2", packId, "e2", "Green", "sticker_packs/$packId/${s2File.name}", listOf("??"), s2File.length(), 1),
+            StickerEntity("s3", packId, "e3", "Blue", "sticker_packs/$packId/${s3File.name}", listOf("??"), s3File.length(), 2)
+        )
+        packDao.insertPackWithStickers(packEntity, stickers)
+
+        val result = repository.reorderStickers(packId, listOf("s3", "s1", "s2"))
+        assertTrue("Expected Success, got $result", result is StickerResult.Success)
+
+        val updatedPack = packDao.getPackByIdentifier(packId)
+        assertNotNull(updatedPack)
+        assertFalse("Whitelist should reset after reorder", updatedPack!!.pack.isWhitelisted)
+
+        val sortedIds = updatedPack.stickers.sortedBy { it.sortOrder }.map { it.id }
+        assertEquals(listOf("s3", "s1", "s2"), sortedIds)
+        assertEquals(listOf(0, 1, 2), updatedPack.stickers.sortedBy { it.sortOrder }.map { it.sortOrder })
+
+        val regeneratedTray = BitmapFactory.decodeFile(trayFile.absolutePath)
+        assertNotNull("Regenerated tray icon must decode cleanly", regeneratedTray)
+        assertEquals(96, regeneratedTray.width)
+        assertEquals(96, regeneratedTray.height)
+        assertEquals(Color.BLUE, regeneratedTray.getPixel(48, 48))
+        regeneratedTray.recycle()
+    }
+
+    @Test
+    fun reorderStickersPreservingSlotZeroUpdatesOrderWithoutOverwritingTrayIcon() = runTest(testDispatcher) {
+        val packId = "reorder-pack-2"
+        val s1File = storageManager.saveStickerFile(packId, "s1", createSolidColorImageBytes(Color.RED))
+        val s2File = storageManager.saveStickerFile(packId, "s2", createSolidColorImageBytes(Color.GREEN))
+        val s3File = storageManager.saveStickerFile(packId, "s3", createSolidColorImageBytes(Color.BLUE))
+        val sentinelTrayBytes = byteArrayOf(7, 8, 9, 10)
+        val trayFile = storageManager.saveTrayIcon(packId, sentinelTrayBytes)
+
+        val packEntity = StickerPackEntity(
+            identifier = packId,
+            name = "Reorder Keep Slot 0",
+            publisher = "Tester",
+            trayImageRelativePath = "sticker_packs/$packId/tray_icon.png",
+            isAnimated = false,
+            isWhitelisted = true,
+            createdAt = 1000L
+        )
+        val stickers = listOf(
+            StickerEntity("s1", packId, "e1", "Red", "sticker_packs/$packId/${s1File.name}", listOf("??"), s1File.length(), 0),
+            StickerEntity("s2", packId, "e2", "Green", "sticker_packs/$packId/${s2File.name}", listOf("??"), s2File.length(), 1),
+            StickerEntity("s3", packId, "e3", "Blue", "sticker_packs/$packId/${s3File.name}", listOf("??"), s3File.length(), 2)
+        )
+        packDao.insertPackWithStickers(packEntity, stickers)
+
+        val result = repository.reorderStickers(packId, listOf("s1", "s3", "s2"))
+        assertTrue(result is StickerResult.Success)
+
+        val updatedPack = packDao.getPackByIdentifier(packId)!!
+        assertEquals(listOf("s1", "s3", "s2"), updatedPack.stickers.sortedBy { it.sortOrder }.map { it.id })
+        assertTrue("Tray bytes should remain untouched when slot 0 does not change", sentinelTrayBytes.contentEquals(trayFile.readBytes()))
+    }
+
+    @Test
+    fun setStickerAsTrayIconMovesStickerToSlotZeroAndRegeneratesTrayIcon() = runTest(testDispatcher) {
+        val packId = "tray-pack-1"
+        val s1File = storageManager.saveStickerFile(packId, "s1", createSolidColorImageBytes(Color.RED))
+        val s2File = storageManager.saveStickerFile(packId, "s2", createSolidColorImageBytes(Color.GREEN))
+        val s3File = storageManager.saveStickerFile(packId, "s3", createSolidColorImageBytes(Color.BLUE))
+        val trayFile = storageManager.saveTrayIcon(packId, createSolidColorImageBytes(Color.RED, 96, 96))
+
+        val packEntity = StickerPackEntity(
+            identifier = packId,
+            name = "Tray Pack",
+            publisher = "Tester",
+            trayImageRelativePath = "sticker_packs/$packId/tray_icon.png",
+            isAnimated = false,
+            isWhitelisted = true,
+            createdAt = 1000L
+        )
+        val stickers = listOf(
+            StickerEntity("s1", packId, "e1", "Red", "sticker_packs/$packId/${s1File.name}", listOf("??"), s1File.length(), 0),
+            StickerEntity("s2", packId, "e2", "Green", "sticker_packs/$packId/${s2File.name}", listOf("??"), s2File.length(), 1),
+            StickerEntity("s3", packId, "e3", "Blue", "sticker_packs/$packId/${s3File.name}", listOf("??"), s3File.length(), 2)
+        )
+        packDao.insertPackWithStickers(packEntity, stickers)
+
+        val result = repository.setStickerAsTrayIcon(packId, "s2")
+        assertTrue("Expected Success, got $result", result is StickerResult.Success)
+
+        val updatedPack = packDao.getPackByIdentifier(packId)!!
+        assertFalse(updatedPack.pack.isWhitelisted)
+        assertEquals(listOf("s2", "s1", "s3"), updatedPack.stickers.sortedBy { it.sortOrder }.map { it.id })
+
+        val regeneratedTray = BitmapFactory.decodeFile(trayFile.absolutePath)
+        assertNotNull(regeneratedTray)
+        assertEquals(96, regeneratedTray.width)
+        assertEquals(96, regeneratedTray.height)
+        assertEquals(Color.GREEN, regeneratedTray.getPixel(48, 48))
+        regeneratedTray.recycle()
+    }
+
+    @Test
+    fun setStickerAsTrayIconReturnsFailureWhenStickerOrPackMissing() = runTest(testDispatcher) {
+        val missingPack = repository.setStickerAsTrayIcon("unknown-pack", "s1")
+        assertTrue(missingPack is StickerResult.Failure)
+        assertTrue((missingPack as StickerResult.Failure).error is StickerError.PackNotFound)
+
+        val packEntity = StickerPackEntity(
+            identifier = "pack-missing-sticker",
+            name = "Pack",
+            publisher = "Tester",
+            trayImageRelativePath = "tray.png",
+            isAnimated = false,
+            isWhitelisted = false,
+            createdAt = 1000L
+        )
+        packDao.insertPackWithStickers(packEntity, emptyList())
+
+        val missingSticker = repository.setStickerAsTrayIcon("pack-missing-sticker", "non-existent")
+        assertTrue(missingSticker is StickerResult.Failure)
+        assertTrue((missingSticker as StickerResult.Failure).error is StickerError.ValidationError)
     }
 
     private class FakeSevenTvRepository : SevenTvRepository {

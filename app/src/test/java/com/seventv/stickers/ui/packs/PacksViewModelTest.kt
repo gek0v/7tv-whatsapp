@@ -443,15 +443,81 @@ class PacksViewModelTest {
     }
 
     @Test
-    fun setStickerAsTrayIconShowsFeedback() = runTest(testDispatcher) {
+    fun setStickerAsTrayIconMovesStickerToSlotZeroCallsRepositoryAndShowsFeedback() = runTest(testDispatcher) {
         val pack = createSamplePack("pack_1", "Original")
         fakeStickerPackRepository.packsFlow.value = listOf(pack)
         advanceUntilIdle()
 
-        viewModel.onSetStickerAsTrayIcon("pack_1", "s_1")
+        viewModel.onSelectPackDetail("pack_1")
+        viewModel.onSetStickerAsTrayIcon("pack_1", "s_3")
         advanceUntilIdle()
 
-        assertEquals("Icono del pack actualizado", viewModel.uiState.value.userFeedbackMessage)
+        assertEquals("pack_1" to "s_3", fakeStickerPackRepository.lastTrayIconSet)
+        assertEquals("Portada del pack actualizada", viewModel.uiState.value.userFeedbackMessage)
+        val updatedStickers = viewModel.uiState.value.selectedPackDetail?.stickers.orEmpty()
+        assertEquals(listOf("s_3", "s_1", "s_2"), updatedStickers.map { it.id })
+        assertEquals(listOf(0, 1, 2), updatedStickers.map { it.sortOrder })
+    }
+
+    @Test
+    fun onMoveStickerUpdatesMemoryOrderImmediatelyAndPersistsOnFinish() = runTest(testDispatcher) {
+        val pack = createSamplePack("pack_1", "Original")
+        fakeStickerPackRepository.packsFlow.value = listOf(pack)
+        advanceUntilIdle()
+
+        viewModel.onSelectPackDetail("pack_1")
+        viewModel.onDragStarted()
+        assertTrue(viewModel.uiState.value.isDraggingSticker)
+
+        viewModel.onMoveSticker("pack_1", fromIndex = 0, toIndex = 2)
+
+        val inMemory = viewModel.uiState.value.selectedPackDetail?.stickers.orEmpty()
+        assertEquals(listOf("s_2", "s_3", "s_1"), inMemory.map { it.id })
+        assertEquals(listOf(0, 1, 2), inMemory.map { it.sortOrder })
+        assertNull("Should not persist until drag finishes", fakeStickerPackRepository.lastReorderedPackId)
+
+        viewModel.onPersistStickerOrder("pack_1")
+        advanceUntilIdle()
+
+        assertFalse(viewModel.uiState.value.isDraggingSticker)
+        assertEquals("pack_1", fakeStickerPackRepository.lastReorderedPackId)
+        assertEquals(listOf("s_2", "s_3", "s_1"), fakeStickerPackRepository.lastReorderedStickerIds)
+    }
+
+    @Test
+    fun onToggleReorderModeTogglesAndResetsOnClear() = runTest(testDispatcher) {
+        val pack = createSamplePack("pack_1", "Original")
+        fakeStickerPackRepository.packsFlow.value = listOf(pack)
+        advanceUntilIdle()
+
+        viewModel.onSelectPackDetail("pack_1")
+        assertFalse(viewModel.uiState.value.isReorderMode)
+
+        viewModel.onToggleReorderMode()
+        assertTrue(viewModel.uiState.value.isReorderMode)
+
+        viewModel.onClearSelectedPackDetail()
+        assertFalse(viewModel.uiState.value.isReorderMode)
+    }
+
+    @Test
+    fun onPersistStickerOrderHandlesFailureAndRevertsOrder() = runTest(testDispatcher) {
+        val pack = createSamplePack("pack_1", "Original")
+        fakeStickerPackRepository.packsFlow.value = listOf(pack)
+        fakeStickerPackRepository.reorderShouldFail = true
+        advanceUntilIdle()
+
+        viewModel.onSelectPackDetail("pack_1")
+        viewModel.onDragStarted()
+        viewModel.onMoveSticker("pack_1", fromIndex = 2, toIndex = 0)
+        assertEquals(listOf("s_3", "s_1", "s_2"), viewModel.uiState.value.selectedPackDetail?.stickers?.map { it.id })
+
+        viewModel.onPersistStickerOrder("pack_1")
+        advanceUntilIdle()
+
+        assertFalse(viewModel.uiState.value.isDraggingSticker)
+        assertEquals(listOf("s_1", "s_2", "s_3"), viewModel.uiState.value.selectedPackDetail?.stickers?.map { it.id })
+        assertTrue(viewModel.uiState.value.userFeedbackMessage?.contains("Error al guardar el orden") == true)
     }
 
     @Test
@@ -773,6 +839,48 @@ class PacksViewModelTest {
         override suspend fun updateStickerEmojis(stickerId: String, emojis: List<String>): StickerResult<Unit> {
             lastUpdatedStickerId = stickerId
             lastUpdatedEmojis = emojis
+            return StickerResult.Success(Unit)
+        }
+
+        var lastReorderedPackId: String? = null
+        var lastReorderedStickerIds: List<String>? = null
+        var reorderShouldFail: Boolean = false
+        override suspend fun reorderStickers(
+            packIdentifier: String,
+            orderedStickerIds: List<String>
+        ): StickerResult<Unit> {
+            lastReorderedPackId = packIdentifier
+            lastReorderedStickerIds = orderedStickerIds
+            if (reorderShouldFail) {
+                return StickerResult.Failure(StickerError.StorageIoError("Simulated reorder failure"))
+            }
+            packsFlow.value = packsFlow.value.map { pack ->
+                if (pack.identifier == packIdentifier) {
+                    val byId = pack.stickers.associateBy { it.id }
+                    val reordered = orderedStickerIds.mapNotNull { byId[it] }
+                        .mapIndexed { idx, s -> s.copy(sortOrder = idx) }
+                    pack.copy(stickers = reordered, isWhitelisted = false)
+                } else pack
+            }
+            return StickerResult.Success(Unit)
+        }
+
+        var lastTrayIconSet: Pair<String, String>? = null
+        override suspend fun setStickerAsTrayIcon(
+            packIdentifier: String,
+            stickerId: String
+        ): StickerResult<Unit> {
+            lastTrayIconSet = packIdentifier to stickerId
+            packsFlow.value = packsFlow.value.map { pack ->
+                if (pack.identifier == packIdentifier) {
+                    val target = pack.stickers.firstOrNull { it.id == stickerId }
+                    if (target != null) {
+                        val reordered = (listOf(target) + pack.stickers.filter { it.id != stickerId })
+                            .mapIndexed { idx, s -> s.copy(sortOrder = idx) }
+                        pack.copy(stickers = reordered, isWhitelisted = false)
+                    } else pack
+                } else pack
+            }
             return StickerResult.Success(Unit)
         }
 

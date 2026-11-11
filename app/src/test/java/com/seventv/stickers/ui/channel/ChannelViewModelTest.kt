@@ -593,6 +593,8 @@ class ChannelViewModelTest {
 
         override suspend fun updateStickerEmojis(stickerId: String, emojis: List<String>): StickerResult<Unit> =
             StickerResult.Success(Unit)
+        override suspend fun reorderStickers(packIdentifier: String, orderedStickerIds: List<String>): StickerResult<Unit> = StickerResult.Success(Unit)
+        override suspend fun setStickerAsTrayIcon(packIdentifier: String, stickerId: String): StickerResult<Unit> = StickerResult.Success(Unit)
 
         override suspend fun updatePackWhitelisted(identifier: String, isWhitelisted: Boolean): StickerResult<Unit> =
             StickerResult.Success(Unit)
