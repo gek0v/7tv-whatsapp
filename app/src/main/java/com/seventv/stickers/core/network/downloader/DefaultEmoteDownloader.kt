@@ -3,7 +3,10 @@ package com.seventv.stickers.core.network.downloader
 import com.seventv.stickers.core.common.result.StickerError
 import com.seventv.stickers.core.common.result.StickerResult
 import com.seventv.stickers.core.network.model.DownloadedEmoteAsset
+import com.seventv.stickers.core.network.model.EmoteProvider
 import com.seventv.stickers.core.network.model.SevenTvEmote
+import com.seventv.stickers.core.network.model.UnifiedEmote
+import com.seventv.stickers.core.network.model.toUnifiedEmote
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -39,7 +42,11 @@ class DefaultEmoteDownloader(
         }
     }
 
-    override suspend fun downloadEmote(emote: SevenTvEmote): StickerResult<DownloadedEmoteAsset> = withContext(dispatcher) {
+    override suspend fun downloadEmote(emote: SevenTvEmote): StickerResult<DownloadedEmoteAsset> {
+        return downloadEmote(emote.toUnifiedEmote())
+    }
+
+    override suspend fun downloadEmote(emote: UnifiedEmote): StickerResult<DownloadedEmoteAsset> = withContext(dispatcher) {
         if (emote.bestAssetUrl.isBlank()) {
             return@withContext StickerResult.Failure(
                 StickerError.NetworkError(message = "Emote asset URL is empty")
@@ -53,7 +60,7 @@ class DefaultEmoteDownloader(
         if (cachedFile.exists() && cachedFile.length() > 0) {
             return@withContext try {
                 val bytes = cachedFile.readBytes()
-                val format = resolveFormat(fileName, null)
+                val format = resolveFormat(fileName, null, bytes)
                 StickerResult.Success(
                     DownloadedEmoteAsset(
                         emoteId = emote.id,
@@ -108,7 +115,7 @@ class DefaultEmoteDownloader(
             }
 
             val bytes = cachedFile.readBytes()
-            val format = resolveFormat(emote.bestAssetUrl, responseContentType)
+            val format = resolveFormat(emote.bestAssetUrl, responseContentType, bytes)
             StickerResult.Success(
                 DownloadedEmoteAsset(
                     emoteId = emote.id,
@@ -119,8 +126,8 @@ class DefaultEmoteDownloader(
                 )
             )
         } catch (e: Exception) {
-            tempFile.delete()
             if (e is CancellationException) throw e
+            tempFile.delete()
             StickerResult.Failure(StickerError.StorageIoError(e))
         }
     }
@@ -128,61 +135,44 @@ class DefaultEmoteDownloader(
     override suspend fun downloadFromUrl(url: String): StickerResult<ByteArray> = withContext(dispatcher) {
         if (url.isBlank()) {
             return@withContext StickerResult.Failure(
-                StickerError.NetworkError(message = "URL is empty")
+                StickerError.NetworkError(message = "Download URL is empty")
             )
         }
 
         val outputStream = ByteArrayOutputStream()
-        val streamResult = streamPayload(url, outputStream)
-        if (streamResult is StickerResult.Failure) {
-            return@withContext streamResult
-        }
+        val downloadResult = downloadToStream(url, outputStream) { /* no-op */ }
 
-        StickerResult.Success(outputStream.toByteArray())
+        when (downloadResult) {
+            is StickerResult.Success -> StickerResult.Success(outputStream.toByteArray())
+            is StickerResult.Failure -> downloadResult
+        }
     }
 
-    private fun downloadToFile(
+    private suspend fun downloadToFile(
         url: String,
         targetFile: File,
         onResponse: (Response) -> Unit = {}
     ): StickerResult<Long> {
-        val fileOutputStream = try {
-            FileOutputStream(targetFile)
-        } catch (e: Exception) {
-            if (e is CancellationException) throw e
-            return StickerResult.Failure(StickerError.StorageIoError(e))
-        }
-
-        var streamResult: StickerResult<Long>? = null
         return try {
-            fileOutputStream.use { out ->
-                streamResult = streamPayload(url, out, onResponse)
+            FileOutputStream(targetFile).use { outputStream ->
+                downloadToStream(url, outputStream, onResponse)
             }
-            if (streamResult is StickerResult.Failure) {
-                targetFile.delete()
-            }
-            streamResult ?: StickerResult.Failure(StickerError.NetworkError(message = "Download stream incomplete"))
         } catch (e: Exception) {
-            targetFile.delete()
             if (e is CancellationException) throw e
-            if (e is DiskStorageException) {
-                StickerResult.Failure(StickerError.StorageIoError(e.cause ?: e))
-            } else {
-                StickerResult.Failure(StickerError.NetworkError(message = e.message ?: "Download failed"))
-            }
+            StickerResult.Failure(StickerError.StorageIoError(e))
         }
     }
 
-    private fun streamPayload(
+    private fun downloadToStream(
         url: String,
         outputStream: OutputStream,
         onResponse: (Response) -> Unit = {}
     ): StickerResult<Long> {
         val request = try {
             Request.Builder().url(url).build()
-        } catch (e: Exception) {
+        } catch (e: IllegalArgumentException) {
             return StickerResult.Failure(
-                StickerError.NetworkError(message = e.message ?: "Invalid URL: $url")
+                StickerError.NetworkError(message = "Invalid URL: $url")
             )
         }
 
@@ -270,16 +260,20 @@ class DefaultEmoteDownloader(
         }
     }
 
-    private fun getCacheFileName(emote: SevenTvEmote): String {
+    private fun getCacheFileName(emote: UnifiedEmote): String {
         val rawName = emote.bestAssetUrl
             .substringAfterLast('/')
             .substringBefore('?')
             .substringBefore('#')
-        val safeName = if (rawName.isNotBlank()) rawName else "4x.webp"
-        return "${emote.id}_$safeName"
+        val safeName = if (rawName.isNotBlank()) rawName else "asset.webp"
+        return if (emote.provider == EmoteProvider.SEVENTV) {
+            "${emote.id}_$safeName"
+        } else {
+            "${emote.provider.name.lowercase()}_${emote.id}_$safeName"
+        }
     }
 
-    private fun resolveFormat(url: String, contentType: String?): String {
+    private fun resolveFormat(url: String, contentType: String?, bytes: ByteArray? = null): String {
         val cleanUrl = url.substringBefore('?').substringBefore('#')
         val extension = cleanUrl.substringAfterLast('.', "").uppercase()
         if (extension in KNOWN_EXTENSIONS) {
@@ -294,6 +288,23 @@ class DefaultEmoteDownloader(
                 contentType.contains("jpeg", ignoreCase = true) || contentType.contains("jpg", ignoreCase = true) -> return "JPEG"
             }
         }
+        if (bytes != null && bytes.size >= 4) {
+            if (bytes[0] == 0x47.toByte() && bytes[1] == 0x49.toByte() && bytes[2] == 0x46.toByte()) {
+                return "GIF"
+            }
+            if (bytes[0] == 0x89.toByte() && bytes[1] == 0x50.toByte() && bytes[2] == 0x4E.toByte() && bytes[3] == 0x47.toByte()) {
+                return "PNG"
+            }
+            if (bytes.size >= 12 &&
+                bytes[0] == 0x52.toByte() && bytes[1] == 0x49.toByte() && bytes[2] == 0x46.toByte() && bytes[3] == 0x46.toByte() &&
+                bytes[8] == 0x57.toByte() && bytes[9] == 0x45.toByte() && bytes[10] == 0x42.toByte() && bytes[11] == 0x50.toByte()
+            ) {
+                return "WEBP"
+            }
+            if (bytes[0] == 0xFF.toByte() && bytes[1] == 0xD8.toByte() && bytes[2] == 0xFF.toByte()) {
+                return "JPEG"
+            }
+        }
         return "WEBP"
     }
 
@@ -306,3 +317,4 @@ class DefaultEmoteDownloader(
         private val KNOWN_EXTENSIONS = setOf("WEBP", "GIF", "PNG", "AVIF", "JPEG", "JPG")
     }
 }
+

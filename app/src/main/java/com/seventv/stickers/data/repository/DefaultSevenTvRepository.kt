@@ -181,7 +181,7 @@ class DefaultSevenTvRepository(
 
     override suspend fun downloadEmoteGif(emote: SevenTvEmote): StickerResult<ByteArray> =
         withContext(dispatcher) {
-            val targetUrl = emote.gifUrl ?: if (emote.isAnimated && emote.bestAssetUrl.isNotBlank()) {
+            val targetUrl = emote.gifUrl ?: if (emote.provider == com.seventv.stickers.core.network.model.EmoteProvider.SEVENTV && emote.isAnimated && emote.bestAssetUrl.isNotBlank()) {
                 val base = emote.bestAssetUrl.substringBeforeLast('/')
                 "$base/4x.gif"
             } else null
@@ -238,3 +238,5 @@ class DefaultSevenTvRepository(
         }
     }
 }
+
+
