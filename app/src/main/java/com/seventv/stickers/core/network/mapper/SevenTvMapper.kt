@@ -12,38 +12,66 @@ object SevenTvMapper {
 
     private const val FLAG_ZERO_WIDTH = 1
     private const val FLAG_NSFW = 1 shl 16
-    private val PREFERRED_SCALES = listOf("4x.webp", "3x.webp", "2x.webp", "1x.webp")
-    private val PREFERRED_PREVIEW_SCALES = listOf("2x.webp", "1x.webp", "3x.webp", "4x.webp")
-    private val PREFERRED_GIF_SCALES = listOf("4x.gif", "3x.gif", "2x.gif", "1x.gif")
 
     /**
-     * Maps a [SevenTvEmoteDto] to domain [SevenTvEmote].
+     * Maps a [SevenTvEmoteDto] to domain [SevenTvEmote] using a single pass over host files.
      */
     fun toDomain(dto: SevenTvEmoteDto): SevenTvEmote {
         val host = dto.host ?: dto.data?.host
         val files = host?.files.orEmpty()
-        val availableScales = files.map { it.name }
+        val availableScales = ArrayList<String>(files.size)
 
-        val preferredScale = PREFERRED_SCALES.firstOrNull { preferred ->
-            files.any { it.name.equals(preferred, ignoreCase = true) }
+        // Priority ranks: higher index wins
+        // Best WEBP: 4x > 3x > 2x > 1x
+        var bestWebpRank = 0
+        var bestWebpName: String? = null
+        // Preview WEBP: 2x > 1x > 3x > 4x
+        var previewWebpRank = 0
+        var previewWebpName: String? = null
+        // Best GIF: 4x > 3x > 2x > 1x
+        var bestGifRank = 0
+        var bestGifName: String? = null
+
+        var firstFileName: String? = null
+        for (i in files.indices) {
+            val fileName = files[i].name
+            availableScales.add(fileName)
+            if (firstFileName == null) firstFileName = fileName
+
+            when {
+                fileName.equals("4x.webp", ignoreCase = true) -> {
+                    if (bestWebpRank < 4) { bestWebpRank = 4; bestWebpName = fileName }
+                    if (previewWebpRank < 1) { previewWebpRank = 1; previewWebpName = fileName }
+                }
+                fileName.equals("3x.webp", ignoreCase = true) -> {
+                    if (bestWebpRank < 3) { bestWebpRank = 3; bestWebpName = fileName }
+                    if (previewWebpRank < 2) { previewWebpRank = 2; previewWebpName = fileName }
+                }
+                fileName.equals("2x.webp", ignoreCase = true) -> {
+                    if (bestWebpRank < 2) { bestWebpRank = 2; bestWebpName = fileName }
+                    if (previewWebpRank < 4) { previewWebpRank = 4; previewWebpName = fileName }
+                }
+                fileName.equals("1x.webp", ignoreCase = true) -> {
+                    if (bestWebpRank < 1) { bestWebpRank = 1; bestWebpName = fileName }
+                    if (previewWebpRank < 3) { previewWebpRank = 3; previewWebpName = fileName }
+                }
+                fileName.equals("4x.gif", ignoreCase = true) -> {
+                    if (bestGifRank < 4) { bestGifRank = 4; bestGifName = fileName }
+                }
+                fileName.equals("3x.gif", ignoreCase = true) -> {
+                    if (bestGifRank < 3) { bestGifRank = 3; bestGifName = fileName }
+                }
+                fileName.equals("2x.gif", ignoreCase = true) -> {
+                    if (bestGifRank < 2) { bestGifRank = 2; bestGifName = fileName }
+                }
+                fileName.equals("1x.gif", ignoreCase = true) -> {
+                    if (bestGifRank < 1) { bestGifRank = 1; bestGifName = fileName }
+                }
+            }
         }
-        val targetFileName = preferredScale ?: files.firstOrNull()?.name ?: "4x.webp"
 
-        val bestAssetUrl = if (host?.url.isNullOrBlank()) {
-            ""
-        } else {
-            normalizeCdnUrl(host.url, targetFileName)
-        }
-
-        val preferredPreviewScale = PREFERRED_PREVIEW_SCALES.firstOrNull { preferred ->
-            files.any { it.name.equals(preferred, ignoreCase = true) }
-        } ?: targetFileName
-
-        val previewUrl = if (host?.url.isNullOrBlank()) {
-            ""
-        } else {
-            normalizeCdnUrl(host.url, preferredPreviewScale)
-        }
+        val targetFileName = bestWebpName ?: firstFileName ?: "4x.webp"
+        val preferredPreviewScale = previewWebpName ?: targetFileName
 
         val isZeroWidth = ((dto.flags and FLAG_ZERO_WIDTH) != 0) ||
             (((dto.data?.flags ?: 0) and FLAG_ZERO_WIDTH) != 0)
@@ -53,12 +81,14 @@ object SevenTvMapper {
 
         val isAnimated = dto.animated || (dto.data?.animated == true)
 
-        val preferredGif = PREFERRED_GIF_SCALES.firstOrNull { preferred ->
-            files.any { it.name.equals(preferred, ignoreCase = true) }
-        } ?: if (isAnimated) "4x.gif" else null
+        val rawHostUrl = host?.url
+        val normalizedBase = if (rawHostUrl.isNullOrBlank()) null else normalizeBaseUrl(rawHostUrl)
 
-        val gifUrl = if (isAnimated && !host?.url.isNullOrBlank() && preferredGif != null) {
-            normalizeCdnUrl(host.url, preferredGif)
+        val bestAssetUrl = if (normalizedBase == null) "" else "$normalizedBase/$targetFileName"
+        val previewUrl = if (normalizedBase == null) "" else "$normalizedBase/$preferredPreviewScale"
+        val gifUrl = if (isAnimated && normalizedBase != null) {
+            val gifFile = bestGifName ?: "4x.gif"
+            "$normalizedBase/$gifFile"
         } else {
             null
         }
@@ -83,12 +113,22 @@ object SevenTvMapper {
      * Maps a [SevenTvEmoteSetDto] to domain [SevenTvEmoteSet].
      */
     fun toDomain(dto: SevenTvEmoteSetDto): SevenTvEmoteSet {
+        val emotes = dto.emotes
+        val mapped = ArrayList<SevenTvEmote>(emotes.size)
+        for (i in emotes.indices) {
+            mapped.add(toDomain(emotes[i]))
+        }
         return SevenTvEmoteSet(
             id = dto.id,
             name = dto.name,
             ownerName = dto.ownerName,
-            emotes = dto.emotes.map { toDomain(it) }
+            emotes = mapped
         )
+    }
+
+    private fun normalizeBaseUrl(baseUrl: String): String {
+        val trimmed = if (baseUrl.startsWith("//")) "https:$baseUrl" else baseUrl
+        return trimmed.trimEnd('/')
     }
 
     /**
@@ -97,12 +137,7 @@ object SevenTvMapper {
     fun normalizeCdnUrl(baseUrl: String, fileName: String): String {
         if (baseUrl.isBlank()) return ""
 
-        val normalizedBase = if (baseUrl.startsWith("//")) {
-            "https:$baseUrl"
-        } else {
-            baseUrl
-        }.trimEnd('/')
-
+        val normalizedBase = normalizeBaseUrl(baseUrl)
         val cleanFileName = fileName.trim().trimStart('/')
         return if (cleanFileName.isEmpty()) {
             normalizedBase

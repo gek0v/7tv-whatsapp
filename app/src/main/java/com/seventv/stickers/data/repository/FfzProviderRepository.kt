@@ -40,10 +40,16 @@ class FfzProviderRepository(
                 )
             },
             transform = { body ->
-                body.emoticons
-                    .filterNot { it.hidden }
-                    .map { FfzMapper.toDomain(it) }
-                    .distinctBy { it.id }
+                val src = body.emoticons
+                val result = ArrayList<UnifiedEmote>(src.size)
+                val seenIds = HashSet<Long>(src.size * 2)
+                for (i in src.indices) {
+                    val dto = src[i]
+                    if (!dto.hidden && seenIds.add(dto.id)) {
+                        result.add(FfzMapper.toDomain(dto))
+                    }
+                }
+                result
             }
         )
     }

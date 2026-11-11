@@ -142,13 +142,17 @@ fun EmoteCard(
             Box(
                 modifier = imageBoxModifier
             ) {
-                AsyncImage(
-                    model = ImageRequest.Builder(LocalContext.current)
+                val context = LocalContext.current
+                val imageRequest = remember(emote.id, emote.previewUrl) {
+                    ImageRequest.Builder(context)
                         .data(emote.previewUrl)
                         .size(128, 128)
                         .memoryCacheKey(CoilSetup.emotePreviewCacheKey(emote.id))
                         .crossfade(true)
-                        .build(),
+                        .build()
+                }
+                AsyncImage(
+                    model = imageRequest,
                     contentDescription = emote.name,
                     contentScale = ContentScale.Fit,
                     modifier = Modifier

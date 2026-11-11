@@ -6,6 +6,7 @@ import com.seventv.stickers.core.network.model.DownloadedEmoteAsset
 import com.seventv.stickers.core.network.model.EmoteProvider
 import com.seventv.stickers.core.network.model.UnifiedEmote
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -167,6 +168,80 @@ class AggregatedEmoteCatalogRepositoryTest {
         assertEquals("b1", (result as StickerResult.Success).data.emoteId)
         assertEquals(1, bttvRepo.downloadCalls)
         assertEquals(0, ffzRepo.downloadCalls)
+    }
+
+    @Test
+    fun searchAllProvidersProgressive_emitsIncrementalResultsAndSkipsUnrequestedProviders() = runTest(testDispatcher) {
+        var bttvCalls = 0
+        val sevenTv = FakeProviderRepo(EmoteProvider.SEVENTV).apply {
+            searchResult = {
+                delay(20)
+                StickerResult.Success(listOf(sampleEmote("7_1", "pepeFast", EmoteProvider.SEVENTV)))
+            }
+        }
+        val bttv = FakeProviderRepo(EmoteProvider.BETTERTTV).apply {
+            searchResult = {
+                bttvCalls++
+                delay(500)
+                StickerResult.Success(listOf(sampleEmote("b_1", "pepeSlow", EmoteProvider.BETTERTTV)))
+            }
+        }
+        val ffz = FakeProviderRepo(EmoteProvider.FRANKERFACEZ).apply {
+            searchResult = {
+                delay(100)
+                StickerResult.Success(listOf(sampleEmote("f_1", "pepeMid", EmoteProvider.FRANKERFACEZ)))
+            }
+        }
+
+        val aggregated = DefaultAggregatedEmoteCatalogRepository(
+            providers = listOf(sevenTv, bttv, ffz),
+            dispatcher = testDispatcher
+        )
+
+        // Progressive emission with all providers should emit incrementally (3 emissions)
+        val emissions = aggregated.searchAllProvidersProgressive("pepe").toList()
+        assertEquals(3, emissions.size)
+        val firstMap = (emissions.first() as StickerResult.Success).data
+        assertEquals(setOf(EmoteProvider.SEVENTV), firstMap.keys)
+        val lastMap = (emissions.last() as StickerResult.Success).data
+        assertEquals(setOf(EmoteProvider.SEVENTV, EmoteProvider.FRANKERFACEZ, EmoteProvider.BETTERTTV), lastMap.keys)
+
+        // Provider-filtered search should skip unrequested providers (BTTV not called again)
+        val callsBefore = bttvCalls
+        val filteredEmissions = aggregated.searchAllProvidersProgressive(
+            query = "pepe2",
+            targetProviders = setOf(EmoteProvider.SEVENTV)
+        ).toList()
+        assertEquals(1, filteredEmissions.size)
+        assertEquals(callsBefore, bttvCalls)
+        assertEquals(setOf(EmoteProvider.SEVENTV), (filteredEmissions.first() as StickerResult.Success).data.keys)
+    }
+
+    @Test
+    fun searchAllProviders_andPrefetch_usesInMemoryCacheOnRepeatCalls() = runTest(testDispatcher) {
+        var callCount = 0
+        val sevenTv = FakeProviderRepo(EmoteProvider.SEVENTV).apply {
+            searchResult = {
+                callCount++
+                StickerResult.Success(listOf(sampleEmote("1", "cachedEmote", EmoteProvider.SEVENTV)))
+            }
+        }
+
+        val aggregated = DefaultAggregatedEmoteCatalogRepository(
+            providers = listOf(sevenTv),
+            dispatcher = testDispatcher
+        )
+
+        val res1 = aggregated.searchAllProviders("kekw", page = 1, limit = 50)
+        val res2 = aggregated.searchAllProviders("KEKW", page = 1, limit = 50)
+        assertTrue(res1 is StickerResult.Success && res2 is StickerResult.Success)
+        assertEquals(1, callCount)
+
+        aggregated.prefetchSearchPage("kekw", page = 2, limit = 50)
+        assertEquals(2, callCount)
+        val page2 = aggregated.searchAllProviders("kekw", page = 2, limit = 50)
+        assertTrue(page2 is StickerResult.Success)
+        assertEquals(2, callCount)
     }
 
     private fun sampleEmote(

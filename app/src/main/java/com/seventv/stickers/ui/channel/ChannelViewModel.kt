@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 class ChannelViewModel(
@@ -30,6 +31,7 @@ class ChannelViewModel(
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ChannelUiState())
+    private var searchJob: Job? = null
     val uiState: StateFlow<ChannelUiState> = _uiState.asStateFlow()
 
     init {
@@ -58,41 +60,48 @@ class ChannelViewModel(
             )
         }
 
-        viewModelScope.launch {
+        searchJob?.cancel()
+        searchJob = viewModelScope.launch {
             if (aggregatedRepository != null) {
-                when (val unifiedResult = aggregatedRepository.getUnifiedChannelEmotes(targetQuery)) {
-                    is StickerResult.Success -> {
-                        val unified = unifiedResult.data
-                        val emotesByProvider = unified.emotesByProvider.mapValues { (_, emotes) ->
-                            emotes.map { it.toSevenTvEmote() }
-                        }
-                        val allEmotes = emotesByProvider.values.flatten().distinctBy { it.id }
+                var emittedSuccess = false
+                aggregatedRepository.getUnifiedChannelEmotesProgressive(targetQuery).collect { unifiedResult ->
+                    when (unifiedResult) {
+                        is StickerResult.Success -> {
+                            emittedSuccess = true
+                            val unified = unifiedResult.data
+                            val emotesByProvider = unified.emotesByProvider.mapValues { (_, emotes) ->
+                                emotes.map { it.toSevenTvEmote() }
+                            }
+                            val allEmotes = emotesByProvider.values.flatten().distinctBy { it.id }
 
-                        val sevenTvSet = SevenTvEmoteSet(
-                            id = unified.activeSevenTvSetId ?: targetQuery,
-                            name = unified.channelName,
-                            ownerName = unified.channelName,
-                            emotes = emotesByProvider[EmoteProvider.SEVENTV].orEmpty()
-                        )
-
-                        _uiState.update {
-                            it.copy(
-                                loadState = ChannelLoadState.Success(
-                                    streamerName = unified.channelName,
-                                    username = targetQuery,
-                                    avatarUrl = unified.avatarUrl,
-                                    availableSets = unified.sevenTvSets,
-                                    currentSetId = sevenTvSet.id,
-                                    emoteSet = sevenTvSet,
-                                    allEmotes = allEmotes,
-                                    emotesByProvider = emotesByProvider
-                                )
+                            val sevenTvSet = SevenTvEmoteSet(
+                                id = unified.activeSevenTvSetId ?: targetQuery,
+                                name = unified.channelName,
+                                ownerName = unified.channelName,
+                                emotes = emotesByProvider[EmoteProvider.SEVENTV].orEmpty()
                             )
+
+                            _uiState.update {
+                                it.copy(
+                                    loadState = ChannelLoadState.Success(
+                                        streamerName = unified.channelName,
+                                        username = targetQuery,
+                                        avatarUrl = unified.avatarUrl,
+                                        availableSets = unified.sevenTvSets,
+                                        currentSetId = sevenTvSet.id,
+                                        emoteSet = sevenTvSet,
+                                        allEmotes = allEmotes,
+                                        emotesByProvider = emotesByProvider
+                                    )
+                                )
+                            }
                         }
-                    }
-                    is StickerResult.Failure -> {
-                        _uiState.update {
-                            it.copy(loadState = ChannelLoadState.Error("No se encontraron emotes para '$targetQuery'"))
+                        is StickerResult.Failure -> {
+                            if (!emittedSuccess) {
+                                _uiState.update {
+                                    it.copy(loadState = ChannelLoadState.Error("No se encontraron emotes para '$targetQuery'"))
+                                }
+                            }
                         }
                     }
                 }
@@ -270,26 +279,7 @@ class ChannelViewModel(
     }
 
     fun getFilteredEmotes(): List<SevenTvEmote> {
-        val state = _uiState.value
-        val successState = state.loadState as? ChannelLoadState.Success ?: return emptyList()
-
-        val providerFiltered = when (val filter = state.activeProviderFilter) {
-            ChannelProviderFilter.ALL -> successState.allEmotes
-            else -> {
-                val p = filter.provider
-                if (p != null) {
-                    successState.emotesByProvider[p] ?: successState.allEmotes.filter { it.provider == p }
-                } else {
-                    successState.allEmotes
-                }
-            }
-        }
-
-        return when (state.activeFilter) {
-            ChannelFilter.ALL -> providerFiltered
-            ChannelFilter.ANIMATED -> providerFiltered.filter { it.isAnimated }
-            ChannelFilter.STATIC -> providerFiltered.filter { !it.isAnimated }
-        }
+        return _uiState.value.filteredEmotes
     }
 
     fun onStartChannelImport(useOnlySelected: Boolean = false) {

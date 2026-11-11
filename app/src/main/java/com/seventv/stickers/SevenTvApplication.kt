@@ -12,12 +12,14 @@ class SevenTvApplication : Application(), ImageLoaderFactory {
     lateinit var appContainer: AppContainer
     val container: AppContainer get() = appContainer
 
+    private val sharedImageLoader: ImageLoader by lazy {
+        CoilSetup.createImageLoader(this)
+    }
+
     override fun onCreate() {
         super.onCreate()
         appContainer = DefaultAppContainer(this)
     }
 
-    override fun newImageLoader(): ImageLoader {
-        return CoilSetup.createImageLoader(this)
-    }
+    override fun newImageLoader(): ImageLoader = sharedImageLoader
 }
