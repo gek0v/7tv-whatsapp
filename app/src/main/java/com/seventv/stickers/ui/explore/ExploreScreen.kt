@@ -299,7 +299,7 @@ fun ExploreScreen(
 
                 // Provider filter chips (Todos, 7TV, BetterTTV, FrankerFaceZ, Twitch)
                 val successResults = uiState.searchResults as? SearchResultsState.Success
-                if (successResults != null && successResults.emotesByProvider.size > 1) {
+                if (successResults != null && (successResults.emotesByProvider.size > 1 || uiState.activeProviderFilter != ChannelProviderFilter.ALL)) {
                     LazyRow(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),

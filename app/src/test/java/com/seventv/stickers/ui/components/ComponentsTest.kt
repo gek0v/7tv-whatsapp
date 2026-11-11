@@ -181,6 +181,19 @@ class ComponentsTest {
         assertTrue(SevenTvSearchBarDefaults.isDirectEmoteUrl(fullUrl))
         assertTrue(SevenTvSearchBarDefaults.isDirectEmoteUrl(nakedUrl))
         assertFalse(SevenTvSearchBarDefaults.isDirectEmoteUrl(nonUrl))
+
+        // BTTV and FFZ Emote URL extraction
+        val bttvFullUrl = "https://betterttv.com/emotes/54fa8f1401e468494b85b537"
+        val bttvNakedUrl = "betterttv.com/emotes/54fa8f1401e468494b85b537"
+        val ffzSlugUrl = "https://www.frankerfacez.com/emoticon/254624-KEKW"
+        val ffzNakedUrl = "frankerfacez.com/emoticon/254624"
+
+        assertEquals("54fa8f1401e468494b85b537", SevenTvSearchBarDefaults.extractEmoteIdFromUrl(bttvFullUrl))
+        assertEquals("54fa8f1401e468494b85b537", SevenTvSearchBarDefaults.extractEmoteIdFromUrl(bttvNakedUrl))
+        assertEquals("254624", SevenTvSearchBarDefaults.extractEmoteIdFromUrl(ffzSlugUrl))
+        assertEquals("254624", SevenTvSearchBarDefaults.extractEmoteIdFromUrl(ffzNakedUrl))
+        assertTrue(SevenTvSearchBarDefaults.isDirectEmoteUrl(bttvFullUrl))
+        assertTrue(SevenTvSearchBarDefaults.isDirectEmoteUrl(ffzSlugUrl))
     }
 
     @Test

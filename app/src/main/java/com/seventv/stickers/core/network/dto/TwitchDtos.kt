@@ -13,6 +13,23 @@ data class TwitchEmoteDto(
 @Serializable
 data class TwitchEmoteSetDto(
     val setID: String = "",
+    val emotes: List<TwitchEmoteDto> = emptyList(),
+    val emoteList: List<TwitchEmoteDto> = emptyList()
+)
+
+@Serializable
+data class TwitchSubProductDto(
+    val id: String = "",
+    val name: String? = null,
+    val displayName: String? = null,
+    val tier: String? = null,
+    val emotes: List<TwitchEmoteDto> = emptyList()
+)
+
+@Serializable
+data class TwitchLocalEmoteGroupDto(
+    val id: String = "",
+    val type: String? = null,
     val emotes: List<TwitchEmoteDto> = emptyList()
 )
 
@@ -23,6 +40,8 @@ data class TwitchChannelEmotesResponseDto(
     val channelID: String? = null,
     val emoteSets: List<TwitchEmoteSetDto> = emptyList(),
     val subscriberEmotes: List<TwitchEmoteSetDto> = emptyList(),
+    val subProducts: List<TwitchSubProductDto> = emptyList(),
+    val localEmotes: List<TwitchLocalEmoteGroupDto> = emptyList(),
     val bitEmotes: List<TwitchEmoteDto> = emptyList()
 )
 

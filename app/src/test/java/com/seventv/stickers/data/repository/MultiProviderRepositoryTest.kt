@@ -100,7 +100,10 @@ class MultiProviderRepositoryTest {
 
         val trending = repo.searchEmotes("")
         assertEquals(1, (trending as StickerResult.Success).data.size)
-        assertEquals("/3/emotes/shared/trending?offset=0&limit=100", mockWebServer.takeRequest().path)
+        val trendingReq = mockWebServer.takeRequest()
+        assertEquals("/3/emotes/shared/trending?limit=100", trendingReq.path)
+        assertEquals("https://betterttv.com", trendingReq.getHeader("Origin"))
+        assertEquals("https://betterttv.com/", trendingReq.getHeader("Referer"))
 
         val shortRes = repo.searchEmotes("EZ")
         assertEquals(listOf("EZ"), (shortRes as StickerResult.Success).data.map { it.name })
@@ -108,7 +111,20 @@ class MultiProviderRepositoryTest {
 
         val searchRes = repo.searchEmotes("peepo")
         assertEquals(listOf("peepoSad"), (searchRes as StickerResult.Success).data.map { it.name })
-        assertTrue(mockWebServer.takeRequest().path!!.startsWith("/3/emotes/shared/search"))
+        val searchReq = mockWebServer.takeRequest()
+        assertEquals("/3/emotes/shared/search?query=peepo&limit=100", searchReq.path)
+        assertEquals("https://betterttv.com", searchReq.getHeader("Origin"))
+        assertEquals("https://betterttv.com/", searchReq.getHeader("Referer"))
+
+        // Page 2 includes positive offset
+        mockWebServer.enqueue(MockResponse().setResponseCode(200).setBody("[]"))
+        repo.searchEmotes("", page = 2, limit = 50)
+        assertEquals("/3/emotes/shared/trending?offset=50&limit=50", mockWebServer.takeRequest().path)
+
+        // Direct API call with offset=0 strips offset=0
+        mockWebServer.enqueue(MockResponse().setResponseCode(200).setBody("[]"))
+        api.getTrendingEmotes(offset = 0, limit = 50)
+        assertEquals("/3/emotes/shared/trending?limit=50", mockWebServer.takeRequest().path)
     }
 
     @Test
@@ -117,7 +133,7 @@ class MultiProviderRepositoryTest {
             MockResponse().setResponseCode(200).setBody(
                 """
                 {
-                  "room": { "id": 1, "twitch_id": 9001, "display_name": "IlloJuan", "set": 100 },
+                  "room": { "id": "illojuan", "_id": 1, "twitch_id": 9001, "display_name": "IlloJuan", "set": 100 },
                   "sets": {
                     "100": {
                       "id": 100,
@@ -159,11 +175,18 @@ class MultiProviderRepositoryTest {
                 """
                 {
                   "channelName": "xQc",
-                  "emoteSets": [
+                  "subProducts": [
                     {
-                      "setID": "1",
+                      "id": "1000",
                       "emotes": [
-                        { "id": "300", "code": "xqcL", "assetType": "STATIC" },
+                        { "id": "300", "code": "xqcL", "assetType": "STATIC" }
+                      ]
+                    }
+                  ],
+                  "localEmotes": [
+                    {
+                      "id": "follower",
+                      "emotes": [
                         { "id": "301", "code": "xqcDance", "assetType": "ANIMATED" }
                       ]
                     }
@@ -185,11 +208,12 @@ class MultiProviderRepositoryTest {
 
         mockWebServer.enqueue(
             MockResponse().setResponseCode(200).setBody(
-                """[{"setID":"0","emotes":[{"id":"25","code":"Kappa","assetType":"STATIC"},{"id":"354","code":"4Head","assetType":"STATIC"}]}]"""
+                """[{"setID":"0","emoteList":[{"id":"25","code":"Kappa","assetType":"STATIC"},{"id":"354","code":"4Head","assetType":"STATIC"}]}]"""
             )
         )
         val globalSearch = repo.searchEmotes("kap")
         assertEquals(listOf("Kappa"), (globalSearch as StickerResult.Success).data.map { it.name })
+        assertEquals("/v2/twitch/emotes/sets?set_id=0", mockWebServer.takeRequest().path)
     }
 
     @Test
@@ -198,7 +222,7 @@ class MultiProviderRepositoryTest {
         mockWebServer.enqueue(MockResponse().setResponseCode(404))
         mockWebServer.enqueue(
             MockResponse().setResponseCode(200).setBody(
-                """{"room":{"id":10,"twitch_id":778899,"display_name":"AuronPlay","set":1},"sets":{}}"""
+                """{"room":{"id":"auronplay","_id":10,"twitch_id":778899,"display_name":"AuronPlay","set":1},"sets":{}}"""
             )
         )
 

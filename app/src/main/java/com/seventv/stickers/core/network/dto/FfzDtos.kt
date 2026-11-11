@@ -11,7 +11,9 @@ data class FfzRoomResponseDto(
 
 @Serializable
 data class FfzRoomDto(
-    val id: Long? = null,
+    val id: String? = null,
+    @SerialName("_id")
+    val internalId: Long? = null,
     @SerialName("twitch_id")
     val twitchId: Long? = null,
     @SerialName("display_name")

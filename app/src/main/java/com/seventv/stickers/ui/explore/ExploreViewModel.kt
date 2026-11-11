@@ -65,7 +65,7 @@ class ExploreViewModel(
         }
         searchJob?.cancel()
         searchJob = viewModelScope.launch {
-            if (category == ExploreCategory.TRENDING && aggregatedRepository != null) {
+            if (aggregatedRepository != null) {
                 when (val result = aggregatedRepository.searchAllProviders(query = "", page = 1, limit = 50)) {
                     is StickerResult.Success -> {
                         val mappedByProvider = result.data.mapValues { (_, list) -> list.map { it.toSevenTvEmote() } }
@@ -239,8 +239,7 @@ class ExploreViewModel(
 
         viewModelScope.launch {
             val query = currentState.query.trim()
-            val useAggregated = aggregatedRepository != null &&
-                (query.isNotBlank() || currentState.selectedCategory == ExploreCategory.TRENDING)
+            val useAggregated = aggregatedRepository != null
 
             if (useAggregated) {
                 when (val result = aggregatedRepository.searchAllProviders(query = query, page = nextPage, limit = 50)) {
@@ -254,7 +253,9 @@ class ExploreViewModel(
                                 searchResults = SearchResultsState.Success(combined, mergedMap),
                                 currentPage = nextPage,
                                 isLoadingMore = false,
-                                hasMorePages = mappedByProvider.values.any { it.size >= 50 }
+                                hasMorePages = currentState.activeProviderFilter.provider?.let { target ->
+                                    (mappedByProvider[target]?.size ?: 0) >= 50
+                                } ?: mappedByProvider.values.any { it.size >= 50 }
                             )
                         }
                     }
@@ -296,6 +297,14 @@ class ExploreViewModel(
 
     fun onProviderFilterSelected(filter: ChannelProviderFilter) {
         _uiState.update { it.copy(activeProviderFilter = filter) }
+        if (aggregatedRepository != null && _uiState.value.searchResults is SearchResultsState.Idle) {
+            val currentQuery = _uiState.value.query.trim()
+            if (currentQuery.isBlank()) {
+                loadCategoryEmotes(_uiState.value.selectedCategory)
+            } else {
+                performSearch(currentQuery, null)
+            }
+        }
     }
 
     private fun interleaveByProvider(

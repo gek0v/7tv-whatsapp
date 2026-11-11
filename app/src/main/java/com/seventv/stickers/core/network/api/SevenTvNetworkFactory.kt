@@ -63,10 +63,29 @@ object SevenTvNetworkFactory {
         baseUrl: String = BTTV_BASE_URL,
         okHttpClient: OkHttpClient = createOkHttpClient()
     ): BttvApi {
+        val bttvClient = okHttpClient.newBuilder()
+            .addInterceptor { chain ->
+                val original = chain.request()
+                val originalUrl = original.url
+                val url = if (originalUrl.queryParameter("offset") == "0") {
+                    originalUrl.newBuilder()
+                        .removeAllQueryParameters("offset")
+                        .build()
+                } else {
+                    originalUrl
+                }
+                val request = original.newBuilder()
+                    .url(url)
+                    .header("Origin", "https://betterttv.com")
+                    .header("Referer", "https://betterttv.com/")
+                    .build()
+                chain.proceed(request)
+            }
+            .build()
         val contentType = "application/json".toMediaType()
         return Retrofit.Builder()
             .baseUrl(baseUrl)
-            .client(okHttpClient)
+            .client(bttvClient)
             .addConverterFactory(defaultJson.asConverterFactory(contentType))
             .build()
             .create(BttvApi::class.java)

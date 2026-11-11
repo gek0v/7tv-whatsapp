@@ -29,8 +29,10 @@ object TwitchMapper {
 
     fun toChannelEmotes(response: TwitchChannelEmotesResponseDto): List<UnifiedEmote> {
         val owner = response.channelName?.ifBlank { null } ?: response.channelLogin
-        val allDtos = response.emoteSets.flatMap { it.emotes } +
-            response.subscriberEmotes.flatMap { it.emotes } +
+        val allDtos = response.emoteSets.flatMap { it.emotes + it.emoteList } +
+            response.subscriberEmotes.flatMap { it.emotes + it.emoteList } +
+            response.subProducts.flatMap { it.emotes } +
+            response.localEmotes.flatMap { it.emotes } +
             response.bitEmotes
         return allDtos
             .map { toDomain(it, owner) }
@@ -39,7 +41,7 @@ object TwitchMapper {
 
     fun toGlobalEmotes(sets: List<TwitchEmoteSetDto>): List<UnifiedEmote> {
         return sets
-            .flatMap { it.emotes }
+            .flatMap { it.emoteList + it.emotes }
             .map { toDomain(it, "Twitch") }
             .distinctBy { it.id }
     }

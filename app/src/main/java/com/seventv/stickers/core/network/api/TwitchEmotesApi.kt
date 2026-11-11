@@ -14,8 +14,10 @@ interface TwitchEmotesApi {
         @Path("login") login: String
     ): Response<TwitchChannelEmotesResponseDto>
 
-    @GET("v2/twitch/emotes/global")
-    suspend fun getGlobalEmotes(): Response<List<TwitchEmoteSetDto>>
+    @GET("v2/twitch/emotes/sets")
+    suspend fun getGlobalEmotes(
+        @Query("set_id") setId: String = "0"
+    ): Response<List<TwitchEmoteSetDto>>
 
     @GET("v2/twitch/user")
     suspend fun getUser(

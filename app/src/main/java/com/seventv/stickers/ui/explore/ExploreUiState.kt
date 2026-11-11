@@ -64,7 +64,15 @@ data class ExploreUiState(
                 ChannelProviderFilter.ALL -> all
                 else -> {
                     val target = pFilter.provider
-                    if (target != null) all.filter { it.provider == target } else all
+                    if (target != null) {
+                        val byProvider = (searchResults as? SearchResultsState.Success)
+                            ?.emotesByProvider
+                            ?.get(target)
+                            ?.distinctBy { "${it.provider.name}:${it.id}" }
+                        byProvider ?: all.filter { it.provider == target }
+                    } else {
+                        all
+                    }
                 }
             }
             return when (activeFilter) {
