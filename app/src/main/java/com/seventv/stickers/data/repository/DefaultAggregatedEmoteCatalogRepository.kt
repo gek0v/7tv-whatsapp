@@ -1,4 +1,4 @@
-package com.seventv.stickers.data.repository
+﻿package com.seventv.stickers.data.repository
 
 import com.seventv.stickers.core.common.result.StickerError
 import com.seventv.stickers.core.common.result.StickerResult
@@ -21,8 +21,28 @@ class DefaultAggregatedEmoteCatalogRepository(
     private val providers: List<EmoteProviderRepository>,
     private val sevenTvRepository: SevenTvRepository? = null,
     private val downloader: EmoteDownloader? = null,
-    private val dispatcher: CoroutineDispatcher = Dispatchers.IO
+    private val dispatcher: CoroutineDispatcher = Dispatchers.IO,
+    cacheTtlMs: Long = DEFAULT_CACHE_TTL_MS,
+    clockMs: () -> Long = { System.currentTimeMillis() }
 ) : AggregatedEmoteCatalogRepository {
+
+    private data class SearchCacheKey(
+        val query: String,
+        val page: Int,
+        val limit: Int
+    )
+
+    private val searchCache = TtlLruCache<SearchCacheKey, Map<EmoteProvider, List<UnifiedEmote>>>(
+        maxEntries = 64,
+        ttlMs = cacheTtlMs,
+        clockMs = clockMs
+    )
+
+    private val channelCache = TtlLruCache<String, UnifiedChannelResult>(
+        maxEntries = 32,
+        ttlMs = cacheTtlMs,
+        clockMs = clockMs
+    )
 
     override suspend fun searchAllProviders(
         query: String,
@@ -31,6 +51,11 @@ class DefaultAggregatedEmoteCatalogRepository(
     ): StickerResult<Map<EmoteProvider, List<UnifiedEmote>>> = withContext(dispatcher) {
         if (providers.isEmpty()) {
             return@withContext StickerResult.Failure(StickerError.ResourceNotFound)
+        }
+
+        val cacheKey = SearchCacheKey(query = query.trim().lowercase(), page = page, limit = limit)
+        searchCache.get(cacheKey)?.let { cached ->
+            return@withContext StickerResult.Success(cached)
         }
 
         val outcomes = coroutineScope {
@@ -59,6 +84,7 @@ class DefaultAggregatedEmoteCatalogRepository(
         }
 
         if (successMap.isNotEmpty()) {
+            searchCache.put(cacheKey, successMap)
             StickerResult.Success(successMap)
         } else {
             firstFailure ?: StickerResult.Failure(StickerError.ResourceNotFound)
@@ -74,6 +100,11 @@ class DefaultAggregatedEmoteCatalogRepository(
         }
         if (providers.isEmpty() && sevenTvRepository == null) {
             return@withContext StickerResult.Failure(StickerError.ResourceNotFound)
+        }
+
+        val cacheKey = trimmed.lowercase()
+        channelCache.get(cacheKey)?.let { cached ->
+            return@withContext StickerResult.Success(cached)
         }
 
         val activeProviders = if (sevenTvRepository != null) {
@@ -158,17 +189,17 @@ class DefaultAggregatedEmoteCatalogRepository(
         val sevenTvSets: List<ChannelEmoteSetSummary> = sevenTvChannelMeta?.availableSets.orEmpty()
         val activeSetId: String? = sevenTvChannelMeta?.activeSet?.id
 
-        StickerResult.Success(
-            UnifiedChannelResult(
-                channelName = inferredOwner,
-                avatarUrl = sevenTvChannelMeta?.avatarUrl,
-                emotesByProvider = emotesByProvider,
-                totalEmotesCount = totalCount,
-                sevenTvSets = sevenTvSets,
-                activeSevenTvSetId = activeSetId,
-                failedProviders = failedProviders
-            )
+        val channelResult = UnifiedChannelResult(
+            channelName = inferredOwner,
+            avatarUrl = sevenTvChannelMeta?.avatarUrl,
+            emotesByProvider = emotesByProvider,
+            totalEmotesCount = totalCount,
+            sevenTvSets = sevenTvSets,
+            activeSevenTvSetId = activeSetId,
+            failedProviders = failedProviders
         )
+        channelCache.put(cacheKey, channelResult)
+        StickerResult.Success(channelResult)
     }
 
     override suspend fun downloadEmote(emote: UnifiedEmote): StickerResult<DownloadedEmoteAsset> {
@@ -180,5 +211,14 @@ class DefaultAggregatedEmoteCatalogRepository(
             return downloader.downloadEmote(emote)
         }
         return StickerResult.Failure(StickerError.ResourceNotFound)
+    }
+
+    fun clearCaches() {
+        searchCache.clear()
+        channelCache.clear()
+    }
+
+    companion object {
+        const val DEFAULT_CACHE_TTL_MS = 2 * 60_000L
     }
 }

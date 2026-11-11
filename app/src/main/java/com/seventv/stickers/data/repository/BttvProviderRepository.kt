@@ -1,9 +1,10 @@
-package com.seventv.stickers.data.repository
+﻿package com.seventv.stickers.data.repository
 
 import com.seventv.stickers.core.common.result.StickerError
 import com.seventv.stickers.core.common.result.StickerResult
 import com.seventv.stickers.core.network.api.BttvApi
 import com.seventv.stickers.core.network.downloader.EmoteDownloader
+import com.seventv.stickers.core.network.dto.BttvEmoteDto
 import com.seventv.stickers.core.network.mapper.BttvMapper
 import com.seventv.stickers.core.network.model.DownloadedEmoteAsset
 import com.seventv.stickers.core.network.model.EmoteProvider
@@ -11,6 +12,8 @@ import com.seventv.stickers.core.network.model.UnifiedEmote
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import retrofit2.Response
 
@@ -20,10 +23,18 @@ class BttvProviderRepository(
     private val twitchIdResolver: suspend (String) -> String? = { query ->
         if (query.all { it.isDigit() } && query.isNotEmpty()) query else null
     },
-    private val dispatcher: CoroutineDispatcher = Dispatchers.IO
+    private val dispatcher: CoroutineDispatcher = Dispatchers.IO,
+    private val globalCacheTtlMs: Long = DEFAULT_GLOBAL_CACHE_TTL_MS,
+    private val clockMs: () -> Long = { System.currentTimeMillis() }
 ) : EmoteProviderRepository {
 
     override val provider: EmoteProvider = EmoteProvider.BETTERTTV
+
+    private val globalCacheMutex = Mutex()
+    @Volatile
+    private var cachedGlobalDtos: List<BttvEmoteDto>? = null
+    @Volatile
+    private var cachedGlobalExpiresAtMs: Long = 0L
 
     override suspend fun searchEmotes(
         query: String,
@@ -43,21 +54,50 @@ class BttvProviderRepository(
         }
 
         if (trimmed.length < 3) {
-            return@withContext safeApiCall(
-                call = { bttvApi.getGlobalEmotes() },
-                transform = { list ->
-                    list.filter { it.code.contains(trimmed, ignoreCase = true) }
+            val globalResult = getOrFetchGlobalDtos()
+            return@withContext when (globalResult) {
+                is StickerResult.Failure -> globalResult
+                is StickerResult.Success -> {
+                    val list = globalResult.data
+                    val filtered = list.filter { it.code.contains(trimmed, ignoreCase = true) }
                         .drop(offset)
                         .take(safeLimit)
                         .map { BttvMapper.toDomain(it) }
+                    StickerResult.Success(filtered)
                 }
-            )
+            }
         }
 
         safeApiCall(
             call = { bttvApi.searchEmotes(query = trimmed, offset = queryOffset, limit = safeLimit) },
             transform = { list -> list.map { BttvMapper.toDomain(it) } }
         )
+    }
+
+    private suspend fun getOrFetchGlobalDtos(): StickerResult<List<BttvEmoteDto>> {
+        val now = clockMs()
+        val snapshot = cachedGlobalDtos
+        if (snapshot != null && now < cachedGlobalExpiresAtMs) {
+            return StickerResult.Success(snapshot)
+        }
+
+        return globalCacheMutex.withLock {
+            val recheckNow = clockMs()
+            val recheckSnapshot = cachedGlobalDtos
+            if (recheckSnapshot != null && recheckNow < cachedGlobalExpiresAtMs) {
+                return@withLock StickerResult.Success(recheckSnapshot)
+            }
+
+            val fetched = safeApiCall(
+                call = { bttvApi.getGlobalEmotes() },
+                transform = { it }
+            )
+            if (fetched is StickerResult.Success && globalCacheTtlMs > 0L) {
+                cachedGlobalDtos = fetched.data
+                cachedGlobalExpiresAtMs = clockMs() + globalCacheTtlMs
+            }
+            fetched
+        }
     }
 
     override suspend fun getChannelEmotes(channelQuery: String): StickerResult<List<UnifiedEmote>> =
@@ -125,5 +165,9 @@ class BttvProviderRepository(
         } catch (e: Exception) {
             StickerResult.Failure(StickerError.NetworkError(message = e.message ?: "BTTV network error"))
         }
+    }
+
+    companion object {
+        const val DEFAULT_GLOBAL_CACHE_TTL_MS = 5 * 60_000L
     }
 }
