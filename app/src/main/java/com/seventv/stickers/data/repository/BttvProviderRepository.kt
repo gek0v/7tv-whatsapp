@@ -59,10 +59,18 @@ class BttvProviderRepository(
                 is StickerResult.Failure -> globalResult
                 is StickerResult.Success -> {
                     val list = globalResult.data
-                    val filtered = list.filter { it.code.contains(trimmed, ignoreCase = true) }
-                        .drop(offset)
-                        .take(safeLimit)
-                        .map { BttvMapper.toDomain(it) }
+                    val filtered = ArrayList<UnifiedEmote>(safeLimit.coerceAtMost(list.size))
+                    var matched = 0
+                    for (i in list.indices) {
+                        val dto = list[i]
+                        if (dto.code.contains(trimmed, ignoreCase = true)) {
+                            if (matched >= offset) {
+                                filtered.add(BttvMapper.toDomain(dto))
+                                if (filtered.size >= safeLimit) break
+                            }
+                            matched++
+                        }
+                    }
                     StickerResult.Success(filtered)
                 }
             }
