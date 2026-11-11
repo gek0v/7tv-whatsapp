@@ -1,4 +1,4 @@
-package com.seventv.stickers.ui.explore
+﻿package com.seventv.stickers.ui.explore
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -17,6 +17,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.last
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -33,6 +34,7 @@ class ExploreViewModel(
     val uiState: StateFlow<ExploreUiState> = _uiState.asStateFlow()
 
     private var searchJob: Job? = null
+    private var lastQueryLoadedAllProviders: Boolean = false
 
     init {
         viewModelScope.launch {
@@ -54,6 +56,9 @@ class ExploreViewModel(
      * Loads emotes for a category (TRENDING or TOP) when query is empty.
      */
     fun loadCategoryEmotes(category: ExploreCategory = _uiState.value.selectedCategory) {
+        val targetProviders = _uiState.value.activeProviderFilter.provider?.let { setOf(it) }
+        lastQueryLoadedAllProviders = targetProviders == null
+
         _uiState.update {
             it.copy(
                 selectedCategory = category,
@@ -66,29 +71,46 @@ class ExploreViewModel(
         searchJob?.cancel()
         searchJob = viewModelScope.launch {
             if (aggregatedRepository != null) {
-                when (val result = aggregatedRepository.searchAllProviders(query = "", page = 1, limit = 50)) {
-                    is StickerResult.Success -> {
-                        val mappedByProvider = result.data.mapValues { (_, list) -> list.map { it.toSevenTvEmote() } }
-                        val interleaved = interleaveByProvider(mappedByProvider)
-                        _uiState.update { state ->
-                            state.copy(
-                                searchResults = if (interleaved.isEmpty()) {
-                                    SearchResultsState.Empty(category.label)
-                                } else {
-                                    SearchResultsState.Success(interleaved, mappedByProvider)
-                                },
-                                hasMorePages = mappedByProvider.values.any { it.size >= 50 }
-                            )
+                var receivedNonEmpty = false
+                aggregatedRepository.searchAllProvidersProgressive(
+                    query = "",
+                    page = 1,
+                    limit = 50,
+                    targetProviders = targetProviders
+                ).collect { result ->
+                    when (result) {
+                        is StickerResult.Success -> {
+                            val mappedByProvider = result.data.mapValues { (_, list) -> list.map { it.toSevenTvEmote() } }
+                            val interleaved = interleaveByProvider(mappedByProvider)
+                            if (interleaved.isNotEmpty()) {
+                                receivedNonEmpty = true
+                                _uiState.update { state ->
+                                    state.copy(
+                                        searchResults = SearchResultsState.Success(interleaved, mappedByProvider),
+                                        hasMorePages = mappedByProvider.values.any { it.size >= 50 }
+                                    )
+                                }
+                            }
+                        }
+                        is StickerResult.Failure -> {
+                            if (!receivedNonEmpty) {
+                                _uiState.update { state ->
+                                    state.copy(
+                                        searchResults = SearchResultsState.Error(
+                                            result.error.toSearchErrorMessage()
+                                        )
+                                    )
+                                }
+                            }
                         }
                     }
-                    is StickerResult.Failure -> {
-                        _uiState.update { state ->
-                            state.copy(
-                                searchResults = SearchResultsState.Error(
-                                    result.error.toSearchErrorMessage()
-                                )
-                            )
-                        }
+                }
+                if (!receivedNonEmpty && _uiState.value.searchResults is SearchResultsState.Loading) {
+                    _uiState.update {
+                        it.copy(
+                            searchResults = SearchResultsState.Empty(category.label),
+                            hasMorePages = false
+                        )
                     }
                 }
             } else {
@@ -157,6 +179,9 @@ class ExploreViewModel(
     }
 
     private fun performSearch(query: String, category: String?) {
+        val targetProviders = _uiState.value.activeProviderFilter.provider?.let { setOf(it) }
+        lastQueryLoadedAllProviders = targetProviders == null
+
         _uiState.update {
             it.copy(
                 searchResults = SearchResultsState.Loading,
@@ -168,30 +193,46 @@ class ExploreViewModel(
         searchJob?.cancel()
         searchJob = viewModelScope.launch {
             if (aggregatedRepository != null && query.isNotBlank()) {
-                when (val result = aggregatedRepository.searchAllProviders(query = query, page = 1, limit = 50)) {
-                    is StickerResult.Success -> {
-                        val mappedByProvider = result.data.mapValues { (_, list) -> list.map { it.toSevenTvEmote() } }
-                        val interleaved = interleaveByProvider(mappedByProvider)
-                        _uiState.update { state ->
-                            val searchState = if (interleaved.isEmpty()) {
-                                SearchResultsState.Empty(query)
-                            } else {
-                                SearchResultsState.Success(interleaved, mappedByProvider)
+                var receivedNonEmpty = false
+                aggregatedRepository.searchAllProvidersProgressive(
+                    query = query,
+                    page = 1,
+                    limit = 50,
+                    targetProviders = targetProviders
+                ).collect { result ->
+                    when (result) {
+                        is StickerResult.Success -> {
+                            val mappedByProvider = result.data.mapValues { (_, list) -> list.map { it.toSevenTvEmote() } }
+                            val interleaved = interleaveByProvider(mappedByProvider)
+                            if (interleaved.isNotEmpty()) {
+                                receivedNonEmpty = true
+                                _uiState.update { state ->
+                                    state.copy(
+                                        searchResults = SearchResultsState.Success(interleaved, mappedByProvider),
+                                        hasMorePages = mappedByProvider.values.any { it.size >= 50 }
+                                    )
+                                }
                             }
-                            state.copy(
-                                searchResults = searchState,
-                                hasMorePages = mappedByProvider.values.any { it.size >= 50 }
-                            )
+                        }
+                        is StickerResult.Failure -> {
+                            if (!receivedNonEmpty) {
+                                _uiState.update { state ->
+                                    state.copy(
+                                        searchResults = SearchResultsState.Error(
+                                            result.error.toSearchErrorMessage()
+                                        )
+                                    )
+                                }
+                            }
                         }
                     }
-                    is StickerResult.Failure -> {
-                        _uiState.update { state ->
-                            state.copy(
-                                searchResults = SearchResultsState.Error(
-                                    result.error.toSearchErrorMessage()
-                                )
-                            )
-                        }
+                }
+                if (!receivedNonEmpty && _uiState.value.searchResults is SearchResultsState.Loading) {
+                    _uiState.update {
+                        it.copy(
+                            searchResults = SearchResultsState.Empty(query),
+                            hasMorePages = false
+                        )
                     }
                 }
             } else {
@@ -242,7 +283,14 @@ class ExploreViewModel(
             val useAggregated = aggregatedRepository != null
 
             if (useAggregated) {
-                when (val result = aggregatedRepository.searchAllProviders(query = query, page = nextPage, limit = 50)) {
+                val targetProviders = currentState.activeProviderFilter.provider?.let { setOf(it) }
+                val result = aggregatedRepository.searchAllProvidersProgressive(
+                    query = query,
+                    page = nextPage,
+                    limit = 50,
+                    targetProviders = targetProviders
+                ).last()
+                when (result) {
                     is StickerResult.Success -> {
                         val mappedByProvider = result.data.mapValues { (_, list) -> list.map { it.toSevenTvEmote() } }
                         val newEmotes = interleaveByProvider(mappedByProvider)
@@ -297,12 +345,20 @@ class ExploreViewModel(
 
     fun onProviderFilterSelected(filter: ChannelProviderFilter) {
         _uiState.update { it.copy(activeProviderFilter = filter) }
-        if (aggregatedRepository != null && _uiState.value.searchResults is SearchResultsState.Idle) {
-            val currentQuery = _uiState.value.query.trim()
-            if (currentQuery.isBlank()) {
-                loadCategoryEmotes(_uiState.value.selectedCategory)
-            } else {
-                performSearch(currentQuery, null)
+        if (aggregatedRepository != null) {
+            val currentResults = _uiState.value.searchResults
+            val needsReload = currentResults is SearchResultsState.Idle ||
+                (!lastQueryLoadedAllProviders && (
+                    filter == ChannelProviderFilter.ALL ||
+                        (currentResults as? SearchResultsState.Success)?.emotesByProvider?.containsKey(filter.provider) != true
+                    ))
+            if (needsReload) {
+                val currentQuery = _uiState.value.query.trim()
+                if (currentQuery.isBlank()) {
+                    loadCategoryEmotes(_uiState.value.selectedCategory)
+                } else {
+                    performSearch(currentQuery, null)
+                }
             }
         }
     }

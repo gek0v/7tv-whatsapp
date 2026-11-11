@@ -1,4 +1,4 @@
-﻿package com.seventv.stickers.benchmark
+package com.seventv.stickers.benchmark
 
 import com.seventv.stickers.core.common.result.StickerResult
 import com.seventv.stickers.core.network.api.SevenTvNetworkFactory
@@ -18,6 +18,7 @@ import com.seventv.stickers.ui.explore.EmoteFilter
 import com.seventv.stickers.ui.explore.ExploreUiState
 import com.seventv.stickers.ui.explore.SearchResultsState
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.Dispatcher
@@ -206,11 +207,11 @@ class EmoteSearchBenchmarkTest {
         }
         val avgColdSearchMs = coldSearchTimes.average() / 1_000_000.0
 
-        // Scenario 2: First Paint / TTFB (time until first provider batch is ready)
+        // Scenario 2: First Paint / TTFB (time until first provider batch is emitted via progressive Flow)
         val firstPaintTimes = LongArray(iterations) { iter ->
             measureNanoTime {
                 runBlocking {
-                    val res = aggregatedRepo.searchAllProviders("ttfb_$iter", 1, 50)
+                    val res = aggregatedRepo.searchAllProvidersProgressive("ttfb_$iter", 1, 50).first()
                     check(res is StickerResult.Success)
                 }
             }

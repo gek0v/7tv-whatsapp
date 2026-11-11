@@ -15,7 +15,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.channelFlow
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.joinAll
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
 class DefaultAggregatedEmoteCatalogRepository(
     private val providers: List<EmoteProviderRepository>,
@@ -23,6 +29,7 @@ class DefaultAggregatedEmoteCatalogRepository(
     private val downloader: EmoteDownloader? = null,
     private val dispatcher: CoroutineDispatcher = Dispatchers.IO,
     cacheTtlMs: Long = DEFAULT_CACHE_TTL_MS,
+    private val providerTimeoutMs: Long = DEFAULT_PROVIDER_TIMEOUT_MS,
     clockMs: () -> Long = { System.currentTimeMillis() }
 ) : AggregatedEmoteCatalogRepository {
 
@@ -61,12 +68,8 @@ class DefaultAggregatedEmoteCatalogRepository(
         val outcomes = coroutineScope {
             providers.map { repo ->
                 async(dispatcher) {
-                    val res = try {
+                    val res = executeWithTimeout {
                         repo.searchEmotes(query = query, page = page, limit = limit)
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (e: Exception) {
-                        StickerResult.Failure(StickerError.NetworkError(message = e.message ?: "Provider error"))
                     }
                     repo.provider to res
                 }
@@ -90,6 +93,92 @@ class DefaultAggregatedEmoteCatalogRepository(
             firstFailure ?: StickerResult.Failure(StickerError.ResourceNotFound)
         }
     }
+
+    override fun searchAllProvidersProgressive(
+        query: String,
+        page: Int,
+        limit: Int,
+        targetProviders: Set<EmoteProvider>?
+    ): Flow<StickerResult<Map<EmoteProvider, List<UnifiedEmote>>>> = channelFlow {
+        val selectedRepos = if (targetProviders.isNullOrEmpty()) {
+            providers
+        } else {
+            providers.filter { it.provider in targetProviders }
+        }
+
+        if (selectedRepos.isEmpty()) {
+            send(StickerResult.Failure(StickerError.ResourceNotFound))
+            return@channelFlow
+        }
+
+        val cacheKey = SearchCacheKey(query = query.trim().lowercase(), page = page, limit = limit)
+        searchCache.get(cacheKey)?.let { cached ->
+            val filtered = if (targetProviders.isNullOrEmpty()) {
+                cached
+            } else {
+                cached.filterKeys { it in targetProviders }
+            }
+            if (filtered.isNotEmpty()) {
+                send(StickerResult.Success(filtered))
+                return@channelFlow
+            }
+        }
+
+        val lock = Any()
+        val accumulated = linkedMapOf<EmoteProvider, List<UnifiedEmote>>()
+        var firstFailure: StickerResult.Failure? = null
+        var emittedAny = false
+
+        val jobs = selectedRepos.map { repo ->
+            launch(dispatcher) {
+                val res = executeWithTimeout {
+                    repo.searchEmotes(query = query, page = page, limit = limit)
+                }
+                val snapshotToEmit: Map<EmoteProvider, List<UnifiedEmote>>? = synchronized(lock) {
+                    when (res) {
+                        is StickerResult.Success -> {
+                            accumulated[repo.provider] = res.data
+                            if (res.data.isNotEmpty()) {
+                                emittedAny = true
+                                LinkedHashMap(accumulated)
+                            } else {
+                                null
+                            }
+                        }
+                        is StickerResult.Failure -> {
+                            if (firstFailure == null) firstFailure = res
+                            null
+                        }
+                    }
+                }
+                if (snapshotToEmit != null) {
+                    send(StickerResult.Success(snapshotToEmit))
+                }
+            }
+        }
+
+        jobs.joinAll()
+
+        val finalSnapshot: Map<EmoteProvider, List<UnifiedEmote>>
+        val failureToEmit: StickerResult.Failure?
+        val needFinalEmit: Boolean
+        synchronized(lock) {
+            finalSnapshot = LinkedHashMap(accumulated)
+            failureToEmit = firstFailure
+            needFinalEmit = !emittedAny && finalSnapshot.isNotEmpty()
+        }
+
+        if (finalSnapshot.isNotEmpty()) {
+            if (targetProviders.isNullOrEmpty()) {
+                searchCache.put(cacheKey, finalSnapshot)
+            }
+            if (needFinalEmit) {
+                send(StickerResult.Success(finalSnapshot))
+            }
+        } else {
+            send(failureToEmit ?: StickerResult.Failure(StickerError.ResourceNotFound))
+        }
+    }.flowOn(dispatcher)
 
     override suspend fun getUnifiedChannelEmotes(
         twitchChannel: String
@@ -117,12 +206,8 @@ class DefaultAggregatedEmoteCatalogRepository(
         val outcomes = coroutineScope {
             val sevenTvDeferred = if (sevenTvRepository != null) {
                 async(dispatcher) {
-                    val res = try {
+                    val res = executeWithTimeout {
                         sevenTvRepository.getChannelData(trimmed)
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (e: Exception) {
-                        StickerResult.Failure(StickerError.NetworkError(message = e.message ?: "7TV error"))
                     }
                     when (res) {
                         is StickerResult.Success -> {
@@ -140,12 +225,8 @@ class DefaultAggregatedEmoteCatalogRepository(
 
             val otherDeferreds = activeProviders.map { repo ->
                 async(dispatcher) {
-                    val res = try {
+                    val res = executeWithTimeout {
                         repo.getChannelEmotes(trimmed)
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (e: Exception) {
-                        StickerResult.Failure(StickerError.NetworkError(message = e.message ?: "Provider error"))
                     }
                     repo.provider to res
                 }
@@ -157,6 +238,167 @@ class DefaultAggregatedEmoteCatalogRepository(
             }.awaitAll()
         }
 
+        val result = buildUnifiedChannelResult(trimmed, outcomes, sevenTvChannelMeta)
+        if (result is StickerResult.Success) {
+            channelCache.put(cacheKey, result.data)
+        }
+        result
+    }
+
+    override fun getUnifiedChannelEmotesProgressive(
+        twitchChannel: String
+    ): Flow<StickerResult<UnifiedChannelResult>> = channelFlow {
+        val trimmed = twitchChannel.trim()
+        if (trimmed.isBlank() || (providers.isEmpty() && sevenTvRepository == null)) {
+            send(StickerResult.Failure(StickerError.ResourceNotFound))
+            return@channelFlow
+        }
+
+        val cacheKey = trimmed.lowercase()
+        channelCache.get(cacheKey)?.let { cached ->
+            send(StickerResult.Success(cached))
+            return@channelFlow
+        }
+
+        val activeProviders = if (sevenTvRepository != null) {
+            providers.filterNot { it.provider == EmoteProvider.SEVENTV }
+        } else {
+            providers
+        }
+
+        val lock = Any()
+        var sevenTvChannelMeta: ChannelSearchResult? = null
+        val emotesByProvider = linkedMapOf<EmoteProvider, List<UnifiedEmote>>()
+        val failedProviders = mutableSetOf<EmoteProvider>()
+        var firstFailure: StickerResult.Failure? = null
+        var anySuccess = false
+        var emittedNonEmpty = false
+
+        val jobs = buildList {
+            if (sevenTvRepository != null) {
+                add(launch(dispatcher) {
+                    val res = executeWithTimeout {
+                        sevenTvRepository.getChannelData(trimmed)
+                    }
+                    val snapshot: UnifiedChannelResult? = synchronized(lock) {
+                        when (res) {
+                            is StickerResult.Success -> {
+                                anySuccess = true
+                                sevenTvChannelMeta = res.data
+                                val owner = res.data.streamerName
+                                val unified = res.data.activeSet.emotes
+                                    .map { it.toUnifiedEmote().copy(originalOwner = owner) }
+                                    .distinctBy { it.id }
+                                if (unified.isNotEmpty()) {
+                                    emotesByProvider[EmoteProvider.SEVENTV] = unified
+                                    emittedNonEmpty = true
+                                    snapshotChannelResult(trimmed, emotesByProvider, failedProviders, sevenTvChannelMeta)
+                                } else {
+                                    null
+                                }
+                            }
+                            is StickerResult.Failure -> {
+                                failedProviders.add(EmoteProvider.SEVENTV)
+                                if (firstFailure == null) firstFailure = res
+                                null
+                            }
+                        }
+                    }
+                    if (snapshot != null) {
+                        send(StickerResult.Success(snapshot))
+                    }
+                })
+            }
+
+            activeProviders.forEach { repo ->
+                add(launch(dispatcher) {
+                    val res = executeWithTimeout {
+                        repo.getChannelEmotes(trimmed)
+                    }
+                    val snapshot: UnifiedChannelResult? = synchronized(lock) {
+                        when (res) {
+                            is StickerResult.Success -> {
+                                anySuccess = true
+                                val deduped = res.data.distinctBy { it.id }
+                                if (deduped.isNotEmpty()) {
+                                    emotesByProvider[repo.provider] = deduped
+                                    emittedNonEmpty = true
+                                    snapshotChannelResult(trimmed, emotesByProvider, failedProviders, sevenTvChannelMeta)
+                                } else {
+                                    null
+                                }
+                            }
+                            is StickerResult.Failure -> {
+                                failedProviders.add(repo.provider)
+                                if (firstFailure == null) firstFailure = res
+                                null
+                            }
+                        }
+                    }
+                    if (snapshot != null) {
+                        send(StickerResult.Success(snapshot))
+                    }
+                })
+            }
+        }
+
+        jobs.joinAll()
+
+        val finalSnapshot: UnifiedChannelResult?
+        val failureToEmit: StickerResult.Failure?
+        val totalCount: Int
+        val hasFailures: Boolean
+        val hadAnySuccess: Boolean
+        synchronized(lock) {
+            totalCount = emotesByProvider.values.sumOf { it.size }
+            hasFailures = failedProviders.isNotEmpty()
+            hadAnySuccess = anySuccess
+            failureToEmit = firstFailure
+            finalSnapshot = if (hadAnySuccess && !(totalCount == 0 && hasFailures)) {
+                snapshotChannelResult(trimmed, emotesByProvider, failedProviders, sevenTvChannelMeta)
+            } else {
+                null
+            }
+        }
+
+        if (finalSnapshot != null) {
+            channelCache.put(cacheKey, finalSnapshot)
+            if (!emittedNonEmpty || hasFailures) {
+                send(StickerResult.Success(finalSnapshot))
+            }
+        } else {
+            send(failureToEmit ?: StickerResult.Failure(StickerError.ResourceNotFound))
+        }
+    }.flowOn(dispatcher)
+
+    private fun snapshotChannelResult(
+        trimmed: String,
+        emotesByProvider: Map<EmoteProvider, List<UnifiedEmote>>,
+        failedProviders: Set<EmoteProvider>,
+        sevenTvChannelMeta: ChannelSearchResult?
+    ): UnifiedChannelResult {
+        val copyMap = linkedMapOf<EmoteProvider, List<UnifiedEmote>>()
+        copyMap.putAll(emotesByProvider)
+        val totalCount = copyMap.values.sumOf { it.size }
+        val inferredOwner = sevenTvChannelMeta?.streamerName
+            ?: copyMap.values.firstNotNullOfOrNull { list -> list.firstNotNullOfOrNull { it.originalOwner } }
+            ?: trimmed
+        return UnifiedChannelResult(
+            channelName = inferredOwner,
+            avatarUrl = sevenTvChannelMeta?.avatarUrl,
+            emotesByProvider = copyMap,
+            totalEmotesCount = totalCount,
+            sevenTvSets = sevenTvChannelMeta?.availableSets.orEmpty(),
+            activeSevenTvSetId = sevenTvChannelMeta?.activeSet?.id,
+            failedProviders = failedProviders.toSet()
+        )
+    }
+
+    private fun buildUnifiedChannelResult(
+        trimmed: String,
+        outcomes: List<Pair<EmoteProvider, StickerResult<List<UnifiedEmote>>>>,
+        sevenTvChannelMeta: ChannelSearchResult?
+    ): StickerResult<UnifiedChannelResult> {
         val emotesByProvider = linkedMapOf<EmoteProvider, List<UnifiedEmote>>()
         val failedProviders = mutableSetOf<EmoteProvider>()
         var firstFailure: StickerResult.Failure? = null
@@ -179,27 +421,26 @@ class DefaultAggregatedEmoteCatalogRepository(
 
         val totalCount = emotesByProvider.values.sumOf { it.size }
         if (!anySuccess || (totalCount == 0 && failedProviders.isNotEmpty())) {
-            return@withContext firstFailure ?: StickerResult.Failure(StickerError.ResourceNotFound)
+            return firstFailure ?: StickerResult.Failure(StickerError.ResourceNotFound)
         }
 
-        val inferredOwner = sevenTvChannelMeta?.streamerName
-            ?: emotesByProvider.values.flatten().firstNotNullOfOrNull { it.originalOwner }
-            ?: trimmed
-
-        val sevenTvSets: List<ChannelEmoteSetSummary> = sevenTvChannelMeta?.availableSets.orEmpty()
-        val activeSetId: String? = sevenTvChannelMeta?.activeSet?.id
-
-        val channelResult = UnifiedChannelResult(
-            channelName = inferredOwner,
-            avatarUrl = sevenTvChannelMeta?.avatarUrl,
-            emotesByProvider = emotesByProvider,
-            totalEmotesCount = totalCount,
-            sevenTvSets = sevenTvSets,
-            activeSevenTvSetId = activeSetId,
-            failedProviders = failedProviders
+        return StickerResult.Success(
+            snapshotChannelResult(trimmed, emotesByProvider, failedProviders, sevenTvChannelMeta)
         )
-        channelCache.put(cacheKey, channelResult)
-        StickerResult.Success(channelResult)
+    }
+
+    private suspend inline fun <T> executeWithTimeout(
+        crossinline block: suspend () -> StickerResult<T>
+    ): StickerResult<T> {
+        return try {
+            withTimeoutOrNull(providerTimeoutMs) {
+                block()
+            } ?: StickerResult.Failure(StickerError.NetworkError(message = "Provider request timed out"))
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            StickerResult.Failure(StickerError.NetworkError(message = e.message ?: "Provider error"))
+        }
     }
 
     override suspend fun downloadEmote(emote: UnifiedEmote): StickerResult<DownloadedEmoteAsset> {
@@ -220,5 +461,6 @@ class DefaultAggregatedEmoteCatalogRepository(
 
     companion object {
         const val DEFAULT_CACHE_TTL_MS = 2 * 60_000L
+        const val DEFAULT_PROVIDER_TIMEOUT_MS = 4_500L
     }
 }
