@@ -139,6 +139,8 @@ class PackImportManagerTest {
         override suspend fun addEmotesToPack(packIdentifier: String, emotes: List<SevenTvEmote>): StickerResult<Unit> = StickerResult.Success(Unit)
         override suspend fun updateStickerEmojis(stickerId: String, emojis: List<String>): StickerResult<Unit> =
             StickerResult.Success(Unit)
+        override suspend fun reorderStickers(packIdentifier: String, orderedStickerIds: List<String>): StickerResult<Unit> = StickerResult.Success(Unit)
+        override suspend fun setStickerAsTrayIcon(packIdentifier: String, stickerId: String): StickerResult<Unit> = StickerResult.Success(Unit)
         override suspend fun updatePackWhitelisted(identifier: String, isWhitelisted: Boolean): StickerResult<Unit> =
             StickerResult.Success(Unit)
         override suspend fun syncWhitelistStatus(context: Context, packIdentifier: String): StickerResult<Boolean> =

@@ -1,9 +1,10 @@
-package com.seventv.stickers.data.local.dao
+﻿package com.seventv.stickers.data.local.dao
 
 import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Transaction
 import com.seventv.stickers.data.local.entity.StickerEntity
 
 @Dao
@@ -16,6 +17,16 @@ interface StickerDao {
 
     @Query("UPDATE stickers SET sortOrder = :newOrder WHERE id = :stickerId")
     suspend fun updateSortOrder(stickerId: String, newOrder: Int)
+
+    @Query("UPDATE stickers SET sortOrder = :newOrder WHERE id = :stickerId AND packIdentifier = :packIdentifier")
+    suspend fun updateSortOrderInPack(packIdentifier: String, stickerId: String, newOrder: Int)
+
+    @Transaction
+    suspend fun reorderStickers(packIdentifier: String, orderedStickerIds: List<String>) {
+        orderedStickerIds.forEachIndexed { index, stickerId ->
+            updateSortOrderInPack(packIdentifier, stickerId, index)
+        }
+    }
 
     @Query("DELETE FROM stickers WHERE id = :stickerId")
     suspend fun deleteSticker(stickerId: String)

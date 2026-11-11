@@ -37,14 +37,15 @@ class PacksViewModel(
                 }
                 .collect { packs ->
                     _uiState.update { current ->
-                        val updatedDetail = if (current.selectedPackDetail != null) {
+                        val updatedDetail = if (!current.isDraggingSticker && current.selectedPackDetail != null) {
                             packs.find { it.identifier == current.selectedPackDetail.identifier }
                         } else null
+                        val effectiveDetail = if (current.isDraggingSticker) current.selectedPackDetail else (updatedDetail ?: current.selectedPackDetail)
                         val report = if (updatedDetail != null) StickerPackInspector.inspect(updatedDetail) else current.packDiagnosticReport
                         val issues = if (updatedDetail != null && report != null) report.issues.associateBy { it.stickerId } else current.stickerIssues
                         current.copy(
                             loadState = PacksLoadState.Success(packs),
-                            selectedPackDetail = updatedDetail ?: current.selectedPackDetail,
+                            selectedPackDetail = effectiveDetail,
                             packDiagnosticReport = report,
                             stickerIssues = issues
                         )
@@ -89,7 +90,9 @@ class PacksViewModel(
                 selectedPackDetail = null,
                 packDiagnosticReport = null,
                 stickerIssues = emptyMap(),
-                isDiagnosticDialogOpen = false
+                isDiagnosticDialogOpen = false,
+                isReorderMode = false,
+                isDraggingSticker = false
             )
         }
     }
@@ -506,9 +509,153 @@ class PacksViewModel(
         }
     }
 
+    fun onToggleReorderMode() {
+        _uiState.update { it.copy(isReorderMode = !it.isReorderMode) }
+    }
+
+    fun onSetReorderMode(enabled: Boolean) {
+        _uiState.update { it.copy(isReorderMode = enabled) }
+    }
+
+    fun onDragStarted() {
+        _uiState.update { it.copy(isDraggingSticker = true) }
+    }
+
+    fun onMoveSticker(packIdentifier: String, fromIndex: Int, toIndex: Int) {
+        _uiState.update { current ->
+            val detail = current.selectedPackDetail
+            if (detail == null || detail.identifier != packIdentifier) return@update current
+            val stickers = detail.stickers
+            if (fromIndex !in stickers.indices || toIndex !in stickers.indices || fromIndex == toIndex) {
+                return@update current
+            }
+            val mutable = stickers.toMutableList()
+            val moved = mutable.removeAt(fromIndex)
+            mutable.add(toIndex, moved)
+            val reindexed = mutable.mapIndexed { idx, sticker -> sticker.copy(sortOrder = idx) }
+            val updatedDetail = detail.copy(stickers = reindexed)
+            val updatedLoadState = (current.loadState as? PacksLoadState.Success)?.let { success ->
+                PacksLoadState.Success(
+                    success.packs.map { if (it.identifier == packIdentifier) updatedDetail else it }
+                )
+            } ?: current.loadState
+
+            current.copy(
+                loadState = updatedLoadState,
+                selectedPackDetail = updatedDetail
+            )
+        }
+    }
+
+    fun onPersistStickerOrder(
+        packIdentifier: String,
+        orderedStickerIds: List<String>? = null
+    ) {
+        val detail = _uiState.value.selectedPackDetail
+        val idsToPersist = orderedStickerIds ?: detail?.takeIf { it.identifier == packIdentifier }?.stickers?.map { it.id }
+        _uiState.update { it.copy(isDraggingSticker = false) }
+        if (idsToPersist.isNullOrEmpty()) return
+
+        viewModelScope.launch {
+            when (val result = stickerPackRepository.reorderStickers(packIdentifier, idsToPersist)) {
+                is com.seventv.stickers.core.common.result.StickerResult.Success -> {
+                    val refreshed = stickerPackRepository.getPack(packIdentifier)
+                    if (refreshed is com.seventv.stickers.core.common.result.StickerResult.Success) {
+                        val report = StickerPackInspector.inspect(refreshed.data)
+                        _uiState.update {
+                            it.copy(
+                                selectedPackDetail = refreshed.data,
+                                packDiagnosticReport = report,
+                                stickerIssues = report.issues.associateBy { issue -> issue.stickerId }
+                            )
+                        }
+                    }
+                }
+                is com.seventv.stickers.core.common.result.StickerResult.Failure -> {
+                    val refreshed = stickerPackRepository.getPack(packIdentifier)
+                    if (refreshed is com.seventv.stickers.core.common.result.StickerResult.Success) {
+                        _uiState.update {
+                            it.copy(
+                                selectedPackDetail = refreshed.data,
+                                userFeedbackMessage = "Error al guardar el orden: ${result.error}"
+                            )
+                        }
+                    } else {
+                        _uiState.update {
+                            it.copy(userFeedbackMessage = "Error al guardar el orden: ${result.error}")
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    fun onDragCancelled(packIdentifier: String) {
+        _uiState.update { it.copy(isDraggingSticker = false) }
+        viewModelScope.launch {
+            val refreshed = stickerPackRepository.getPack(packIdentifier)
+            if (refreshed is com.seventv.stickers.core.common.result.StickerResult.Success) {
+                val report = StickerPackInspector.inspect(refreshed.data)
+                _uiState.update {
+                    it.copy(
+                        selectedPackDetail = refreshed.data,
+                        packDiagnosticReport = report,
+                        stickerIssues = report.issues.associateBy { issue -> issue.stickerId }
+                    )
+                }
+            }
+        }
+    }
+
     fun onSetStickerAsTrayIcon(packIdentifier: String, stickerId: String) {
-        _uiState.update {
-            it.copy(userFeedbackMessage = "Icono del pack actualizado")
+        _uiState.update { current ->
+            val detail = current.selectedPackDetail
+            if (detail != null && detail.identifier == packIdentifier) {
+                val target = detail.stickers.firstOrNull { it.id == stickerId }
+                if (target != null) {
+                    val reordered = (listOf(target) + detail.stickers.filter { it.id != stickerId })
+                        .mapIndexed { idx, s -> s.copy(sortOrder = idx) }
+                    val updatedDetail = detail.copy(stickers = reordered)
+                    val updatedLoadState = (current.loadState as? PacksLoadState.Success)?.let { success ->
+                        PacksLoadState.Success(
+                            success.packs.map { if (it.identifier == packIdentifier) updatedDetail else it }
+                        )
+                    } ?: current.loadState
+                    current.copy(
+                        loadState = updatedLoadState,
+                        selectedPackDetail = updatedDetail
+                    )
+                } else current
+            } else current
+        }
+
+        viewModelScope.launch {
+            when (val result = stickerPackRepository.setStickerAsTrayIcon(packIdentifier, stickerId)) {
+                is com.seventv.stickers.core.common.result.StickerResult.Success -> {
+                    val refreshed = stickerPackRepository.getPack(packIdentifier)
+                    if (refreshed is com.seventv.stickers.core.common.result.StickerResult.Success) {
+                        val report = StickerPackInspector.inspect(refreshed.data)
+                        _uiState.update {
+                            it.copy(
+                                selectedPackDetail = refreshed.data,
+                                packDiagnosticReport = report,
+                                stickerIssues = report.issues.associateBy { issue -> issue.stickerId },
+                                userFeedbackMessage = "Portada del pack actualizada"
+                            )
+                        }
+                    } else {
+                        _uiState.update {
+                            it.copy(userFeedbackMessage = "Portada del pack actualizada")
+                        }
+                    }
+                }
+                is com.seventv.stickers.core.common.result.StickerResult.Failure -> {
+                    onSelectPackDetail(packIdentifier)
+                    _uiState.update {
+                        it.copy(userFeedbackMessage = "Error al actualizar portada: ${result.error}")
+                    }
+                }
+            }
         }
     }
 

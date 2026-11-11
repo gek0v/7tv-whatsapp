@@ -50,6 +50,8 @@ data class PacksUiState(
     val isDuplicateDialogOpen: Boolean = false,
     val packToDuplicate: StickerPack? = null,
     // Sticker Management in Detail
+    val isReorderMode: Boolean = false,
+    val isDraggingSticker: Boolean = false,
     val isDeleteStickerConfirmDialogOpen: Boolean = false,
     val stickerToDelete: PackSticker? = null,
     val isAddStickersDialogOpen: Boolean = false,

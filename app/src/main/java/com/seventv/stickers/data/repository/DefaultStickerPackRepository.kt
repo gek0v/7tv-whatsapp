@@ -671,6 +671,136 @@ class DefaultStickerPackRepository(
         }
     }
 
+    override suspend fun reorderStickers(
+        packIdentifier: String,
+        orderedStickerIds: List<String>
+    ): StickerResult<Unit> = withContext(dispatcher) {
+        try {
+            val packWithStickers = stickerPackDao.getPackByIdentifier(packIdentifier)
+                ?: return@withContext StickerResult.Failure(StickerError.PackNotFound(packIdentifier))
+
+            val existingStickers = packWithStickers.stickers.sortedBy { it.sortOrder }
+            if (existingStickers.isEmpty() || orderedStickerIds.isEmpty()) {
+                return@withContext StickerResult.Success(Unit)
+            }
+
+            val existingIds = existingStickers.map { it.id }.toSet()
+            val validOrderedIds = orderedStickerIds.filter { it in existingIds }.distinct()
+            val remainingIds = existingStickers.map { it.id }.filter { it !in validOrderedIds }
+            val finalOrderedIds = validOrderedIds + remainingIds
+
+            val previousFirstId = existingStickers.firstOrNull()?.id
+            val newFirstId = finalOrderedIds.firstOrNull()
+
+            stickerDao.reorderStickers(packIdentifier, finalOrderedIds)
+
+            if (newFirstId != null && newFirstId != previousFirstId) {
+                val firstSticker = existingStickers.firstOrNull { it.id == newFirstId }
+                if (firstSticker != null) {
+                    val stickerFile = storageManager.getAbsoluteFile(firstSticker.relativeFilePath)
+                    if (stickerFile.exists()) {
+                        val regenResult = regenerateTrayIconFromStickerFile(packIdentifier, stickerFile)
+                        if (regenResult is StickerResult.Failure) {
+                            return@withContext regenResult
+                        }
+                    }
+                }
+            }
+
+            stickerPackDao.updateWhitelisted(packIdentifier, false)
+            StickerResult.Success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            StickerResult.Failure(StickerError.StorageIoError(e))
+        }
+    }
+
+    override suspend fun setStickerAsTrayIcon(
+        packIdentifier: String,
+        stickerId: String
+    ): StickerResult<Unit> = withContext(dispatcher) {
+        try {
+            val packWithStickers = stickerPackDao.getPackByIdentifier(packIdentifier)
+                ?: return@withContext StickerResult.Failure(StickerError.PackNotFound(packIdentifier))
+
+            val existingStickers = packWithStickers.stickers.sortedBy { it.sortOrder }
+            val targetSticker = existingStickers.firstOrNull { it.id == stickerId }
+                ?: return@withContext StickerResult.Failure(
+                    StickerError.ValidationError("Sticker no encontrado en el paquete: $stickerId")
+                )
+
+            val newOrderedIds = listOf(stickerId) + existingStickers.map { it.id }.filter { it != stickerId }
+            stickerDao.reorderStickers(packIdentifier, newOrderedIds)
+
+            val stickerFile = storageManager.getAbsoluteFile(targetSticker.relativeFilePath)
+            if (stickerFile.exists()) {
+                val regenResult = regenerateTrayIconFromStickerFile(packIdentifier, stickerFile)
+                if (regenResult is StickerResult.Failure) {
+                    return@withContext regenResult
+                }
+            }
+
+            stickerPackDao.updateWhitelisted(packIdentifier, false)
+            StickerResult.Success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            StickerResult.Failure(StickerError.StorageIoError(e))
+        }
+    }
+
+    private suspend fun regenerateTrayIconFromStickerFile(
+        packIdentifier: String,
+        stickerFile: File
+    ): StickerResult<Unit> {
+        val packDir = storageManager.getPackDirectory(packIdentifier)
+        val stagingDir = File(packDir, "staging_tray_${UUID.randomUUID()}").apply { mkdirs() }
+        val trayOutFile = File(stagingDir, "tray_icon.png")
+
+        val options = BitmapFactory.Options().apply {
+            inPreferredConfig = Bitmap.Config.ARGB_8888
+        }
+        var bitmap: Bitmap? = BitmapFactory.decodeFile(stickerFile.absolutePath, options)
+        val extraFramesToRecycle = mutableListOf<AnimationFrame>()
+
+        try {
+            if (bitmap == null) {
+                val frameExtractor = DefaultFrameExtractor()
+                val framesResult = frameExtractor.extractFrames(stickerFile.readBytes())
+                if (framesResult is StickerResult.Success && framesResult.data.isNotEmpty()) {
+                    bitmap = framesResult.data.first().bitmap
+                    if (framesResult.data.size > 1) {
+                        extraFramesToRecycle.addAll(framesResult.data.drop(1))
+                    }
+                }
+            }
+
+            val sourceBitmap = bitmap
+                ?: return StickerResult.Failure(StickerError.CorruptedSourceData)
+
+            val trayResult = mediaPipeline.processTrayIcon(sourceBitmap, trayOutFile)
+            return when (trayResult) {
+                is StickerResult.Success -> {
+                    val trayBytes = trayOutFile.readBytes()
+                    storageManager.saveTrayIcon(packIdentifier, trayBytes)
+                    StickerResult.Success(Unit)
+                }
+                is StickerResult.Failure -> trayResult
+            }
+        } finally {
+            stagingDir.deleteRecursively()
+            for (extra in extraFramesToRecycle) {
+                if (!extra.bitmap.isRecycled) {
+                    extra.bitmap.recycle()
+                }
+            }
+            if (bitmap != null && !bitmap.isRecycled) {
+                bitmap.recycle()
+            }
+        }
+    }
+
     override suspend fun updatePackWhitelisted(
         identifier: String,
         isWhitelisted: Boolean
