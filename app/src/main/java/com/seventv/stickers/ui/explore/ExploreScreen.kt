@@ -128,11 +128,25 @@ fun ExploreScreen(
     }
 
     val gridState = rememberLazyGridState()
+    val shouldPrefetchMore by remember {
+        derivedStateOf {
+            val lastVisibleIndex = gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+            val totalCount = gridState.layoutInfo.totalItemsCount
+            totalCount > 0 && lastVisibleIndex >= totalCount - 14
+        }
+    }
+
     val shouldLoadMore by remember {
         derivedStateOf {
             val lastVisibleIndex = gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
             val totalCount = gridState.layoutInfo.totalItemsCount
             totalCount > 0 && lastVisibleIndex >= totalCount - 6
+        }
+    }
+
+    LaunchedEffect(shouldPrefetchMore) {
+        if (shouldPrefetchMore && uiState.hasMorePages && !uiState.isLoadingMore) {
+            viewModel.prefetchNextPage()
         }
     }
 

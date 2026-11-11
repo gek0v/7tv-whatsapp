@@ -180,6 +180,16 @@ class DefaultAggregatedEmoteCatalogRepository(
         }
     }.flowOn(dispatcher)
 
+    override suspend fun prefetchSearchPage(
+        query: String,
+        page: Int,
+        limit: Int
+    ) {
+        val cacheKey = SearchCacheKey(query = query.trim().lowercase(), page = page, limit = limit)
+        if (searchCache.get(cacheKey) != null) return
+        searchAllProviders(query = query, page = page, limit = limit)
+    }
+
     override suspend fun getUnifiedChannelEmotes(
         twitchChannel: String
     ): StickerResult<UnifiedChannelResult> = withContext(dispatcher) {

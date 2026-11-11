@@ -34,6 +34,7 @@ class ExploreViewModel(
     val uiState: StateFlow<ExploreUiState> = _uiState.asStateFlow()
 
     private var searchJob: Job? = null
+    private var prefetchJob: Job? = null
     private var lastQueryLoadedAllProviders: Boolean = false
 
     init {
@@ -267,6 +268,19 @@ class ExploreViewModel(
         }
     }
 
+    fun prefetchNextPage() {
+        val repo = aggregatedRepository ?: return
+        val currentState = _uiState.value
+        if (currentState.isLoadingMore || !currentState.hasMorePages) return
+        if (currentState.searchResults !is SearchResultsState.Success) return
+        if (prefetchJob?.isActive == true) return
+        val nextPage = currentState.currentPage + 1
+        val query = currentState.query.trim()
+        prefetchJob = viewModelScope.launch {
+            repo.prefetchSearchPage(query = query, page = nextPage, limit = 50)
+        }
+    }
+
     /**
      * Loads the next page of emotes (for infinite scroll) and appends them to current results.
      */
@@ -296,9 +310,18 @@ class ExploreViewModel(
                         val newEmotes = interleaveByProvider(mappedByProvider)
                         _uiState.update { state ->
                             val combined = (currentResults.emotes + newEmotes).distinctBy { it.provider to it.id }
-                            val mergedMap = combined.groupBy { it.provider }
+                            val mergedMap = LinkedHashMap<EmoteProvider, List<SevenTvEmote>>(currentResults.emotesByProvider.size + mappedByProvider.size)
+                            for ((p, existingList) in currentResults.emotesByProvider) {
+                                val extra = mappedByProvider[p]
+                                mergedMap[p] = if (extra.isNullOrEmpty()) existingList else (existingList + extra).distinctBy { it.id }
+                            }
+                            for ((p, extra) in mappedByProvider) {
+                                if (p !in mergedMap) {
+                                    mergedMap[p] = extra.distinctBy { it.id }
+                                }
+                            }
                             state.copy(
-                                searchResults = SearchResultsState.Success(combined, mergedMap),
+                                searchResults = SearchResultsState.Success(combined, mergedMap, isDeduplicated = true),
                                 currentPage = nextPage,
                                 isLoadingMore = false,
                                 hasMorePages = currentState.activeProviderFilter.provider?.let { target ->

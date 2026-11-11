@@ -2,6 +2,8 @@ package com.seventv.stickers.core.network.api
 
 import kotlinx.serialization.json.Json
 import okhttp3.Cache
+import okhttp3.ConnectionPool
+import okhttp3.Dispatcher
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import retrofit2.Retrofit
@@ -20,7 +22,13 @@ object SevenTvNetworkFactory {
     private const val CACHE_SIZE_BYTES = 10L * 1024 * 1024 // 10 MB
 
     fun createOkHttpClient(cacheDir: File? = null): OkHttpClient {
+        val dispatcher = Dispatcher().apply {
+            maxRequests = 96
+            maxRequestsPerHost = 24
+        }
         val builder = OkHttpClient.Builder()
+            .dispatcher(dispatcher)
+            .connectionPool(ConnectionPool(12, 5, TimeUnit.MINUTES))
             .connectTimeout(TIMEOUT_SECONDS, TimeUnit.SECONDS)
             .readTimeout(TIMEOUT_SECONDS, TimeUnit.SECONDS)
             .writeTimeout(TIMEOUT_SECONDS, TimeUnit.SECONDS)

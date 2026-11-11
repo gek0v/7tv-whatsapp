@@ -29,6 +29,14 @@ interface AggregatedEmoteCatalogRepository {
         }
     }
 
+    suspend fun prefetchSearchPage(
+        query: String,
+        page: Int,
+        limit: Int = 100
+    ) {
+        // Default no-op for test doubles
+    }
+
     suspend fun getUnifiedChannelEmotes(twitchChannel: String): StickerResult<UnifiedChannelResult>
 
     fun getUnifiedChannelEmotesProgressive(
