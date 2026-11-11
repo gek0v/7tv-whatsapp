@@ -16,10 +16,17 @@ class ThemeTokensTest {
 
     @Test
     fun verifyColorConstants() {
-        // Dark brand tokens
-        assertEquals(Color(0xFF00D2FF), SevenTvCyan)
-        assertEquals(Color(0xFFB37BF2), TwitchPurple)
-        assertEquals(Color(0xFF25D366), WhatsAppGreen)
+        // Vaporwave neon tokens
+        assertEquals(Color(0xFFFF71CE), NeonFuchsia)
+        assertEquals(Color(0xFF01CDFE), ElectricCyan)
+        assertEquals(Color(0xFFB967FF), RetroViolet)
+        assertEquals(Color(0xFFFFFB96), SunsetYellow)
+        assertEquals(Color(0xFF05FFA1), WhatsAppGlow)
+
+        // Dark brand tokens (Vaporwave Night)
+        assertEquals(Color(0xFF01CDFE), SevenTvCyan)
+        assertEquals(Color(0xFFB967FF), TwitchPurple)
+        assertEquals(Color(0xFF05FFA1), WhatsAppGreen)
         assertEquals(Color(0xFFFF4858), ErrorRed)
 
         // Light brand tokens
@@ -28,16 +35,23 @@ class ThemeTokensTest {
         assertEquals(Color(0xFF008744), WhatsAppGreenLight)
         assertEquals(Color(0xFFD32F2F), ErrorRedLight)
 
-        // Dark surface container levels
-        assertEquals(Color(0xFF0E1015), DarkBackground)
-        assertEquals(Color(0xFF141720), DarkSurface)
-        assertEquals(Color(0xFF1A1D28), DarkSurfaceContainerLow)
-        assertEquals(Color(0xFF202432), DarkSurfaceContainer)
-        assertEquals(Color(0xFF272C3E), DarkSurfaceContainerHigh)
-        assertEquals(Color(0xFF31374C), DarkSurfaceContainerHighest)
-        assertEquals(Color(0xFF272C3E), DarkSurfaceVariant)
-        assertEquals(Color(0xFFF1F3F5), DarkOnSurface)
-        assertEquals(Color(0xFF9AA0A6), DarkOnSurfaceVariant)
+        // Dark surface container levels (Púrpura noche / Añil profundo)
+        assertEquals(Color(0xFF0F081D), DarkBackground)
+        assertEquals(Color(0xFF160D2E), DarkSurface)
+        assertEquals(Color(0xFF1C113B), DarkSurfaceContainerLow)
+        assertEquals(Color(0xFF24164C), DarkSurfaceContainer)
+        assertEquals(Color(0xFF2E1C60), DarkSurfaceContainerHigh)
+        assertEquals(Color(0xFF3B2479), DarkSurfaceContainerHighest)
+        assertEquals(Color(0xFF2A1954), DarkSurfaceVariant)
+        assertEquals(Color(0xFFFBF8FF), DarkOnSurface)
+        assertEquals(Color(0xFFB8AFD4), DarkOnSurfaceVariant)
+
+        // Glassmorphism tokens
+        assertEquals(Color(0x33FFFFFF), GlassSurface)
+        assertEquals(Color(0x251F1435), GlassSurfaceDark)
+        assertEquals(Color(0x40FFFFFF), GlassBorder)
+        assertEquals(Color(0x6001CDFE), GlassBorderCyan)
+        assertEquals(Color(0x60FF71CE), GlassBorderFuchsia)
 
         // Light surface container levels
         assertEquals(Color(0xFFF7F9FC), LightBackground)
@@ -76,19 +90,19 @@ class ThemeTokensTest {
     fun testDualColorSchemeRoles() {
         assertNotNull(SevenTvDarkColorScheme.surfaceContainer)
         assertNotNull(SevenTvLightColorScheme.surfaceContainer)
-        assertEquals(Color(0xFF00D2FF), SevenTvDarkColorScheme.primary)
+        assertEquals(Color(0xFF01CDFE), SevenTvDarkColorScheme.primary)
         assertEquals(Color(0xFF00728F), SevenTvLightColorScheme.primary)
-        assertEquals(Color(0xFF25D366), SevenTvDarkColorScheme.tertiary)
+        assertEquals(Color(0xFF05FFA1), SevenTvDarkColorScheme.tertiary)
     }
 
     @Test
     fun verifyDarkColorSchemeTokens() {
         assertEquals(SevenTvCyan, SevenTvDarkColorScheme.primary)
-        assertEquals(Color.Black, SevenTvDarkColorScheme.onPrimary)
-        assertEquals(TwitchPurple, SevenTvDarkColorScheme.secondary)
+        assertEquals(Color(0xFF0F081D), SevenTvDarkColorScheme.onPrimary)
+        assertEquals(NeonFuchsia, SevenTvDarkColorScheme.secondary)
         assertEquals(Color.White, SevenTvDarkColorScheme.onSecondary)
         assertEquals(WhatsAppGreen, SevenTvDarkColorScheme.tertiary)
-        assertEquals(Color.Black, SevenTvDarkColorScheme.onTertiary)
+        assertEquals(Color(0xFF0F081D), SevenTvDarkColorScheme.onTertiary)
         assertEquals(DarkBackground, SevenTvDarkColorScheme.background)
         assertEquals(DarkOnSurface, SevenTvDarkColorScheme.onBackground)
         assertEquals(DarkSurface, SevenTvDarkColorScheme.surface)
@@ -99,6 +113,8 @@ class ThemeTokensTest {
         assertEquals(DarkSurfaceContainer, SevenTvDarkColorScheme.surfaceContainer)
         assertEquals(DarkSurfaceContainerHigh, SevenTvDarkColorScheme.surfaceContainerHigh)
         assertEquals(DarkSurfaceContainerHighest, SevenTvDarkColorScheme.surfaceContainerHighest)
+        assertEquals(GlassBorder, SevenTvDarkColorScheme.outline)
+        assertEquals(GlassBorderCyan, SevenTvDarkColorScheme.outlineVariant)
         assertEquals(ErrorRed, SevenTvDarkColorScheme.error)
         assertEquals(Color.White, SevenTvDarkColorScheme.onError)
     }
@@ -127,11 +143,11 @@ class ThemeTokensTest {
 
     @Test
     fun verifyShapeTokens() {
-        assertEquals(RoundedCornerShape(8.dp), SevenTvShapes.extraSmall)
-        assertEquals(RoundedCornerShape(12.dp), SevenTvShapes.small)
-        assertEquals(RoundedCornerShape(16.dp), SevenTvShapes.medium)
+        assertEquals(RoundedCornerShape(10.dp), SevenTvShapes.extraSmall)
+        assertEquals(RoundedCornerShape(16.dp), SevenTvShapes.small)
+        assertEquals(RoundedCornerShape(20.dp), SevenTvShapes.medium)
         assertEquals(RoundedCornerShape(24.dp), SevenTvShapes.large)
-        assertEquals(RoundedCornerShape(28.dp), SevenTvShapes.extraLarge)
+        assertEquals(RoundedCornerShape(32.dp), SevenTvShapes.extraLarge)
     }
 
     @Test

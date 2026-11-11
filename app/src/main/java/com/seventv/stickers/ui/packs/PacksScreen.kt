@@ -2,9 +2,21 @@ package com.seventv.stickers.ui.packs
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import com.seventv.stickers.ui.theme.ElectricCyan
+import com.seventv.stickers.ui.theme.NeonFuchsia
+import com.seventv.stickers.ui.theme.NightDarkPurple
+import com.seventv.stickers.ui.theme.GlassSurfaceBar
+import com.seventv.stickers.ui.theme.GlassSurfaceCard
+import com.seventv.stickers.ui.theme.GlassBorder
+import com.seventv.stickers.ui.theme.RetroViolet
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -222,8 +234,9 @@ fun PacksScreen(
                     onClick = onCreatePackClick,
                     icon = { Icon(Icons.Default.Add, contentDescription = null) },
                     text = { Text("Crear Pack", fontWeight = FontWeight.Bold) },
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary
+                    shape = RoundedCornerShape(20.dp),
+                    containerColor = ElectricCyan,
+                    contentColor = NightDarkPurple
                 )
             }
         },
@@ -233,9 +246,10 @@ fun PacksScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(16.dp),
-                    shape = MaterialTheme.shapes.large,
-                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    shadowElevation = 6.dp
+                    shape = RoundedCornerShape(24.dp),
+                    color = GlassSurfaceBar,
+                    border = BorderStroke(1.dp, GlassBorder),
+                    shadowElevation = 8.dp
                 ) {
                     Row(
                         modifier = Modifier
@@ -337,11 +351,19 @@ fun PacksScreen(
                             contentAlignment = Alignment.Center
                         ) {
                             Card(
-                                shape = MaterialTheme.shapes.large,
+                                shape = RoundedCornerShape(24.dp),
                                 colors = CardDefaults.cardColors(
-                                    containerColor = MaterialTheme.colorScheme.surfaceContainer
+                                    containerColor = GlassSurfaceCard
                                 ),
-                                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                                border = BorderStroke(
+                                    1.dp,
+                                    Brush.horizontalGradient(
+                                        listOf(
+                                            ElectricCyan.copy(alpha = 0.35f),
+                                            NeonFuchsia.copy(alpha = 0.35f)
+                                        )
+                                    )
+                                ),
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 Column(
@@ -354,13 +376,13 @@ fun PacksScreen(
                                         modifier = Modifier
                                             .size(72.dp)
                                             .clip(CircleShape)
-                                            .background(MaterialTheme.colorScheme.primaryContainer),
+                                            .background(RetroViolet.copy(alpha = 0.2f)),
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Icon(
                                             imageVector = Icons.Default.Folder,
                                             contentDescription = null,
-                                            tint = MaterialTheme.colorScheme.primary,
+                                            tint = RetroViolet,
                                             modifier = Modifier.size(36.dp)
                                         )
                                     }
@@ -382,10 +404,10 @@ fun PacksScreen(
                                     Spacer(modifier = Modifier.height(20.dp))
                                     Button(
                                         onClick = onCreatePackClick,
-                                        shape = MaterialTheme.shapes.medium,
+                                        shape = RoundedCornerShape(16.dp),
                                         colors = ButtonDefaults.buttonColors(
-                                            containerColor = MaterialTheme.colorScheme.primary,
-                                            contentColor = MaterialTheme.colorScheme.onPrimary
+                                            containerColor = ElectricCyan,
+                                            contentColor = NightDarkPurple
                                         )
                                     ) {
                                         Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(18.dp))

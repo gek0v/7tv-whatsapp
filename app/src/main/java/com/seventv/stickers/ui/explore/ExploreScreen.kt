@@ -201,15 +201,39 @@ fun ExploreScreen(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
+                        val isTrending = uiState.selectedCategory == ExploreCategory.TRENDING
                         FilterChip(
-                            selected = uiState.selectedCategory == ExploreCategory.TRENDING,
+                            selected = isTrending,
                             onClick = { viewModel.onCategorySelected(ExploreCategory.TRENDING) },
-                            label = { Text("🔥 Tendencias") }
+                            label = { Text("🔥 Tendencias") },
+                            shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+                            border = androidx.compose.foundation.BorderStroke(
+                                1.dp,
+                                if (isTrending) com.seventv.stickers.ui.theme.NeonFuchsia else androidx.compose.ui.graphics.Color(0x35FFFFFF)
+                            ),
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = androidx.compose.ui.graphics.Color(0x35FF71CE),
+                                selectedLabelColor = com.seventv.stickers.ui.theme.NeonFuchsia,
+                                containerColor = com.seventv.stickers.ui.theme.GlassSurfaceDark,
+                                labelColor = com.seventv.stickers.ui.theme.DarkOnSurfaceVariant
+                            )
                         )
+                        val isTop = uiState.selectedCategory == ExploreCategory.TOP
                         FilterChip(
-                            selected = uiState.selectedCategory == ExploreCategory.TOP,
+                            selected = isTop,
                             onClick = { viewModel.onCategorySelected(ExploreCategory.TOP) },
-                            label = { Text("⭐ Populares") }
+                            label = { Text("⭐ Populares") },
+                            shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+                            border = androidx.compose.foundation.BorderStroke(
+                                1.dp,
+                                if (isTop) com.seventv.stickers.ui.theme.SunsetYellow else androidx.compose.ui.graphics.Color(0x35FFFFFF)
+                            ),
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = androidx.compose.ui.graphics.Color(0x35FFFB96),
+                                selectedLabelColor = com.seventv.stickers.ui.theme.SunsetYellow,
+                                containerColor = com.seventv.stickers.ui.theme.GlassSurfaceDark,
+                                labelColor = com.seventv.stickers.ui.theme.DarkOnSurfaceVariant
+                            )
                         )
                     }
 

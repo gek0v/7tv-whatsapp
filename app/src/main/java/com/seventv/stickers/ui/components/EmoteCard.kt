@@ -8,6 +8,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -20,11 +21,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -35,6 +38,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
@@ -42,6 +46,12 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.seventv.stickers.core.network.model.SevenTvEmote
+import com.seventv.stickers.ui.theme.DarkOnSurfaceVariant
+import com.seventv.stickers.ui.theme.ElectricCyan
+import com.seventv.stickers.ui.theme.GlassBorder
+import com.seventv.stickers.ui.theme.GlassSurfaceCard
+import com.seventv.stickers.ui.theme.NeonFuchsia
+import com.seventv.stickers.ui.theme.WhatsAppGlow
 
 object EmoteCardDefaults {
     const val ANIMATED_BADGE = "ANIM"
@@ -51,8 +61,8 @@ object EmoteCardDefaults {
 }
 
 /**
- * Grid card component displaying an individual 7TV emote thumbnail with M3 ElevatedCard styling,
- * format badge (ANIM / STATIC), and animated draft toggle action.
+ * Vaporwave + Glassmorphism grid card displaying an individual 7TV emote thumbnail
+ * with translucent glass surface, subtle glowing border, frosted badge, and neon draft toggle.
  */
 @Composable
 fun EmoteCard(
@@ -69,12 +79,14 @@ fun EmoteCard(
         modifier
     }
 
-    ElevatedCard(
+    Card(
         modifier = cardModifier,
-        shape = MaterialTheme.shapes.medium, // 16dp
-        colors = CardDefaults.elevatedCardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
-        )
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = GlassSurfaceCard
+        ),
+        border = BorderStroke(1.dp, GlassBorder.copy(alpha = 0.25f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
     ) {
         Column(
             modifier = Modifier
@@ -85,12 +97,13 @@ fun EmoteCard(
                 Modifier
                     .fillMaxWidth()
                     .aspectRatio(1f)
-                    .clip(MaterialTheme.shapes.small)
+                    .clip(RoundedCornerShape(14.dp))
                     .clickable(onClick = onPreviewClick)
             } else {
                 Modifier
                     .fillMaxWidth()
                     .aspectRatio(1f)
+                    .clip(RoundedCornerShape(14.dp))
             }
 
             Box(
@@ -109,22 +122,22 @@ fun EmoteCard(
                         .align(Alignment.Center)
                 )
 
-                // Format badge in top-end corner: "ANIM" or "STATIC"
+                // Frosted neon format badge in top-end corner
                 Surface(
                     modifier = Modifier
                         .align(Alignment.TopEnd)
-                        .padding(4.dp),
-                    shape = MaterialTheme.shapes.extraSmall, // 8dp
-                    color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.85f)
+                        .padding(5.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    color = Color(0x800F081D),
+                    border = BorderStroke(
+                        0.5.dp,
+                        if (emote.isAnimated) ElectricCyan.copy(alpha = 0.6f) else Color(0x35FFFFFF)
+                    )
                 ) {
                     Text(
                         text = EmoteCardDefaults.badgeText(emote.isAnimated),
                         style = MaterialTheme.typography.labelSmall,
-                        color = if (emote.isAnimated) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        },
+                        color = if (emote.isAnimated) ElectricCyan else DarkOnSurfaceVariant,
                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                     )
                 }
@@ -147,29 +160,39 @@ fun EmoteCard(
                 )
 
                 val tintColor by animateColorAsState(
-                    targetValue = if (isInDraft) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.primary,
+                    targetValue = if (isInDraft) WhatsAppGlow else ElectricCyan,
                     animationSpec = tween(durationMillis = 200),
                     label = "DraftTintAnimation"
                 )
 
-                IconButton(
-                    onClick = onToggleDraft,
+                Surface(
+                    shape = CircleShape,
+                    color = if (isInDraft) Color(0x3005FFA1) else Color(0x2001CDFE),
+                    border = BorderStroke(
+                        1.dp,
+                        if (isInDraft) WhatsAppGlow.copy(alpha = 0.8f) else ElectricCyan.copy(alpha = 0.6f)
+                    ),
                     modifier = Modifier.size(32.dp)
                 ) {
-                    AnimatedContent(
-                        targetState = isInDraft,
-                        transitionSpec = {
-                            (fadeIn(animationSpec = tween(180)) + scaleIn(initialScale = 0.7f, animationSpec = tween(180)))
-                                .togetherWith(fadeOut(animationSpec = tween(140)) + scaleOut(targetScale = 0.7f, animationSpec = tween(140)))
-                        },
-                        label = "DraftToggleIcon"
-                    ) { inDraft ->
-                        Icon(
-                            imageVector = if (inDraft) Icons.Default.Check else Icons.Default.Add,
-                            contentDescription = if (inDraft) "Quitar del borrador" else "Añadir al borrador",
-                            tint = tintColor,
-                            modifier = Modifier.size(20.dp)
-                        )
+                    IconButton(
+                        onClick = onToggleDraft,
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        AnimatedContent(
+                            targetState = isInDraft,
+                            transitionSpec = {
+                                (fadeIn(animationSpec = tween(180)) + scaleIn(initialScale = 0.7f, animationSpec = tween(180)))
+                                    .togetherWith(fadeOut(animationSpec = tween(140)) + scaleOut(targetScale = 0.7f, animationSpec = tween(140)))
+                            },
+                            label = "DraftToggleIcon"
+                        ) { inDraft ->
+                            Icon(
+                                imageVector = if (inDraft) Icons.Default.Check else Icons.Default.Add,
+                                contentDescription = if (inDraft) "Quitar del borrador" else "Añadir al borrador",
+                                tint = tintColor,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
                     }
                 }
             }

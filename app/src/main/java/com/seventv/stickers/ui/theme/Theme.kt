@@ -14,11 +14,17 @@ import androidx.core.view.WindowCompat
 
 val SevenTvDarkColorScheme = darkColorScheme(
     primary = SevenTvCyan,
-    onPrimary = Color.Black,
-    secondary = TwitchPurple,
+    onPrimary = Color(0xFF0F081D),
+    primaryContainer = Color(0x3501CDFE),
+    onPrimaryContainer = SevenTvCyan,
+    secondary = NeonFuchsia,
     onSecondary = Color.White,
+    secondaryContainer = Color(0x35FF71CE),
+    onSecondaryContainer = NeonFuchsia,
     tertiary = WhatsAppGreen,
-    onTertiary = Color.Black,
+    onTertiary = Color(0xFF0F081D),
+    tertiaryContainer = Color(0x3505FFA1),
+    onTertiaryContainer = WhatsAppGreen,
     background = DarkBackground,
     onBackground = DarkOnSurface,
     surface = DarkSurface,
@@ -30,6 +36,8 @@ val SevenTvDarkColorScheme = darkColorScheme(
     surfaceContainer = DarkSurfaceContainer,
     surfaceContainerHigh = DarkSurfaceContainerHigh,
     surfaceContainerHighest = DarkSurfaceContainerHighest,
+    outline = GlassBorder,
+    outlineVariant = GlassBorderCyan,
     error = ErrorRed,
     onError = Color.White
 )

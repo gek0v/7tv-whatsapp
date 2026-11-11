@@ -4,8 +4,17 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import com.seventv.stickers.ui.theme.ElectricCyan
+import com.seventv.stickers.ui.theme.NeonFuchsia
+import com.seventv.stickers.ui.theme.SunsetYellow
+import com.seventv.stickers.ui.theme.ErrorNeonRed
+import com.seventv.stickers.ui.theme.GlassSurfaceCard
+import com.seventv.stickers.ui.theme.GlassBorder
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -301,8 +310,10 @@ fun PackDetailScreen(
                 val isBelowMinimum = stickerCount < DraftBottomSheetDefaults.MIN_STICKERS
 
                 Surface(
-                    shape = MaterialTheme.shapes.medium,
-                    color = MaterialTheme.colorScheme.surfaceContainer,
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp),
+                    color = com.seventv.stickers.ui.theme.GlassSurfaceCard,
+                    border = BorderStroke(1.dp, com.seventv.stickers.ui.theme.GlassBorderCyan.copy(alpha = 0.4f)),
+                    shadowElevation = 4.dp,
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp, vertical = 8.dp)
@@ -316,13 +327,13 @@ fun PackDetailScreen(
                             Text(
                                 text = "Capacidad del Pack",
                                 style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = com.seventv.stickers.ui.theme.DarkOnSurfaceVariant
                             )
                             Text(
                                 text = "$stickerCount / ${DraftBottomSheetDefaults.MAX_STICKERS}",
                                 style = MaterialTheme.typography.labelLarge,
                                 fontWeight = FontWeight.Bold,
-                                color = if (isBelowMinimum) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
+                                color = if (isBelowMinimum) MaterialTheme.colorScheme.error else com.seventv.stickers.ui.theme.ElectricCyan
                             )
                         }
 
@@ -336,10 +347,10 @@ fun PackDetailScreen(
                                 .clip(MaterialTheme.shapes.small),
                             color = when {
                                 isBelowMinimum -> MaterialTheme.colorScheme.error
-                                stickerCount >= DraftBottomSheetDefaults.MAX_STICKERS -> MaterialTheme.colorScheme.tertiary
-                                else -> MaterialTheme.colorScheme.primary
+                                stickerCount >= DraftBottomSheetDefaults.MAX_STICKERS -> com.seventv.stickers.ui.theme.WhatsAppGlow
+                                else -> com.seventv.stickers.ui.theme.ElectricCyan
                             },
-                            trackColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                            trackColor = Color(0x30FFFFFF)
                         )
 
                         if (isBelowMinimum) {
@@ -363,7 +374,7 @@ fun PackDetailScreen(
                     }
                 }
 
-                // Chat Simulator Mode Selector
+                // Chat Simulator Mode Selector with neon glassmorphism pills
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -374,33 +385,58 @@ fun PackDetailScreen(
                     Text(
                         text = "Fondo:",
                         style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        fontWeight = FontWeight.Medium,
+                        color = com.seventv.stickers.ui.theme.DarkOnSurfaceVariant
                     )
+                    val isDark = state.chatSimulatorMode == ChatSimulatorMode.WHATSAPP_DARK
                     FilterChip(
-                        selected = state.chatSimulatorMode == ChatSimulatorMode.WHATSAPP_DARK,
+                        selected = isDark,
                         onClick = { viewModel.onSetChatSimulatorMode(ChatSimulatorMode.WHATSAPP_DARK) },
                         label = { Text("WA Oscuro") },
+                        shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+                        border = BorderStroke(
+                            1.dp,
+                            if (isDark) com.seventv.stickers.ui.theme.ElectricCyan else Color(0x35FFFFFF)
+                        ),
                         colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = MaterialTheme.colorScheme.primary,
-                            selectedLabelColor = MaterialTheme.colorScheme.onPrimary
+                            selectedContainerColor = Color(0x3501CDFE),
+                            selectedLabelColor = com.seventv.stickers.ui.theme.ElectricCyan,
+                            containerColor = com.seventv.stickers.ui.theme.GlassSurfaceDark,
+                            labelColor = com.seventv.stickers.ui.theme.DarkOnSurfaceVariant
                         )
                     )
+                    val isLight = state.chatSimulatorMode == ChatSimulatorMode.WHATSAPP_LIGHT
                     FilterChip(
-                        selected = state.chatSimulatorMode == ChatSimulatorMode.WHATSAPP_LIGHT,
+                        selected = isLight,
                         onClick = { viewModel.onSetChatSimulatorMode(ChatSimulatorMode.WHATSAPP_LIGHT) },
                         label = { Text("WA Claro") },
+                        shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+                        border = BorderStroke(
+                            1.dp,
+                            if (isLight) com.seventv.stickers.ui.theme.NeonFuchsia else Color(0x35FFFFFF)
+                        ),
                         colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = MaterialTheme.colorScheme.primary,
-                            selectedLabelColor = MaterialTheme.colorScheme.onPrimary
+                            selectedContainerColor = Color(0x35FF71CE),
+                            selectedLabelColor = com.seventv.stickers.ui.theme.NeonFuchsia,
+                            containerColor = com.seventv.stickers.ui.theme.GlassSurfaceDark,
+                            labelColor = com.seventv.stickers.ui.theme.DarkOnSurfaceVariant
                         )
                     )
+                    val isChecker = state.chatSimulatorMode == ChatSimulatorMode.CHECKERBOARD
                     FilterChip(
-                        selected = state.chatSimulatorMode == ChatSimulatorMode.CHECKERBOARD,
+                        selected = isChecker,
                         onClick = { viewModel.onSetChatSimulatorMode(ChatSimulatorMode.CHECKERBOARD) },
                         label = { Text("Malla") },
+                        shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+                        border = BorderStroke(
+                            1.dp,
+                            if (isChecker) com.seventv.stickers.ui.theme.SunsetYellow else Color(0x35FFFFFF)
+                        ),
                         colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = MaterialTheme.colorScheme.primary,
-                            selectedLabelColor = MaterialTheme.colorScheme.onPrimary
+                            selectedContainerColor = Color(0x35FFFB96),
+                            selectedLabelColor = com.seventv.stickers.ui.theme.SunsetYellow,
+                            containerColor = com.seventv.stickers.ui.theme.GlassSurfaceDark,
+                            labelColor = com.seventv.stickers.ui.theme.DarkOnSurfaceVariant
                         )
                     )
                 }
@@ -463,32 +499,46 @@ fun PackDetailScreen(
                     }
                 }
 
-                // Sticker Grid wrapped in Chat Simulator Background
-                ChatSimulatorBackground(
-                    mode = state.chatSimulatorMode,
+                // Sticker Grid wrapped in Chat Simulator Background with glass frame
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .weight(1f)
                         .padding(horizontal = 16.dp)
-                        .clip(MaterialTheme.shapes.large)
+                        .clip(RoundedCornerShape(22.dp))
+                        .border(
+                            width = 1.dp,
+                            brush = Brush.horizontalGradient(
+                                listOf(
+                                    ElectricCyan.copy(alpha = 0.35f),
+                                    NeonFuchsia.copy(alpha = 0.35f)
+                                )
+                            ),
+                            shape = RoundedCornerShape(22.dp)
+                        )
                 ) {
-                    LazyVerticalGrid(
-                        columns = GridCells.Fixed(3),
-                        contentPadding = PaddingValues(12.dp),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                    ChatSimulatorBackground(
+                        mode = state.chatSimulatorMode,
                         modifier = Modifier.fillMaxSize()
                     ) {
-                        itemsIndexed(pack.stickers, key = { _, sticker -> sticker.id }) { index, sticker ->
-                            PackStickerCell(
-                                sticker = sticker,
-                                isTrayIcon = index == 0,
-                                issue = state.stickerIssues[sticker.id],
-                                onClick = { inspectedSticker = sticker },
-                                onPreviewClick = { fullscreenSticker = sticker },
-                                onDeleteClick = { viewModel.onOpenDeleteStickerDialog(sticker) },
-                                onIssueClick = { viewModel.onOpenDiagnosticDialog() }
-                            )
+                        LazyVerticalGrid(
+                            columns = GridCells.Fixed(3),
+                            contentPadding = PaddingValues(12.dp),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                            modifier = Modifier.fillMaxSize()
+                        ) {
+                            itemsIndexed(pack.stickers, key = { _, sticker -> sticker.id }) { index, sticker ->
+                                PackStickerCell(
+                                    sticker = sticker,
+                                    isTrayIcon = index == 0,
+                                    issue = state.stickerIssues[sticker.id],
+                                    onClick = { inspectedSticker = sticker },
+                                    onPreviewClick = { fullscreenSticker = sticker },
+                                    onDeleteClick = { viewModel.onOpenDeleteStickerDialog(sticker) },
+                                    onIssueClick = { viewModel.onOpenDiagnosticDialog() }
+                                )
+                            }
                         }
                     }
                 }
@@ -983,15 +1033,19 @@ private fun PackStickerCell(
     }
 
     Card(
-        shape = MaterialTheme.shapes.medium,
+        shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(
             containerColor = if (issue != null) {
-                MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.25f)
+                ErrorNeonRed.copy(alpha = 0.2f)
             } else {
-                MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.85f)
+                GlassSurfaceCard
             }
         ),
-        border = if (issue != null) BorderStroke(1.5.dp, MaterialTheme.colorScheme.error) else null,
+        border = if (issue != null) {
+            BorderStroke(1.5.dp, ErrorNeonRed)
+        } else {
+            BorderStroke(1.dp, Color(0x35FFFFFF))
+        },
         modifier = Modifier
             .fillMaxWidth()
             .clickable {
@@ -1014,7 +1068,7 @@ private fun PackStickerCell(
                     contentDescription = sticker.emoteName,
                     modifier = Modifier
                         .size(72.dp)
-                        .clip(MaterialTheme.shapes.small)
+                        .clip(RoundedCornerShape(12.dp))
                         .clickable(onClick = onPreviewClick)
                 )
                 Spacer(modifier = Modifier.height(4.dp))
@@ -1022,13 +1076,14 @@ private fun PackStickerCell(
                     text = sticker.emoteName,
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurface,
+                    fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
                 if (issue != null) {
                     Text(
                         text = issue.reason,
-                        color = MaterialTheme.colorScheme.error,
+                        color = ErrorNeonRed,
                         fontSize = 8.sp,
                         fontWeight = FontWeight.Bold,
                         maxLines = 2,
@@ -1045,32 +1100,32 @@ private fun PackStickerCell(
 
             if (issue != null) {
                 Surface(
-                    color = MaterialTheme.colorScheme.error,
-                    shape = RoundedCornerShape(topStart = 8.dp, bottomEnd = 6.dp),
+                    color = ErrorNeonRed,
+                    shape = RoundedCornerShape(topStart = 16.dp, bottomEnd = 8.dp),
                     modifier = Modifier.align(Alignment.TopStart)
                 ) {
                     Text(
                         text = "⚠️ ERROR",
-                        color = MaterialTheme.colorScheme.onError,
+                        color = Color.White,
                         fontSize = 8.sp,
                         fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                     )
                 }
             } else if (isTrayIcon) {
                 Surface(
-                    shape = MaterialTheme.shapes.extraSmall,
-                    color = MaterialTheme.colorScheme.primaryContainer,
-                    modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .padding(4.dp)
+                    shape = RoundedCornerShape(topStart = 16.dp, bottomEnd = 8.dp),
+                    color = SunsetYellow.copy(alpha = 0.25f),
+                    border = BorderStroke(1.dp, SunsetYellow.copy(alpha = 0.8f)),
+                    modifier = Modifier.align(Alignment.TopStart)
                 ) {
                     Text(
-                        text = "★ Tray Icon",
+                        text = "★ Tray",
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer,
-                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                        color = SunsetYellow,
+                        fontSize = 9.sp,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                     )
                 }
             }
@@ -1085,7 +1140,7 @@ private fun PackStickerCell(
                 Icon(
                     imageVector = Icons.Default.Delete,
                     contentDescription = "Eliminar sticker",
-                    tint = MaterialTheme.colorScheme.error,
+                    tint = ErrorNeonRed.copy(alpha = 0.85f),
                     modifier = Modifier.size(14.dp)
                 )
             }

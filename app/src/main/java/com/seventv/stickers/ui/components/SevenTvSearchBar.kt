@@ -1,5 +1,6 @@
 package com.seventv.stickers.ui.components
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -9,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentPaste
@@ -27,6 +29,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import com.seventv.stickers.ui.theme.DarkOnSurfaceVariant
+import com.seventv.stickers.ui.theme.ElectricCyan
+import com.seventv.stickers.ui.theme.GlassBorderCyan
+import com.seventv.stickers.ui.theme.GlassSurfaceDark
+import com.seventv.stickers.ui.theme.NeonFuchsia
 
 object SevenTvSearchBarDefaults {
     val filters: List<String> = listOf("Todos", "Animados", "Estáticos", "Populares hoy")
@@ -45,8 +52,8 @@ object SevenTvSearchBarDefaults {
 }
 
 /**
- * M3 Expressive search bar component with tonal surfaceContainerLow container, 28dp rounded shape,
- * search leading icon, clear / paste-url trailing actions, and a horizontal row of filter chips.
+ * Vaporwave + Glassmorphism search bar component with translucent glass container,
+ * subtle electric cyan glowing border, and neon translucent pill filter chips.
  */
 @Composable
 fun SevenTvSearchBar(
@@ -62,8 +69,11 @@ fun SevenTvSearchBar(
         modifier = modifier.fillMaxWidth()
     ) {
         Surface(
-            shape = MaterialTheme.shapes.extraLarge, // 28dp pill shape
-            color = MaterialTheme.colorScheme.surfaceContainerLow,
+            shape = RoundedCornerShape(24.dp),
+            color = GlassSurfaceDark,
+            border = BorderStroke(1.dp, GlassBorderCyan),
+            shadowElevation = 8.dp,
+            tonalElevation = 2.dp,
             modifier = Modifier.fillMaxWidth()
         ) {
             TextField(
@@ -73,14 +83,14 @@ fun SevenTvSearchBar(
                     Text(
                         text = "Buscar emotes en 7TV...",
                         style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = DarkOnSurfaceVariant.copy(alpha = 0.7f)
                     )
                 },
                 leadingIcon = {
                     Icon(
                         imageVector = Icons.Default.Search,
                         contentDescription = "Buscar",
-                        tint = MaterialTheme.colorScheme.primary
+                        tint = ElectricCyan
                     )
                 },
                 trailingIcon = {
@@ -95,7 +105,7 @@ fun SevenTvSearchBar(
                                 Icon(
                                     imageVector = Icons.Default.Close,
                                     contentDescription = "Limpiar búsqueda",
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                    tint = NeonFuchsia
                                 )
                             }
                         }
@@ -106,30 +116,30 @@ fun SevenTvSearchBar(
                             Icon(
                                 imageVector = Icons.Default.ContentPaste,
                                 contentDescription = "Pegar enlace directo",
-                                tint = MaterialTheme.colorScheme.primary
+                                tint = ElectricCyan
                             )
                         }
                     }
                 },
                 singleLine = true,
-                shape = MaterialTheme.shapes.extraLarge,
+                shape = RoundedCornerShape(24.dp),
                 colors = TextFieldDefaults.colors(
-                    focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-                    disabledContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                    focusedContainerColor = Color.Transparent,
+                    unfocusedContainerColor = Color.Transparent,
+                    disabledContainerColor = Color.Transparent,
                     focusedIndicatorColor = Color.Transparent,
                     unfocusedIndicatorColor = Color.Transparent,
                     disabledIndicatorColor = Color.Transparent,
                     focusedTextColor = MaterialTheme.colorScheme.onSurface,
                     unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
-                    cursorColor = MaterialTheme.colorScheme.primary
+                    cursorColor = ElectricCyan
                 ),
                 textStyle = MaterialTheme.typography.bodyLarge,
                 modifier = Modifier.fillMaxWidth()
             )
         }
 
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(10.dp))
 
         Row(
             modifier = Modifier
@@ -138,8 +148,9 @@ fun SevenTvSearchBar(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             filters.forEach { filter ->
+                val isSelected = selectedFilter == filter
                 FilterChip(
-                    selected = selectedFilter == filter,
+                    selected = isSelected,
                     onClick = { onFilterSelected(filter) },
                     label = {
                         Text(
@@ -147,12 +158,16 @@ fun SevenTvSearchBar(
                             style = MaterialTheme.typography.labelMedium
                         )
                     },
-                    shape = MaterialTheme.shapes.small, // 12dp
+                    shape = RoundedCornerShape(16.dp),
+                    border = BorderStroke(
+                        1.dp,
+                        if (isSelected) ElectricCyan else Color(0x35FFFFFF)
+                    ),
                     colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = MaterialTheme.colorScheme.primary,
-                        selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
-                        containerColor = MaterialTheme.colorScheme.surfaceContainer,
-                        labelColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        selectedContainerColor = Color(0x3501CDFE),
+                        selectedLabelColor = ElectricCyan,
+                        containerColor = GlassSurfaceDark,
+                        labelColor = DarkOnSurfaceVariant
                     )
                 )
             }

@@ -3,9 +3,18 @@ package com.seventv.stickers.ui.components
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.ui.graphics.Brush
+import com.seventv.stickers.ui.theme.ElectricCyan
+import com.seventv.stickers.ui.theme.ErrorNeonRed
+import com.seventv.stickers.ui.theme.GlassBorder
+import com.seventv.stickers.ui.theme.GlassSurfaceCard
+import com.seventv.stickers.ui.theme.NeonFuchsia
+import com.seventv.stickers.ui.theme.SunsetYellow
+import com.seventv.stickers.ui.theme.WhatsAppGlow
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -138,8 +147,8 @@ fun StickerInspectorSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
         dragHandle = { BottomSheetDefaults.DragHandle() },
-        shape = MaterialTheme.shapes.extraLarge,
-        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+        containerColor = Color(0xF2160D2E),
         modifier = modifier
     ) {
         Column(
@@ -177,7 +186,7 @@ fun StickerInspectorSheet(
                             Text(
                                 text = "⛶ Expandir",
                                 style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.primary,
+                                color = ElectricCyan,
                                 fontWeight = FontWeight.Bold
                             )
                         }
@@ -208,43 +217,81 @@ fun StickerInspectorSheet(
                 FilterChip(
                     selected = simMode == ChatSimulatorMode.WHATSAPP_DARK,
                     onClick = { simMode = ChatSimulatorMode.WHATSAPP_DARK },
-                    label = { Text("WA Oscuro") },
+                    label = { Text("WA Oscuro", fontWeight = FontWeight.SemiBold) },
+                    shape = RoundedCornerShape(12.dp),
                     colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = MaterialTheme.colorScheme.primary,
-                        selectedLabelColor = MaterialTheme.colorScheme.onPrimary
+                        selectedContainerColor = ElectricCyan.copy(alpha = 0.2f),
+                        selectedLabelColor = ElectricCyan,
+                        containerColor = GlassSurfaceCard,
+                        labelColor = MaterialTheme.colorScheme.onSurfaceVariant
+                    ),
+                    border = FilterChipDefaults.filterChipBorder(
+                        enabled = true,
+                        selected = simMode == ChatSimulatorMode.WHATSAPP_DARK,
+                        borderColor = if (simMode == ChatSimulatorMode.WHATSAPP_DARK) ElectricCyan else Color(0x30FFFFFF)
                     )
                 )
                 FilterChip(
                     selected = simMode == ChatSimulatorMode.WHATSAPP_LIGHT,
                     onClick = { simMode = ChatSimulatorMode.WHATSAPP_LIGHT },
-                    label = { Text("WA Claro") },
+                    label = { Text("WA Claro", fontWeight = FontWeight.SemiBold) },
+                    shape = RoundedCornerShape(12.dp),
                     colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = MaterialTheme.colorScheme.primary,
-                        selectedLabelColor = MaterialTheme.colorScheme.onPrimary
+                        selectedContainerColor = ElectricCyan.copy(alpha = 0.2f),
+                        selectedLabelColor = ElectricCyan,
+                        containerColor = GlassSurfaceCard,
+                        labelColor = MaterialTheme.colorScheme.onSurfaceVariant
+                    ),
+                    border = FilterChipDefaults.filterChipBorder(
+                        enabled = true,
+                        selected = simMode == ChatSimulatorMode.WHATSAPP_LIGHT,
+                        borderColor = if (simMode == ChatSimulatorMode.WHATSAPP_LIGHT) ElectricCyan else Color(0x30FFFFFF)
                     )
                 )
                 FilterChip(
                     selected = simMode == ChatSimulatorMode.CHECKERBOARD,
                     onClick = { simMode = ChatSimulatorMode.CHECKERBOARD },
-                    label = { Text("Malla") },
+                    label = { Text("Malla", fontWeight = FontWeight.SemiBold) },
+                    shape = RoundedCornerShape(12.dp),
                     colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = MaterialTheme.colorScheme.primary,
-                        selectedLabelColor = MaterialTheme.colorScheme.onPrimary
+                        selectedContainerColor = ElectricCyan.copy(alpha = 0.2f),
+                        selectedLabelColor = ElectricCyan,
+                        containerColor = GlassSurfaceCard,
+                        labelColor = MaterialTheme.colorScheme.onSurfaceVariant
+                    ),
+                    border = FilterChipDefaults.filterChipBorder(
+                        enabled = true,
+                        selected = simMode == ChatSimulatorMode.CHECKERBOARD,
+                        borderColor = if (simMode == ChatSimulatorMode.CHECKERBOARD) ElectricCyan else Color(0x30FFFFFF)
                     )
                 )
             }
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Large Preview inside ChatSimulatorBackground
-            ChatSimulatorBackground(
-                mode = simMode,
+            // Large Preview inside ChatSimulatorBackground with glass border
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(220.dp)
-                    .clip(MaterialTheme.shapes.large)
-                    .clickable(enabled = onFullscreenClick != null) { onFullscreenClick?.invoke() }
+                    .clip(RoundedCornerShape(20.dp))
+                    .border(
+                        width = 1.dp,
+                        brush = Brush.horizontalGradient(
+                            listOf(
+                                ElectricCyan.copy(alpha = 0.35f),
+                                NeonFuchsia.copy(alpha = 0.35f)
+                            )
+                        ),
+                        shape = RoundedCornerShape(20.dp)
+                    )
             ) {
+                ChatSimulatorBackground(
+                    mode = simMode,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clickable(enabled = onFullscreenClick != null) { onFullscreenClick?.invoke() }
+                ) {
                 val bubbleColor = ChatSimulatorDefaults.bubbleColor(simMode)
                 Box(
                     modifier = Modifier.fillMaxSize(),
@@ -285,6 +332,7 @@ fun StickerInspectorSheet(
                     }
                 }
             }
+            }
 
             Spacer(modifier = Modifier.height(20.dp))
 
@@ -304,12 +352,9 @@ fun StickerInspectorSheet(
             ) {
                 sticker.emojis.forEach { emoji ->
                     Surface(
-                        shape = MaterialTheme.shapes.small,
-                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                        border = androidx.compose.foundation.BorderStroke(
-                            1.dp,
-                            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                        )
+                        shape = RoundedCornerShape(12.dp),
+                        color = GlassSurfaceCard,
+                        border = BorderStroke(1.dp, Color(0x35FFFFFF))
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -341,18 +386,22 @@ fun StickerInspectorSheet(
                 if (canAddMore) {
                     OutlinedButton(
                         onClick = { isEmojiPickerVisible = !isEmojiPickerVisible },
-                        shape = MaterialTheme.shapes.small,
+                        shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(1.dp, ElectricCyan.copy(alpha = 0.6f)),
                         contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.Add,
                             contentDescription = null,
+                            tint = ElectricCyan,
                             modifier = Modifier.size(16.dp)
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
                             text = "Añadir emoji",
-                            style = MaterialTheme.typography.labelMedium
+                            style = MaterialTheme.typography.labelMedium,
+                            color = ElectricCyan,
+                            fontWeight = FontWeight.SemiBold
                         )
                     }
                 }
@@ -378,7 +427,8 @@ fun StickerInspectorSheet(
                         items(StickerInspectorSheetDefaults.quickEmojis) { candidate ->
                             Surface(
                                 shape = CircleShape,
-                                color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                                color = GlassSurfaceCard,
+                                border = BorderStroke(1.dp, Color(0x25FFFFFF)),
                                 modifier = Modifier
                                     .size(36.dp)
                                     .clickable {
@@ -417,9 +467,9 @@ fun StickerInspectorSheet(
             ) {
                 // Metric 1: File Size
                 Surface(
-                    shape = MaterialTheme.shapes.medium,
-                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    border = if (isSizeExceeded) androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.error) else null,
+                    shape = RoundedCornerShape(16.dp),
+                    color = GlassSurfaceCard,
+                    border = BorderStroke(1.dp, if (isSizeExceeded) ErrorNeonRed else Color(0x25FFFFFF)),
                     modifier = Modifier.weight(1f)
                 ) {
                     Column(
@@ -436,7 +486,7 @@ fun StickerInspectorSheet(
                             text = StickerInspectorSheetDefaults.formatFileSize(sticker.fileLength),
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
-                            color = sizeColor,
+                            color = if (isSizeExceeded) ErrorNeonRed else ElectricCyan,
                             textAlign = TextAlign.Center
                         )
                         Text(
@@ -449,8 +499,9 @@ fun StickerInspectorSheet(
 
                 // Metric 2: Duration
                 Surface(
-                    shape = MaterialTheme.shapes.medium,
-                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    shape = RoundedCornerShape(16.dp),
+                    color = GlassSurfaceCard,
+                    border = BorderStroke(1.dp, Color(0x25FFFFFF)),
                     modifier = Modifier.weight(1f)
                 ) {
                     Column(
@@ -467,7 +518,7 @@ fun StickerInspectorSheet(
                             text = if (isAnimated) StickerInspectorSheetDefaults.formatDuration(3.0f) else "Estático",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface,
+                            color = SunsetYellow,
                             textAlign = TextAlign.Center
                         )
                         Text(
@@ -480,8 +531,9 @@ fun StickerInspectorSheet(
 
                 // Metric 3: Framerate
                 Surface(
-                    shape = MaterialTheme.shapes.medium,
-                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    shape = RoundedCornerShape(16.dp),
+                    color = GlassSurfaceCard,
+                    border = BorderStroke(1.dp, Color(0x25FFFFFF)),
                     modifier = Modifier.weight(1f)
                 ) {
                     Column(
@@ -498,7 +550,7 @@ fun StickerInspectorSheet(
                             text = if (isAnimated) StickerInspectorSheetDefaults.formatFps(30) else "N/A",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface,
+                            color = WhatsAppGlow,
                             textAlign = TextAlign.Center
                         )
                         Text(
@@ -519,7 +571,8 @@ fun StickerInspectorSheet(
                         onShareSticker()
                         onDismiss()
                     },
-                    shape = MaterialTheme.shapes.large,
+                    shape = RoundedCornerShape(16.dp),
+                    border = BorderStroke(1.2.dp, ElectricCyan.copy(alpha = 0.7f)),
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(48.dp)
@@ -527,12 +580,14 @@ fun StickerInspectorSheet(
                     Icon(
                         imageVector = Icons.Default.Share,
                         contentDescription = null,
+                        tint = ElectricCyan,
                         modifier = Modifier.size(18.dp)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = if (isAnimated) "Compartir GIF animado" else "Compartir imagen WebP",
                         style = MaterialTheme.typography.labelLarge,
+                        color = ElectricCyan,
                         fontWeight = FontWeight.Bold
                     )
                 }
@@ -549,7 +604,8 @@ fun StickerInspectorSheet(
                         onSetAsTrayIcon()
                         onDismiss()
                     },
-                    shape = MaterialTheme.shapes.large,
+                    shape = RoundedCornerShape(16.dp),
+                    border = BorderStroke(1.2.dp, SunsetYellow.copy(alpha = 0.8f)),
                     modifier = Modifier
                         .weight(1f)
                         .height(48.dp)
@@ -557,12 +613,15 @@ fun StickerInspectorSheet(
                     Icon(
                         imageVector = Icons.Default.Star,
                         contentDescription = null,
+                        tint = SunsetYellow,
                         modifier = Modifier.size(18.dp)
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
                         text = "Icono del pack",
-                        style = MaterialTheme.typography.labelLarge
+                        style = MaterialTheme.typography.labelLarge,
+                        color = SunsetYellow,
+                        fontWeight = FontWeight.Bold
                     )
                 }
 
@@ -571,10 +630,10 @@ fun StickerInspectorSheet(
                         onDeleteSticker()
                         onDismiss()
                     },
-                    shape = MaterialTheme.shapes.large,
+                    shape = RoundedCornerShape(16.dp),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.error,
-                        contentColor = MaterialTheme.colorScheme.onError
+                        containerColor = ErrorNeonRed.copy(alpha = 0.85f),
+                        contentColor = Color.White
                     ),
                     modifier = Modifier
                         .weight(1f)
@@ -588,7 +647,8 @@ fun StickerInspectorSheet(
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
                         text = "Eliminar",
-                        style = MaterialTheme.typography.labelLarge
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold
                     )
                 }
             }

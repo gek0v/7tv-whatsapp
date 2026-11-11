@@ -131,11 +131,20 @@ fun PackHeroCard(
     val statusColor = PackHeroCardDefaults.statusColor(syncStatus, MaterialTheme.colorScheme)
 
     Card(
-        shape = MaterialTheme.shapes.large,
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainer
+            containerColor = com.seventv.stickers.ui.theme.GlassSurfaceCard
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        border = androidx.compose.foundation.BorderStroke(
+            1.dp,
+            androidx.compose.ui.graphics.Brush.horizontalGradient(
+                listOf(
+                    com.seventv.stickers.ui.theme.ElectricCyan.copy(alpha = 0.4f),
+                    com.seventv.stickers.ui.theme.NeonFuchsia.copy(alpha = 0.4f)
+                )
+            )
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
         modifier = modifier
             .fillMaxWidth()
             .clickable(onClick = onPackClick)
@@ -181,21 +190,30 @@ fun PackHeroCard(
                 ) {
                     // Counter Pill
                     Surface(
-                        shape = MaterialTheme.shapes.small,
-                        color = MaterialTheme.colorScheme.surfaceContainerHigh
+                        shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+                        color = Color(0x3501CDFE),
+                        border = androidx.compose.foundation.BorderStroke(
+                            1.dp,
+                            com.seventv.stickers.ui.theme.ElectricCyan.copy(alpha = 0.4f)
+                        )
                     ) {
                         Text(
                             text = PackHeroCardDefaults.counterText(stickerCount),
                             style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurface,
+                            fontWeight = FontWeight.Bold,
+                            color = com.seventv.stickers.ui.theme.ElectricCyan,
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                         )
                     }
 
                     // Status Chip
                     Surface(
-                        shape = MaterialTheme.shapes.small,
-                        color = MaterialTheme.colorScheme.surfaceContainerHigh
+                        shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+                        color = Color(0x351F1435),
+                        border = androidx.compose.foundation.BorderStroke(
+                            1.dp,
+                            statusColor.copy(alpha = 0.5f)
+                        )
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -210,6 +228,7 @@ fun PackHeroCard(
                             Text(
                                 text = PackHeroCardDefaults.statusLabel(syncStatus),
                                 style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Medium,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                         }
@@ -219,7 +238,7 @@ fun PackHeroCard(
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // Sticker Preview Strip (Horizontal LazyRow)
+            // Sticker Preview Strip (Vitrina de Cristal)
             if (displayStickers.isNotEmpty()) {
                 LazyRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -234,33 +253,39 @@ fun PackHeroCard(
 
                         val boxModifier = if (onStickerClick != null) {
                             Modifier
-                                .size(60.dp)
-                                .clip(MaterialTheme.shapes.medium)
-                                .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                                .size(64.dp)
+                                .clip(androidx.compose.foundation.shape.RoundedCornerShape(16.dp))
+                                .background(Color(0x351F1435))
                                 .clickable { onStickerClick(sticker) }
                         } else {
                             Modifier
-                                .size(60.dp)
-                                .clip(MaterialTheme.shapes.medium)
-                                .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                                .size(64.dp)
+                                .clip(androidx.compose.foundation.shape.RoundedCornerShape(16.dp))
+                                .background(Color(0x351F1435))
                         }
 
-                        Box(
-                            modifier = boxModifier,
-                            contentAlignment = Alignment.Center
+                        Surface(
+                            shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+                            color = Color.Transparent,
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0x35FFFFFF))
                         ) {
-                            AsyncImage(
-                                model = ImageRequest.Builder(context)
-                                    .data(if (stickerFile.exists()) stickerFile else sticker.filePath)
-                                    .size(128, 128)
-                                    .crossfade(true)
-                                    .build(),
-                                contentDescription = sticker.emoteName,
-                                contentScale = ContentScale.Fit,
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .padding(6.dp)
-                            )
+                            Box(
+                                modifier = boxModifier,
+                                contentAlignment = Alignment.Center
+                            ) {
+                                AsyncImage(
+                                    model = ImageRequest.Builder(context)
+                                        .data(if (stickerFile.exists()) stickerFile else sticker.filePath)
+                                        .size(128, 128)
+                                        .crossfade(true)
+                                        .build(),
+                                    contentDescription = sticker.emoteName,
+                                    contentScale = ContentScale.Fit,
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(6.dp)
+                                )
+                            }
                         }
                     }
                 }

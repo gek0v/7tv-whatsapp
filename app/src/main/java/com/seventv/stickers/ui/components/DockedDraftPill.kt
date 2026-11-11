@@ -131,11 +131,20 @@ fun DockedDraftPill(
         val statusColor = DockedDraftPillDefaults.statusColor(status, MaterialTheme.colorScheme)
 
         Surface(
-            shape = MaterialTheme.shapes.extraLarge,
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
+            shape = RoundedCornerShape(26.dp),
+            color = com.seventv.stickers.ui.theme.GlassSurfaceBar,
+            border = BorderStroke(
+                1.5.dp,
+                androidx.compose.ui.graphics.Brush.horizontalGradient(
+                    listOf(
+                        com.seventv.stickers.ui.theme.NeonFuchsia,
+                        com.seventv.stickers.ui.theme.SunsetYellow,
+                        com.seventv.stickers.ui.theme.ElectricCyan
+                    )
+                )
+            ),
             tonalElevation = 6.dp,
-            shadowElevation = 8.dp,
+            shadowElevation = 16.dp,
             modifier = Modifier.clickable(onClick = onClickReview)
         ) {
             Column(
@@ -148,7 +157,7 @@ fun DockedDraftPill(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    // Mini thumbnails row
+                    // Mini thumbnails row with glowing retro frames
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy((-6).dp)
@@ -157,8 +166,11 @@ fun DockedDraftPill(
                             Surface(
                                 shape = CircleShape,
                                 color = MaterialTheme.colorScheme.surfaceContainerHighest,
-                                border = BorderStroke(1.5.dp, MaterialTheme.colorScheme.surfaceContainerHigh),
-                                modifier = Modifier.size(32.dp)
+                                border = BorderStroke(
+                                    1.5.dp,
+                                    com.seventv.stickers.ui.theme.ElectricCyan.copy(alpha = 0.7f)
+                                ),
+                                modifier = Modifier.size(34.dp)
                             ) {
                                 AsyncImage(
                                     model = ImageRequest.Builder(LocalContext.current)
@@ -206,26 +218,38 @@ fun DockedDraftPill(
 
                     Spacer(modifier = Modifier.width(8.dp))
 
-                    // Action button
-                    Button(
-                        onClick = onClickReview,
-                        shape = MaterialTheme.shapes.large,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.primary,
-                            contentColor = MaterialTheme.colorScheme.onPrimary
-                        ),
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                    // Action button with Sunset neon gradient
+                    Surface(
+                        shape = RoundedCornerShape(18.dp),
+                        color = Color.Transparent,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(18.dp))
+                            .background(
+                                androidx.compose.ui.graphics.Brush.horizontalGradient(
+                                    listOf(
+                                        com.seventv.stickers.ui.theme.NeonFuchsia,
+                                        com.seventv.stickers.ui.theme.ElectricCyan
+                                    )
+                                )
+                            )
+                            .clickable(onClick = onClickReview)
                     ) {
-                        Text(
-                            text = "Revisar Pack ▶",
-                            style = MaterialTheme.typography.labelLarge
-                        )
+                        Row(
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Revisar Pack ▶",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = Color.White
+                            )
+                        }
                     }
                 }
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // Linear tonal progress bar
+                // Linear tonal progress bar with vaporwave tint
                 LinearProgressIndicator(
                     progress = { (count / DockedDraftPillDefaults.MAX_STICKERS.toFloat()).coerceIn(0f, 1f) },
                     modifier = Modifier
@@ -233,7 +257,7 @@ fun DockedDraftPill(
                         .height(3.dp)
                         .clip(RoundedCornerShape(1.5.dp)),
                     color = statusColor,
-                    trackColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                    trackColor = Color(0x30FFFFFF)
                 )
             }
         }

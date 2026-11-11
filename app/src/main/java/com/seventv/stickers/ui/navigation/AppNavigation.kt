@@ -37,6 +37,21 @@ import com.seventv.stickers.ui.packs.PackDetailScreen
 import com.seventv.stickers.ui.packs.PacksScreen
 import com.seventv.stickers.ui.packs.PacksViewModel
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Surface
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import com.seventv.stickers.ui.theme.DarkOnSurfaceVariant
+import com.seventv.stickers.ui.theme.ElectricCyan
+import com.seventv.stickers.ui.theme.GlassSurfaceBar
+import com.seventv.stickers.ui.theme.NeonFuchsia
+
 sealed class Screen(val route: String, val title: String, val icon: ImageVector) {
     data object Explore : Screen("explore", "Explorar", Icons.Default.Search)
     data object Channel : Screen("channel", "Canales", Icons.Default.Tv)
@@ -67,34 +82,70 @@ fun AppNavigation(
             Column {
                 ImportProgressBanner(importManager = container.packImportManager)
                 if (isBottomBarVisible) {
-                    NavigationBar(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainer
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 10.dp)
                     ) {
-                        bottomNavItems.forEach { screen ->
-                            val isSelected = currentRoute == screen.route
-                            NavigationBarItem(
-                                icon = { Icon(screen.icon, contentDescription = screen.title) },
-                                label = { Text(screen.title) },
-                                selected = isSelected,
-                                colors = NavigationBarItemDefaults.colors(
-                                    indicatorColor = MaterialTheme.colorScheme.primaryContainer,
-                                    selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    selectedTextColor = MaterialTheme.colorScheme.primary,
-                                    unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
-                                ),
-                                onClick = {
-                                    if (currentRoute != screen.route) {
-                                        navController.navigate(screen.route) {
-                                            popUpTo(navController.graph.findStartDestination().id) {
-                                                saveState = true
+                        Surface(
+                            shape = RoundedCornerShape(28.dp),
+                            color = GlassSurfaceBar,
+                            border = BorderStroke(
+                                1.dp,
+                                Brush.horizontalGradient(
+                                    listOf(
+                                        ElectricCyan.copy(alpha = 0.55f),
+                                        NeonFuchsia.copy(alpha = 0.55f)
+                                    )
+                                )
+                            ),
+                            shadowElevation = 14.dp,
+                            tonalElevation = 6.dp,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            NavigationBar(
+                                containerColor = Color.Transparent,
+                                tonalElevation = 0.dp,
+                                windowInsets = WindowInsets(0, 0, 0, 0),
+                                modifier = Modifier.height(68.dp)
+                            ) {
+                                bottomNavItems.forEach { screen ->
+                                    val isSelected = currentRoute == screen.route
+                                    NavigationBarItem(
+                                        icon = {
+                                            Icon(
+                                                imageVector = screen.icon,
+                                                contentDescription = screen.title
+                                            )
+                                        },
+                                        label = {
+                                            Text(
+                                                text = screen.title,
+                                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                                            )
+                                        },
+                                        selected = isSelected,
+                                        colors = NavigationBarItemDefaults.colors(
+                                            indicatorColor = Color(0x35FF71CE),
+                                            selectedIconColor = ElectricCyan,
+                                            selectedTextColor = NeonFuchsia,
+                                            unselectedIconColor = DarkOnSurfaceVariant.copy(alpha = 0.75f),
+                                            unselectedTextColor = DarkOnSurfaceVariant.copy(alpha = 0.75f)
+                                        ),
+                                        onClick = {
+                                            if (currentRoute != screen.route) {
+                                                navController.navigate(screen.route) {
+                                                    popUpTo(navController.graph.findStartDestination().id) {
+                                                        saveState = true
+                                                    }
+                                                    launchSingleTop = true
+                                                    restoreState = true
+                                                }
                                             }
-                                            launchSingleTop = true
-                                            restoreState = true
                                         }
-                                    }
+                                    )
                                 }
-                            )
+                            }
                         }
                     }
                 }

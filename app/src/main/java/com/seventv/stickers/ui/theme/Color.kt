@@ -2,11 +2,19 @@ package com.seventv.stickers.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// 7TV & Partner Brand Tokens (Dark)
-val SevenTvCyan = Color(0xFF00D2FF)
-val TwitchPurple = Color(0xFFB37BF2)
-val WhatsAppGreen = Color(0xFF25D366)
-val ErrorRed = Color(0xFFFF4858)
+// Iconic Vaporwave Neon Tokens
+val NeonFuchsia = Color(0xFFFF71CE)    // Rosa Neón / Fucsia Sunset (#FF71CE)
+val ElectricCyan = Color(0xFF01CDFE)   // Cian Eléctrico / Menta Vapor (#01CDFE)
+val RetroViolet = Color(0xFFB967FF)    // Lavanda / Violeta Retro (#B967FF)
+val SunsetYellow = Color(0xFFFFFB96)   // Amarillo Sunset (#FFFB96)
+val WhatsAppGlow = Color(0xFF05FFA1)   // Verde Menta / WhatsApp Glow (#05FFA1)
+val ErrorNeonRed = Color(0xFFFF4858)   // Rojo Neón alerta
+
+// 7TV & Partner Brand Tokens (Vaporwave Night Palette)
+val SevenTvCyan = ElectricCyan         // #01CDFE
+val TwitchPurple = RetroViolet         // #B967FF
+val WhatsAppGreen = WhatsAppGlow       // #05FFA1
+val ErrorRed = ErrorNeonRed            // #FF4858
 
 // 7TV & Partner Brand Tokens (Light)
 val SevenTvCyanLight = Color(0xFF00728F)
@@ -14,16 +22,30 @@ val TwitchPurpleLight = Color(0xFF6D28D9)
 val WhatsAppGreenLight = Color(0xFF008744)
 val ErrorRedLight = Color(0xFFD32F2F)
 
-// Dark Surface & Background Tonal Levels
-val DarkBackground = Color(0xFF0E1015)
-val DarkSurface = Color(0xFF141720)
-val DarkSurfaceContainerLow = Color(0xFF1A1D28)
-val DarkSurfaceContainer = Color(0xFF202432)
-val DarkSurfaceContainerHigh = Color(0xFF272C3E)
-val DarkSurfaceContainerHighest = Color(0xFF31374C)
-val DarkSurfaceVariant = Color(0xFF272C3E)
-val DarkOnSurface = Color(0xFFF1F3F5)
-val DarkOnSurfaceVariant = Color(0xFF9AA0A6)
+// Vaporwave Dark Surface & Background Tonal Levels (Púrpura noche / Añil profundo)
+val DarkBackground = Color(0xFF0F081D)              // Púrpura noche (#0F081D)
+val NightDarkPurple = DarkBackground                // Púrpura noche (#0F081D)
+val DarkSurface = Color(0xFF160D2E)                 // Añil profundo (#160D2E)
+val DarkSurfaceContainerLow = Color(0xFF1C113B)     // Contenedor violeta profundo bajo
+val DarkSurfaceContainer = Color(0xFF24164C)        // Contenedor violeta profundo
+val DarkSurfaceContainerHigh = Color(0xFF2E1C60)    // Contenedor violeta medio
+val DarkSurfaceContainerHighest = Color(0xFF3B2479) // Contenedor violeta elevado
+val DarkSurfaceVariant = Color(0xFF2A1954)          // Variante de superficie
+val DarkOnSurface = Color(0xFFFBF8FF)               // Blanco hielo luminoso
+val DarkOnSurfaceVariant = Color(0xFFB8AFD4)        // Lavanda suave para subtextos y metadatos
+
+// Glassmorphism Aesthetic Tokens
+val GlassSurface = Color(0x33FFFFFF)                // Fondo cristal translúcido 20%
+val GlassSurfaceDark = Color(0x251F1435)            // Fondo cristal tintado oscuro
+val GlassSurfaceCard = Color(0x35231548)            // Contenedor de tarjeta frosted glass
+val GlassSurfaceBar = Color(0xD9160D2E)             // Barra de navegación frosted glass
+val GlassBorder = Color(0x40FFFFFF)                 // Borde fino translúcido 1dp
+val GlassBorderCyan = Color(0x6001CDFE)             // Borde fino cian eléctrico
+val GlassBorderFuchsia = Color(0x60FF71CE)          // Borde fino fucsia sunset
+val GlassBorderMint = Color(0x6005FFA1)             // Borde fino menta glow
+val GlassGlowCyan = Color(0x3301CDFE)               // Resplandor difuso cian
+val GlassGlowFuchsia = Color(0x33FF71CE)            // Resplandor difuso fucsia
+val GlassGlowMint = Color(0x3305FFA1)               // Resplandor difuso menta
 
 // Light Surface & Background Tonal Levels
 val LightBackground = Color(0xFFF7F9FC)

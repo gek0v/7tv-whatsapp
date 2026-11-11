@@ -146,10 +146,13 @@ fun ChannelScreen(
             ) {
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // Top Channel Search using surfaceContainerLow and rounded pill shape
+                // Top Channel Search using glassmorphism and cyan border
                 Surface(
-                    shape = MaterialTheme.shapes.extraLarge,
-                    color = MaterialTheme.colorScheme.surfaceContainerLow,
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
+                    color = com.seventv.stickers.ui.theme.GlassSurfaceDark,
+                    border = BorderStroke(1.dp, com.seventv.stickers.ui.theme.GlassBorderCyan),
+                    shadowElevation = 8.dp,
+                    tonalElevation = 2.dp,
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     TextField(
@@ -159,14 +162,14 @@ fun ChannelScreen(
                             Text(
                                 text = "Buscar streamer o emote set (ej: ibai)...",
                                 style = MaterialTheme.typography.bodyLarge,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = com.seventv.stickers.ui.theme.DarkOnSurfaceVariant.copy(alpha = 0.7f)
                             )
                         },
                         leadingIcon = {
                             Icon(
                                 imageVector = Icons.Default.Search,
                                 contentDescription = "Buscar canal",
-                                tint = MaterialTheme.colorScheme.primary
+                                tint = com.seventv.stickers.ui.theme.ElectricCyan
                             )
                         },
                         trailingIcon = {
@@ -175,7 +178,7 @@ fun ChannelScreen(
                                     Icon(
                                         imageVector = Icons.Default.Close,
                                         contentDescription = "Limpiar búsqueda",
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                        tint = com.seventv.stickers.ui.theme.NeonFuchsia
                                     )
                                 }
                             }
@@ -183,31 +186,32 @@ fun ChannelScreen(
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                         keyboardActions = KeyboardActions(onSearch = { viewModel.onSearchStreamer() }),
-                        shape = MaterialTheme.shapes.extraLarge,
+                        shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
                         colors = TextFieldDefaults.colors(
-                            focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-                            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                            focusedContainerColor = Color.Transparent,
+                            unfocusedContainerColor = Color.Transparent,
+                            disabledContainerColor = Color.Transparent,
                             focusedIndicatorColor = Color.Transparent,
                             unfocusedIndicatorColor = Color.Transparent,
                             disabledIndicatorColor = Color.Transparent,
                             focusedTextColor = MaterialTheme.colorScheme.onSurface,
                             unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
-                            cursorColor = MaterialTheme.colorScheme.primary
+                            cursorColor = com.seventv.stickers.ui.theme.ElectricCyan
                         ),
                         textStyle = MaterialTheme.typography.bodyLarge,
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
 
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(10.dp))
 
                 Button(
                     onClick = { viewModel.onSearchStreamer() },
                     modifier = Modifier.fillMaxWidth(),
-                    shape = MaterialTheme.shapes.medium,
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(18.dp),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.primary,
-                        contentColor = MaterialTheme.colorScheme.onPrimary
+                        containerColor = com.seventv.stickers.ui.theme.ElectricCyan,
+                        contentColor = Color(0xFF0F081D)
                     )
                 ) {
                     Icon(
@@ -218,7 +222,8 @@ fun ChannelScreen(
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = "Cargar Emotes de Canal",
-                        style = MaterialTheme.typography.labelLarge
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
                     )
                 }
 
@@ -456,45 +461,81 @@ fun ChannelScreen(
         }
     }
 
-    // Split Confirmation Modal with M3 surfaceContainerHigh
+    // Split Confirmation Modal with Vaporwave & Glassmorphism styling
     val importState = state.importState
     if (importState is ChannelImportState.Confirming) {
         AlertDialog(
             onDismissRequest = viewModel::onDismissImportConfirmation,
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            containerColor = Color(0xF2160D2E),
+            shape = androidx.compose.foundation.shape.RoundedCornerShape(26.dp),
+            modifier = Modifier.border(
+                1.5.dp,
+                androidx.compose.ui.graphics.Brush.horizontalGradient(
+                    listOf(
+                        com.seventv.stickers.ui.theme.ElectricCyan,
+                        com.seventv.stickers.ui.theme.NeonFuchsia
+                    )
+                ),
+                androidx.compose.foundation.shape.RoundedCornerShape(26.dp)
+            ),
             title = {
-                Text(
-                    text = "Importar a WhatsApp",
-                    style = MaterialTheme.typography.titleLarge,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "✦ División Inteligente",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                        color = com.seventv.stickers.ui.theme.ElectricCyan
+                    )
+                }
             },
             text = {
                 Column {
                     Text(
                         text = "Se crearán ${importState.splitPlans.size} paquete(s) de stickers divididos inteligentemente (3 a 30 por pack):",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = com.seventv.stickers.ui.theme.DarkOnSurfaceVariant
                     )
                     Spacer(modifier = Modifier.height(12.dp))
-                    LazyColumn(modifier = Modifier.height(160.dp)) {
+                    LazyColumn(modifier = Modifier.height(180.dp)) {
                         items(importState.splitPlans) { plan ->
-                            Row(
+                            Surface(
+                                shape = androidx.compose.foundation.shape.RoundedCornerShape(14.dp),
+                                color = Color(0x351F1435),
+                                border = BorderStroke(1.dp, Color(0x4001CDFE)),
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(vertical = 4.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween
+                                    .padding(vertical = 4.dp)
                             ) {
-                                Text(
-                                    text = "• ${plan.packName}",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                                Text(
-                                    text = "${plan.emotes.size} stickers (${if (plan.isAnimated) "Animado" else "Estático"})",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "• ${plan.packName}",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = androidx.compose.ui.text.font.FontWeight.Medium,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Surface(
+                                        shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp),
+                                        color = if (plan.isAnimated) Color(0x30FF71CE) else Color(0x3001CDFE),
+                                        border = BorderStroke(
+                                            0.5.dp,
+                                            if (plan.isAnimated) com.seventv.stickers.ui.theme.NeonFuchsia.copy(alpha = 0.6f) else com.seventv.stickers.ui.theme.ElectricCyan.copy(alpha = 0.6f)
+                                        )
+                                    ) {
+                                        Text(
+                                            text = "${plan.emotes.size} (${if (plan.isAnimated) "Animado" else "Estático"})",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                                            color = if (plan.isAnimated) com.seventv.stickers.ui.theme.NeonFuchsia else com.seventv.stickers.ui.theme.ElectricCyan,
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
@@ -503,20 +544,23 @@ fun ChannelScreen(
             confirmButton = {
                 Button(
                     onClick = { viewModel.onConfirmImport(importState.splitPlans) },
-                    shape = MaterialTheme.shapes.large,
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(18.dp),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.tertiary,
-                        contentColor = MaterialTheme.colorScheme.onTertiary
+                        containerColor = com.seventv.stickers.ui.theme.WhatsAppGlow,
+                        contentColor = Color(0xFF0F081D)
                     )
                 ) {
-                    Text("Crear Paquetes")
+                    Text(
+                        text = "Crear Paquetes",
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+                    )
                 }
             },
             dismissButton = {
                 TextButton(onClick = viewModel::onDismissImportConfirmation) {
                     Text(
                         text = "Cancelar",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = com.seventv.stickers.ui.theme.DarkOnSurfaceVariant
                     )
                 }
             }
@@ -550,13 +594,24 @@ private fun ChannelContent(
     modifier: Modifier = Modifier
 ) {
     Column(modifier = modifier) {
-        // Channel Hero Header Card
+        // Channel Hero Header Card with retro halo and glassmorphic finish
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+                containerColor = com.seventv.stickers.ui.theme.GlassSurfaceCard
             ),
-            shape = MaterialTheme.shapes.large
+            shape = androidx.compose.foundation.shape.RoundedCornerShape(22.dp),
+            border = BorderStroke(
+                1.5.dp,
+                androidx.compose.ui.graphics.Brush.horizontalGradient(
+                    listOf(
+                        com.seventv.stickers.ui.theme.ElectricCyan,
+                        com.seventv.stickers.ui.theme.RetroViolet,
+                        com.seventv.stickers.ui.theme.NeonFuchsia
+                    )
+                )
+            ),
+            elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
         ) {
             Row(
                 modifier = Modifier
@@ -565,10 +620,20 @@ private fun ChannelContent(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Surface(
-                    modifier = Modifier.size(52.dp),
+                    modifier = Modifier.size(56.dp),
                     shape = CircleShape,
-                    color = MaterialTheme.colorScheme.primaryContainer,
-                    border = BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
+                    color = Color(0x3501CDFE),
+                    border = BorderStroke(
+                        2.5.dp,
+                        androidx.compose.ui.graphics.Brush.sweepGradient(
+                            listOf(
+                                com.seventv.stickers.ui.theme.ElectricCyan,
+                                com.seventv.stickers.ui.theme.NeonFuchsia,
+                                com.seventv.stickers.ui.theme.SunsetYellow,
+                                com.seventv.stickers.ui.theme.ElectricCyan
+                            )
+                        )
+                    )
                 ) {
                     if (!avatarUrl.isNullOrBlank()) {
                         AsyncImage(
@@ -582,7 +647,8 @@ private fun ChannelContent(
                             Text(
                                 text = streamerName.take(1).uppercase(),
                                 style = MaterialTheme.typography.titleLarge,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                                color = com.seventv.stickers.ui.theme.ElectricCyan
                             )
                         }
                     }
@@ -593,23 +659,29 @@ private fun ChannelContent(
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = streamerName,
-                        style = MaterialTheme.typography.titleMedium,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Surface(
-                        shape = MaterialTheme.shapes.extraSmall,
-                        color = MaterialTheme.colorScheme.surfaceContainerHighest
+                        shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+                        color = Color(0x3501CDFE),
+                        border = BorderStroke(
+                            1.dp,
+                            com.seventv.stickers.ui.theme.ElectricCyan.copy(alpha = 0.6f)
+                        )
                     ) {
                         Text(
                             text = if (availableSets.size > 1) {
-                                "${availableSets.size} paquetes de emotes disponibles • $totalEmotes en este pack"
+                                "${availableSets.size} paquetes • $totalEmotes emotes"
                             } else {
                                 "$totalEmotes emotes"
                             },
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                            color = com.seventv.stickers.ui.theme.ElectricCyan,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp)
                         )
                     }
                 }
