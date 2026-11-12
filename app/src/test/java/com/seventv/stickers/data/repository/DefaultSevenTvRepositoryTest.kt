@@ -328,6 +328,70 @@ class DefaultSevenTvRepositoryTest {
     }
 
     @Test
+    fun getChannelDataUsesLimit15AndPrioritizesExactMatchOverPartialFirstResult() = runTest(testDispatcher) {
+        fakeApi.getEmoteSetHandler = { errorResponse(404, "Set not found") }
+
+        var capturedLimit: Int? = null
+        fakeApi.searchUsersHandler = { request ->
+            capturedLimit = request.variables?.get("limit")?.toString()?.toIntOrNull()
+            Response.success(
+                SevenTvGqlResponse(
+                    data = SevenTvGqlUsersData(
+                        users = listOf(
+                            SevenTvGqlUserDto(
+                                id = "u_unrelated",
+                                username = "other_streamer_fan",
+                                displayName = "OtherStreamerFan",
+                                emoteSets = listOf(
+                                    SevenTvGqlEmoteSetRefDto(id = "set_unrelated", name = "Main", emoteCount = 10)
+                                )
+                            ),
+                            SevenTvGqlUserDto(
+                                id = "u_partial",
+                                username = "illojuan_clips",
+                                displayName = "IlloJuanClips",
+                                emoteSets = listOf(
+                                    SevenTvGqlEmoteSetRefDto(id = "set_partial", name = "Main", emoteCount = 10)
+                                )
+                            ),
+                            SevenTvGqlUserDto(
+                                id = "u_exact",
+                                username = "illojuan_tv",
+                                displayName = "IlloJuan",
+                                emoteSets = listOf(
+                                    SevenTvGqlEmoteSetRefDto(id = "set_exact", name = "Main", emoteCount = 25)
+                                )
+                            )
+                        )
+                    )
+                )
+            )
+        }
+
+        fakeApi.getEmoteSetHandler = { setId ->
+            if (setId == "set_exact") {
+                Response.success(
+                    SevenTvEmoteSetDto(
+                        id = "set_exact",
+                        name = "Main",
+                        emotes = listOf(SevenTvEmoteDto(id = "e1", name = "KEKW", animated = false))
+                    )
+                )
+            } else {
+                errorResponse(404, "Not found")
+            }
+        }
+
+        val result = repository.getChannelData("illojuan")
+
+        assertEquals(15, capturedLimit)
+        assertTrue("Expected Success, got $result", result is StickerResult.Success<*>)
+        val channel = (result as StickerResult.Success<ChannelSearchResult>).data
+        assertEquals("IlloJuan", channel.streamerName)
+        assertEquals("set_exact", channel.activeSet.id)
+    }
+
+    @Test
     fun getEmoteSuccess() = runTest(testDispatcher) {
         val emoteDto = SevenTvEmoteDto(
             id = "emote2",

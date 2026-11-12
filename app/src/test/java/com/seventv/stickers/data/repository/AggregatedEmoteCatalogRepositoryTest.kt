@@ -2,8 +2,12 @@ package com.seventv.stickers.data.repository
 
 import com.seventv.stickers.core.common.result.StickerError
 import com.seventv.stickers.core.common.result.StickerResult
+import com.seventv.stickers.core.network.model.ChannelEmoteSetSummary
+import com.seventv.stickers.core.network.model.ChannelSearchResult
 import com.seventv.stickers.core.network.model.DownloadedEmoteAsset
 import com.seventv.stickers.core.network.model.EmoteProvider
+import com.seventv.stickers.core.network.model.SevenTvEmote
+import com.seventv.stickers.core.network.model.SevenTvEmoteSet
 import com.seventv.stickers.core.network.model.UnifiedEmote
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.toList
@@ -52,7 +56,7 @@ class AggregatedEmoteCatalogRepositoryTest {
         val result = aggregated.getUnifiedChannelEmotes("ibai")
         assertTrue(result is StickerResult.Success)
         val data = (result as StickerResult.Success).data
-        assertEquals("Ibai", data.channelName)
+        assertEquals("ibai", data.channelName)
         assertEquals(4, data.totalEmotesCount)
         assertEquals(4, data.emotesByProvider.size)
         assertTrue(data.failedProviders.isEmpty())
@@ -242,6 +246,110 @@ class AggregatedEmoteCatalogRepositoryTest {
         val page2 = aggregated.searchAllProviders("kekw", page = 2, limit = 50)
         assertTrue(page2 is StickerResult.Success)
         assertEquals(2, callCount)
+    }
+
+    @Test
+    fun getUnifiedChannelEmotesProgressive_neverUsesEmoteAuthorAsChannelNameWhenBttvOrFfzEmitBeforeSevenTv() =
+        runTest(testDispatcher) {
+            val bttv = FakeProviderRepo(EmoteProvider.BETTERTTV).apply {
+                channelResult = {
+                    delay(10)
+                    StickerResult.Success(
+                        listOf(sampleEmote("bttv1", "catJAM", EmoteProvider.BETTERTTV, "MadLittleCat"))
+                    )
+                }
+            }
+            val ffz = FakeProviderRepo(EmoteProvider.FRANKERFACEZ).apply {
+                channelResult = {
+                    delay(20)
+                    StickerResult.Success(
+                        listOf(sampleEmote("ffz1", "KEKW", EmoteProvider.FRANKERFACEZ, "FabulousPotato69"))
+                    )
+                }
+            }
+            val sevenTvRepo = FakeSevenTvRepo().apply {
+                channelDataResult = {
+                    delay(100)
+                    StickerResult.Success(
+                        ChannelSearchResult(
+                            streamerName = "IlloJuan",
+                            username = "illojuan",
+                            avatarUrl = "https://cdn.7tv.app/user/illojuan.webp",
+                            availableSets = listOf(
+                                ChannelEmoteSetSummary(
+                                    id = "set_illo",
+                                    name = "Main",
+                                    emoteCount = 1,
+                                    isActive = true
+                                )
+                            ),
+                            activeSet = SevenTvEmoteSet(
+                                id = "set_illo",
+                                name = "Main",
+                                ownerName = "IlloJuan",
+                                emotes = listOf(
+                                    SevenTvEmote(
+                                        id = "7tv1",
+                                        name = "GIGACHAD",
+                                        isAnimated = false,
+                                        isZeroWidth = false,
+                                        isNsfw = false,
+                                        bestAssetUrl = "https://cdn.7tv.app/emote/7tv1/4x.webp",
+                                        previewUrl = "https://cdn.7tv.app/emote/7tv1/2x.webp",
+                                        availableScales = listOf("1x", "2x", "4x")
+                                    )
+                                )
+                            )
+                        )
+                    )
+                }
+            }
+
+            val aggregated = DefaultAggregatedEmoteCatalogRepository(
+                providers = listOf(bttv, ffz),
+                sevenTvRepository = sevenTvRepo,
+                dispatcher = testDispatcher
+            )
+
+            val emissions = aggregated.getUnifiedChannelEmotesProgressive("illojuan").toList()
+            assertEquals(3, emissions.size)
+
+            val first = (emissions[0] as StickerResult.Success).data
+            assertEquals("illojuan", first.channelName)
+            assertTrue(first.emotesByProvider.containsKey(EmoteProvider.BETTERTTV))
+
+            val second = (emissions[1] as StickerResult.Success).data
+            assertEquals("illojuan", second.channelName)
+            assertTrue(second.emotesByProvider.containsKey(EmoteProvider.FRANKERFACEZ))
+
+            val finalEmission = (emissions[2] as StickerResult.Success).data
+            assertEquals("IlloJuan", finalEmission.channelName)
+            assertTrue(finalEmission.emotesByProvider.containsKey(EmoteProvider.SEVENTV))
+        }
+
+    private class FakeSevenTvRepo : SevenTvRepository {
+        var channelDataResult: suspend () -> StickerResult<ChannelSearchResult> = {
+            StickerResult.Failure(StickerError.ResourceNotFound)
+        }
+
+        override suspend fun searchEmotes(
+            query: String,
+            page: Int,
+            limit: Int,
+            category: String?
+        ): StickerResult<List<SevenTvEmote>> = StickerResult.Success(emptyList())
+
+        override suspend fun getEmote(emoteId: String): StickerResult<SevenTvEmote> =
+            StickerResult.Failure(StickerError.ResourceNotFound)
+
+        override suspend fun getEmoteSet(setId: String): StickerResult<SevenTvEmoteSet> =
+            StickerResult.Failure(StickerError.ResourceNotFound)
+
+        override suspend fun downloadEmote(emote: SevenTvEmote): StickerResult<DownloadedEmoteAsset> =
+            StickerResult.Failure(StickerError.ResourceNotFound)
+
+        override suspend fun getChannelData(query: String): StickerResult<ChannelSearchResult> =
+            channelDataResult()
     }
 
     private fun sampleEmote(

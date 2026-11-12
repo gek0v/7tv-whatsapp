@@ -390,9 +390,7 @@ class DefaultAggregatedEmoteCatalogRepository(
         val copyMap = linkedMapOf<EmoteProvider, List<UnifiedEmote>>()
         copyMap.putAll(emotesByProvider)
         val totalCount = copyMap.values.sumOf { it.size }
-        val inferredOwner = sevenTvChannelMeta?.streamerName
-            ?: copyMap.values.firstNotNullOfOrNull { list -> list.firstNotNullOfOrNull { it.originalOwner } }
-            ?: trimmed
+        val inferredOwner = sevenTvChannelMeta?.streamerName?.ifBlank { null } ?: trimmed
         return UnifiedChannelResult(
             channelName = inferredOwner,
             avatarUrl = sevenTvChannelMeta?.avatarUrl,
