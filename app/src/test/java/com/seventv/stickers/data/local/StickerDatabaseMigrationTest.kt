@@ -49,6 +49,12 @@ class StickerDatabaseMigrationTest {
                     db.execSQL(
                         "CREATE TABLE IF NOT EXISTS `stickers` (`id` TEXT NOT NULL, `packIdentifier` TEXT NOT NULL, `emoteId` TEXT NOT NULL, `emoteName` TEXT NOT NULL, `relativeFilePath` TEXT NOT NULL, `emojis` TEXT NOT NULL, `fileLength` INTEGER NOT NULL, `sortOrder` INTEGER NOT NULL, PRIMARY KEY(`id`), FOREIGN KEY(`packIdentifier`) REFERENCES `sticker_packs`(`identifier`) ON UPDATE NO ACTION ON DELETE CASCADE )"
                     )
+                    db.execSQL(
+                        "CREATE INDEX IF NOT EXISTS `index_stickers_packIdentifier` ON `stickers` (`packIdentifier`)"
+                    )
+                    db.execSQL(
+                        "CREATE INDEX IF NOT EXISTS `index_stickers_emoteId` ON `stickers` (`emoteId`)"
+                    )
                 }
 
                 override fun onUpgrade(db: SupportSQLiteDatabase, oldVersion: Int, newVersion: Int) {}
