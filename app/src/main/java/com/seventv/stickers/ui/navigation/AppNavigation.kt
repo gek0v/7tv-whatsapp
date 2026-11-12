@@ -2,6 +2,7 @@ package com.seventv.stickers.ui.navigation
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Folder
@@ -109,7 +110,7 @@ fun AppNavigation(
     EmotePeekHost(state = peekState, modifier = modifier) {
     Scaffold(
         bottomBar = {
-            Column {
+            Column(modifier = Modifier.navigationBarsPadding()) {
                 ImportProgressBanner(importManager = container.packImportManager)
                 if (isBottomBarVisible) {
                     Box(
