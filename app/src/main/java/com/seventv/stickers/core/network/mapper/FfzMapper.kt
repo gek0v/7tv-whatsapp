@@ -34,7 +34,7 @@ object FfzMapper {
                 ?: rawBest
         }
 
-        val owner = dto.owner?.displayName?.ifBlank { null }
+        val emoteCreator = dto.owner?.displayName?.ifBlank { null }
             ?: dto.owner?.name?.ifBlank { null }
             ?: ownerFallback?.ifBlank { null }
 
@@ -48,7 +48,7 @@ object FfzMapper {
             bestAssetUrl = normalizeUrl(rawBest),
             previewUrl = normalizeUrl(rawPreview),
             gifUrl = null,
-            originalOwner = owner
+            originalOwner = emoteCreator
         )
     }
 

@@ -12,7 +12,7 @@ object BttvMapper {
 
     fun toDomain(dto: BttvEmoteDto, ownerFallback: String? = null): UnifiedEmote {
         val isAnimated = dto.animated || dto.imageType.equals("gif", ignoreCase = true)
-        val owner = dto.user?.displayName?.ifBlank { null }
+        val emoteCreator = dto.user?.displayName?.ifBlank { null }
             ?: dto.user?.name?.ifBlank { null }
             ?: ownerFallback?.ifBlank { null }
 
@@ -26,7 +26,7 @@ object BttvMapper {
             bestAssetUrl = "$CDN_BASE/${dto.id}/3x.webp",
             previewUrl = "$CDN_BASE/${dto.id}/2x.webp",
             gifUrl = if (isAnimated) "$CDN_BASE/${dto.id}/3x.gif" else null,
-            originalOwner = owner
+            originalOwner = emoteCreator
         )
     }
 

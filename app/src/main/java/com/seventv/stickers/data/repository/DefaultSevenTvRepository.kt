@@ -87,7 +87,7 @@ class DefaultSevenTvRepository(
             val directDeferred = async(dispatcher) { getEmoteSet(trimmed) }
             val userDeferred = async(dispatcher) {
                 safeApiCall(
-                    call = { api.searchUsers(SevenTvGqlQueries.searchUsersRequest(trimmed, limit = 5)) },
+                    call = { api.searchUsers(SevenTvGqlQueries.searchUsersRequest(trimmed, limit = 15)) },
                     transform = { gqlResponse -> gqlResponse.data?.users.orEmpty() }
                 )
             }
@@ -125,6 +125,9 @@ class DefaultSevenTvRepository(
             val users = userSearchCall.data
             if (users.isNotEmpty()) {
                 val targetUser = users.firstOrNull { it.username.equals(trimmed, ignoreCase = true) }
+                    ?: users.firstOrNull { it.displayName?.equals(trimmed, ignoreCase = true) == true }
+                    ?: users.firstOrNull { it.username.contains(trimmed, ignoreCase = true) }
+                    ?: users.firstOrNull { it.displayName?.contains(trimmed, ignoreCase = true) == true }
                     ?: users.firstOrNull()!!
 
                 val displayName = targetUser.displayName?.ifBlank { null } ?: targetUser.username
