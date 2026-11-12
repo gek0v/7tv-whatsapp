@@ -215,6 +215,9 @@ class EmotePeekState {
     var hoveredActionIndex by mutableStateOf<Int?>(null)
         internal set
 
+    internal var boundsSnapshotProvider: (() -> Map<Int, Rect>)? = null
+    internal var hitSlopPx: Float = 0f
+
     val isActive: Boolean
         get() = isVisible && currentPayload != null
 
@@ -230,7 +233,16 @@ class EmotePeekState {
 
     fun onRelease(hapticFeedback: HapticFeedback? = null) {
         val payload = currentPayload
-        val hoveredIdx = hoveredActionIndex
+        val freshBounds = boundsSnapshotProvider?.invoke().orEmpty()
+        val hoveredIdx = if (freshBounds.isNotEmpty() && pointerPositionInRoot != null) {
+            EmotePeekOverlayDefaults.findHoveredActionIndex(
+                pointerPosition = pointerPositionInRoot,
+                actionBounds = freshBounds,
+                hitSlopPx = hitSlopPx
+            )
+        } else {
+            hoveredActionIndex
+        }
         if (hoveredIdx != null && payload != null && hoveredIdx in payload.actions.indices) {
             hapticFeedback?.performHapticFeedback(HapticFeedbackType.LongPress)
             val action = payload.actions[hoveredIdx]
@@ -247,6 +259,7 @@ class EmotePeekState {
 
     internal fun clearPayload() {
         currentPayload = null
+        boundsSnapshotProvider = null
         hoveredActionIndex = null
         pointerPositionInRoot = null
     }
@@ -433,10 +446,25 @@ fun EmotePeekOverlay(
 
     val density = LocalDensity.current
     val hitSlopPx = remember(density) { with(density) { EmotePeekOverlayDefaults.HIT_SLOP.toPx() } }
+    val actionCoords = remember(payload?.id) { mutableStateMapOf<Int, LayoutCoordinates>() }
     val actionBounds = remember(payload?.id) { mutableStateMapOf<Int, Rect>() }
 
-    // Update hovered action index on pointer drag
-    LaunchedEffect(state.pointerPositionInRoot, payload?.actions?.size) {
+    LaunchedEffect(payload?.id, hitSlopPx) {
+        state.hitSlopPx = hitSlopPx
+        state.boundsSnapshotProvider = {
+            actionCoords.mapNotNull { (index, coords) ->
+                if (coords.isAttached) index to coords.boundsInRoot() else null
+            }.toMap()
+        }
+    }
+
+    // Update actionBounds and hovered action index on pointer drag or animation progress
+    LaunchedEffect(state.pointerPositionInRoot, progress.value, payload?.actions?.size) {
+        actionCoords.forEach { (index, coords) ->
+            if (coords.isAttached) {
+                actionBounds[index] = coords.boundsInRoot()
+            }
+        }
         val hovered = EmotePeekOverlayDefaults.findHoveredActionIndex(
             pointerPosition = state.pointerPositionInRoot,
             actionBounds = actionBounds,
@@ -501,7 +529,7 @@ fun EmotePeekOverlay(
                         translationX = emergenceOffset.x
                         translationY = emergenceOffset.y
                     }
-                    .padding(horizontal = 24.dp),
+                    .padding(horizontal = 16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
@@ -515,8 +543,11 @@ fun EmotePeekOverlay(
                 QuickActionPillBar(
                     actions = payload.actions,
                     hoveredIndex = state.hoveredActionIndex,
-                    onRegisterBounds = { index, bounds ->
-                        actionBounds[index] = bounds
+                    onRegisterCoords = { index, coords ->
+                        actionCoords[index] = coords
+                        if (coords.isAttached) {
+                            actionBounds[index] = coords.boundsInRoot()
+                        }
                     },
                     onActionClick = { action ->
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -715,7 +746,7 @@ private fun FrostedPeekCard(
 private fun QuickActionPillBar(
     actions: List<EmotePeekAction>,
     hoveredIndex: Int?,
-    onRegisterBounds: (Int, Rect) -> Unit,
+    onRegisterCoords: (Int, LayoutCoordinates) -> Unit,
     onActionClick: (EmotePeekAction) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -737,8 +768,8 @@ private fun QuickActionPillBar(
         modifier = modifier
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             actions.forEachIndexed { index, action ->
@@ -769,23 +800,23 @@ private fun QuickActionPillBar(
 
                 Surface(
                     modifier = Modifier
+                        .weight(1f, fill = false)
                         .graphicsLayer {
                             scaleX = scale
                             scaleY = scale
                         }
                         .onGloballyPositioned { coords ->
-                            if (coords.isAttached) {
-                                onRegisterBounds(index, coords.boundsInRoot())
-                            }
+                            onRegisterCoords(index, coords)
                         }
                         .clip(RoundedCornerShape(16.dp))
                         .clickable { onActionClick(action) },
                     shape = RoundedCornerShape(16.dp),
                     color = backgroundColor,
-                    border = BorderStroke(1.dp, borderColor)
+                    border = BorderStroke(if (isHovered) 1.5.dp else 1.dp, borderColor),
+                    shadowElevation = if (isHovered) 8.dp else 0.dp
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.Center
                     ) {
@@ -793,15 +824,17 @@ private fun QuickActionPillBar(
                             imageVector = action.icon,
                             contentDescription = action.label,
                             tint = if (isHovered || action.isActive) action.accentColor else DarkOnSurfaceVariant,
-                            modifier = Modifier.size(18.dp)
+                            modifier = Modifier.size(16.dp)
                         )
-                        Spacer(modifier = Modifier.width(6.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
                         Text(
                             text = action.label,
                             style = MaterialTheme.typography.labelMedium,
                             fontWeight = if (isHovered || action.isActive) FontWeight.Bold else FontWeight.Medium,
                             color = if (isHovered || action.isActive) DarkOnSurface else DarkOnSurfaceVariant,
-                            maxLines = 1
+                            maxLines = 1,
+                            softWrap = false,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                 }

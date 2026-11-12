@@ -78,6 +78,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
@@ -162,13 +163,31 @@ fun PackDetailScreen(
     val shareSticker: (PackSticker, Boolean) -> Unit = { targetSticker, isAnimated ->
         val shareManager = (context.applicationContext as SevenTvApplication).container.stickerShareManager
         coroutineScope.launch {
-            when (val result = shareManager.prepareStickerForShare(targetSticker, isAnimated = isAnimated)) {
-                is StickerResult.Success -> {
-                    shareManager.launchShare(context, result.data)
+            val preparingJob = coroutineScope.launch {
+                snackbarHostState.showSnackbar(
+                    message = "Preparando sticker para compartir...",
+                    duration = SnackbarDuration.Short
+                )
+            }
+            try {
+                when (val result = shareManager.prepareStickerForShare(targetSticker, isAnimated = isAnimated)) {
+                    is StickerResult.Success -> {
+                        preparingJob.cancel()
+                        snackbarHostState.currentSnackbarData?.dismiss()
+                        if (!shareManager.launchShare(context, result.data)) {
+                            snackbarHostState.showSnackbar("No se encontr? ninguna aplicaci?n para compartir")
+                        }
+                    }
+                    is StickerResult.Failure -> {
+                        preparingJob.cancel()
+                        snackbarHostState.currentSnackbarData?.dismiss()
+                        snackbarHostState.showSnackbar("Error al preparar sticker: ${result.error}")
+                    }
                 }
-                is StickerResult.Failure -> {
-                    snackbarHostState.showSnackbar("Error al preparar sticker: ${result.error}")
-                }
+            } catch (e: Exception) {
+                preparingJob.cancel()
+                snackbarHostState.currentSnackbarData?.dismiss()
+                snackbarHostState.showSnackbar("Error al compartir: ${e.message}")
             }
         }
     }
@@ -899,7 +918,9 @@ fun PackDetailScreen(
                 coroutineScope.launch {
                     when (val result = shareManager.prepareStickerForShare(targetSticker, isAnimated = pack.isAnimated)) {
                         is StickerResult.Success -> {
-                            shareManager.launchShare(context, result.data)
+                            if (!shareManager.launchShare(context, result.data)) {
+                                snackbarHostState.showSnackbar("No se encontr? ninguna aplicaci?n para compartir")
+                            }
                         }
                         is StickerResult.Failure -> {
                             snackbarHostState.showSnackbar("Error al preparar sticker: ${result.error}")
@@ -1321,7 +1342,9 @@ fun PackDetailScreen(
                 coroutineScope.launch {
                     when (val result = shareManager.prepareStickerForShare(sticker, isAnimated = pack.isAnimated)) {
                         is StickerResult.Success -> {
-                            shareManager.launchShare(context, result.data)
+                            if (!shareManager.launchShare(context, result.data)) {
+                                snackbarHostState.showSnackbar("No se encontr? ninguna aplicaci?n para compartir")
+                            }
                         }
                         is StickerResult.Failure -> {
                             snackbarHostState.showSnackbar("Error al preparar sticker: ${result.error}")

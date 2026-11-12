@@ -141,6 +141,93 @@ class EmotePeekOverlayTest {
         assertNull(state.currentPayload)
     }
 
+
+    @Test
+    fun emotePeekState_executesShareAction_onReleaseUsingFreshBoundsSnapshot() {
+        val state = EmotePeekState()
+        var draftClicked = 0
+        var inspectClicked = 0
+        var shareClicked = 0
+
+        val payload = EmotePeekPayload(
+            id = "emote_share",
+            name = "catJAM",
+            isAnimated = true,
+            imageModel = "https://cdn.7tv.app/emote/2/4x.webp",
+            actions = listOf(
+                EmotePeekAction("draft", "En borrador", Icons.Default.Add, onClick = { draftClicked++ }),
+                EmotePeekAction("inspect", "Inspeccionar", Icons.Default.ZoomIn, onClick = { inspectClicked++ }),
+                EmotePeekAction("share", "Compartir", Icons.Default.Share, onClick = { shareClicked++ })
+            )
+        )
+
+        val recordedHaptics = mutableListOf<HapticFeedbackType>()
+        val fakeHaptic = object : HapticFeedback {
+            override fun performHapticFeedback(hapticFeedbackType: HapticFeedbackType) {
+                recordedHaptics.add(hapticFeedbackType)
+            }
+        }
+
+        // Simulate bounds shifting from initial animation (progress=0f) to settled layout (progress=1f)
+        var currentShareRect = Rect(300f, 650f, 400f, 700f)
+        state.hitSlopPx = 14f
+        state.boundsSnapshotProvider = {
+            mapOf(
+                0 to Rect(60f, 800f, 180f, 850f),
+                1 to Rect(190f, 800f, 320f, 850f),
+                2 to currentShareRect
+            )
+        }
+
+        state.show(payload)
+        // Update settled position of Share button after entrance animation completes
+        currentShareRect = Rect(330f, 800f, 450f, 850f)
+        state.updatePointer(Offset(390f, 825f))
+
+        // Release executes index 2 ("Compartir") using fresh bounds snapshot even without manual hoveredActionIndex
+        state.onRelease(fakeHaptic)
+        assertEquals(0, draftClicked)
+        assertEquals(0, inspectClicked)
+        assertEquals(1, shareClicked)
+        assertEquals(listOf(HapticFeedbackType.LongPress), recordedHaptics)
+        assertFalse(state.isActive)
+    }
+
+    @Test
+    fun emotePeekState_executesShareAction_withHitSlopOnEdge() {
+        val state = EmotePeekState()
+        var shareClicked = 0
+
+        val payload = EmotePeekPayload(
+            id = "emote_share_edge",
+            name = "pepeLaugh",
+            isAnimated = false,
+            imageModel = "https://cdn.7tv.app/emote/3/4x.webp",
+            actions = listOf(
+                EmotePeekAction("draft", "En borrador", Icons.Default.Add, onClick = {}),
+                EmotePeekAction("inspect", "Inspeccionar", Icons.Default.ZoomIn, onClick = {}),
+                EmotePeekAction("share", "Compartir", Icons.Default.Share, onClick = { shareClicked++ })
+            )
+        )
+
+        state.hitSlopPx = 20f
+        state.boundsSnapshotProvider = {
+            mapOf(
+                0 to Rect(60f, 800f, 180f, 850f),
+                1 to Rect(190f, 800f, 320f, 850f),
+                2 to Rect(330f, 800f, 450f, 850f)
+            )
+        }
+
+        state.show(payload)
+        // Pointer is 10px below the Share button bottom edge (within 20px hitSlop)
+        state.updatePointer(Offset(400f, 860f))
+        state.onRelease()
+
+        assertEquals(1, shareClicked)
+        assertFalse(state.isActive)
+    }
+
     @Test
     fun coilSetup_generatesConsistentCacheKeys() {
         assertEquals("emote_preview_abc123", CoilSetup.emotePreviewCacheKey("abc123"))

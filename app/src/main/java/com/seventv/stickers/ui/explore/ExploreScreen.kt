@@ -108,18 +108,33 @@ fun ExploreScreen(
 
     val shareEmote: (SevenTvEmote) -> Unit = { emote ->
         coroutineScope.launch {
+            if (isSharingSticker) return@launch
             isSharingSticker = true
+            val preparingJob = coroutineScope.launch {
+                snackbarHostState.showSnackbar(
+                    message = "Preparando sticker para compartir...",
+                    duration = SnackbarDuration.Short
+                )
+            }
             try {
                 val shareManager = (context.applicationContext as SevenTvApplication).container.stickerShareManager
                 when (val result = shareManager.prepareEmoteForShare(emote)) {
                     is StickerResult.Success -> {
-                        shareManager.launchShare(context, result.data)
+                        preparingJob.cancel()
+                        snackbarHostState.currentSnackbarData?.dismiss()
+                        if (!shareManager.launchShare(context, result.data)) {
+                            snackbarHostState.showSnackbar("No se encontr? ninguna aplicaci?n para compartir")
+                        }
                     }
                     is StickerResult.Failure -> {
+                        preparingJob.cancel()
+                        snackbarHostState.currentSnackbarData?.dismiss()
                         snackbarHostState.showSnackbar("Error al preparar sticker para compartir")
                     }
                 }
             } catch (e: Exception) {
+                preparingJob.cancel()
+                snackbarHostState.currentSnackbarData?.dismiss()
                 snackbarHostState.showSnackbar("Error al compartir: ${e.message}")
             } finally {
                 isSharingSticker = false
