@@ -1,7 +1,7 @@
 package com.seventv.stickers.ui.theme
 
 import android.app.Activity
-import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
@@ -64,19 +64,25 @@ val SevenTvLightColorScheme = lightColorScheme(
     onError = Color.White
 )
 
+internal fun resolveSevenTvColorScheme(darkTheme: Boolean = true): ColorScheme =
+    if (darkTheme) SevenTvDarkColorScheme else SevenTvLightColorScheme
+
 @Composable
 fun SevenTvTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
+    darkTheme: Boolean = true,
     content: @Composable () -> Unit
 ) {
-    val colorScheme = if (darkTheme) SevenTvDarkColorScheme else SevenTvLightColorScheme
+    val colorScheme = resolveSevenTvColorScheme(darkTheme)
     val view = LocalView.current
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as? Activity)?.window
             if (window != null) {
                 window.statusBarColor = colorScheme.background.toArgb()
-                WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !darkTheme
+                window.navigationBarColor = colorScheme.background.toArgb()
+                val insetsController = WindowCompat.getInsetsController(window, view)
+                insetsController.isAppearanceLightStatusBars = !darkTheme
+                insetsController.isAppearanceLightNavigationBars = !darkTheme
             }
         }
     }

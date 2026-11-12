@@ -172,4 +172,11 @@ class ThemeTokensTest {
         assertEquals(FontWeight.Medium, Typography.labelSmall.fontWeight)
         assertEquals(FontFamily.Monospace, Typography.labelSmall.fontFamily)
     }
+
+    @Test
+    fun resolveSevenTvColorScheme_defaultsToDarkVaporwaveTheme() {
+        assertEquals(SevenTvDarkColorScheme, resolveSevenTvColorScheme())
+        assertEquals(SevenTvDarkColorScheme, resolveSevenTvColorScheme(darkTheme = true))
+        assertEquals(SevenTvLightColorScheme, resolveSevenTvColorScheme(darkTheme = false))
+    }
 }
