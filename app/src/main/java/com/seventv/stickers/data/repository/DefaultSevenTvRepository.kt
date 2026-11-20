@@ -44,10 +44,10 @@ class DefaultSevenTvRepository(
         page: Int,
         limit: Int,
         category: String?
-    ): StickerResult<List<SevenTvEmote>> = safeApiCall(
+    ): StickerResult<List<SevenTvEmote>> = safeGqlCall(
         call = { api.searchEmotes(SevenTvGqlQueries.searchEmotesRequest(query, page, limit, category)) },
-        transform = { gqlResponse ->
-            val items = gqlResponse.data?.emotes?.items.orEmpty()
+        transform = { data ->
+            val items = data.emotes?.items.orEmpty()
             items.map { SevenTvMapper.toDomain(it) }
         }
     )
@@ -86,9 +86,9 @@ class DefaultSevenTvRepository(
         val (directSetResult, userSearchCall) = coroutineScope {
             val directDeferred = async(dispatcher) { getEmoteSet(trimmed) }
             val userDeferred = async(dispatcher) {
-                safeApiCall(
+                safeGqlCall(
                     call = { api.searchUsers(SevenTvGqlQueries.searchUsersRequest(trimmed, limit = 15)) },
-                    transform = { gqlResponse -> gqlResponse.data?.users.orEmpty() }
+                    transform = { data -> data.users }
                 )
             }
             val direct = directDeferred.await()
@@ -243,6 +243,51 @@ class DefaultSevenTvRepository(
                 StickerResult.Failure(StickerError.NetworkError(message = e.message ?: "GIF download failed"))
             }
         }
+
+    private suspend fun <T, R> safeGqlCall(
+        call: suspend () -> Response<com.seventv.stickers.core.network.dto.SevenTvGqlResponse<T>>,
+        transform: (T) -> R
+    ): StickerResult<R> = withContext(dispatcher) {
+        try {
+            val response = call()
+            if (response.isSuccessful) {
+                val body = response.body()
+                if (body == null) {
+                    StickerResult.Failure(
+                        StickerError.NetworkError(statusCode = response.code(), message = "Empty response body")
+                    )
+                } else if (!body.errors.isNullOrEmpty() && body.data == null) {
+                    val errorMsg = body.errors.joinToString("; ") { it.message }
+                    StickerResult.Failure(
+                        StickerError.NetworkError(statusCode = response.code(), message = errorMsg)
+                    )
+                } else if (body.data == null) {
+                    StickerResult.Failure(
+                        StickerError.NetworkError(statusCode = response.code(), message = "Missing GraphQL data")
+                    )
+                } else {
+                    StickerResult.Success(transform(body.data))
+                }
+            } else {
+                when (response.code()) {
+                    404 -> StickerResult.Failure(StickerError.ResourceNotFound)
+                    429 -> StickerResult.Failure(StickerError.RateLimited)
+                    else -> StickerResult.Failure(
+                        StickerError.NetworkError(
+                            statusCode = response.code(),
+                            message = response.message().ifBlank { "HTTP ${response.code()}" }
+                        )
+                    )
+                }
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            StickerResult.Failure(
+                StickerError.NetworkError(message = e.message ?: "Network error")
+            )
+        }
+    }
 
     private suspend fun <T, R> safeApiCall(
         call: suspend () -> Response<T>,

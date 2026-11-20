@@ -127,8 +127,14 @@ object SevenTvMapper {
     }
 
     private fun normalizeBaseUrl(baseUrl: String): String {
-        val trimmed = if (baseUrl.startsWith("//")) "https:$baseUrl" else baseUrl
-        return trimmed.trimEnd('/')
+        val trimmed = baseUrl.trim()
+        val withScheme = when {
+            trimmed.startsWith("https://", ignoreCase = true) -> trimmed
+            trimmed.startsWith("http://", ignoreCase = true) -> "https://${trimmed.substring(7)}"
+            trimmed.startsWith("//") -> "https:$trimmed"
+            else -> "https://$trimmed"
+        }
+        return withScheme.trimEnd('/')
     }
 
     /**

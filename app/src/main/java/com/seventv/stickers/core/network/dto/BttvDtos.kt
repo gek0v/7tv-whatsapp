@@ -4,8 +4,8 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class BttvEmoteDto(
-    val id: String,
-    val code: String,
+    val id: String = "",
+    val code: String = "",
     val imageType: String = "png",
     val animated: Boolean = false,
     val userId: String? = null,

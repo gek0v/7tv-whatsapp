@@ -322,6 +322,9 @@ class DefaultStickerPackRepository(
                 }
             }
 
+            for (p in createdPacks) {
+                notifyPackModified(p.identifier)
+            }
             StickerResult.Success(createdPacks)
         } catch (e: CancellationException) {
             throw e
@@ -416,139 +419,159 @@ class DefaultStickerPackRepository(
 
             val chunks = partitionStickersIntoPacks(allStickers, maxPerPack = 30, minPerPack = 3)
             val createdPacks = mutableListOf<StickerPack>()
+            val packsToInsert = mutableListOf<Pair<StickerPackEntity, List<StickerEntity>>>()
+            val createdPackDirectories = mutableListOf<java.io.File>()
 
-            for ((chunkIndex, chunk) in chunks.withIndex()) {
-                val newPackId = java.util.UUID.randomUUID().toString()
-                val packName = if (chunks.size == 1) basePackName else "$basePackName ${chunkIndex + 1}"
-                val packDir = storageManager.getPackDirectory(newPackId)
-                packDir.mkdirs()
+            try {
+                for ((chunkIndex, chunk) in chunks.withIndex()) {
+                    val newPackId = java.util.UUID.randomUUID().toString()
+                    val packName = if (chunks.size == 1) basePackName else "$basePackName ${chunkIndex + 1}"
+                    val packDir = storageManager.getPackDirectory(newPackId)
+                    packDir.mkdirs()
+                    createdPackDirectories.add(packDir)
 
-                val newPackStickers = mutableListOf<PackSticker>()
-                val newPackStickerEntities = mutableListOf<StickerEntity>()
-                var firstSavedFile: java.io.File? = null
+                    val newPackStickers = mutableListOf<PackSticker>()
+                    val newPackStickerEntities = mutableListOf<StickerEntity>()
+                    var firstSavedFile: java.io.File? = null
 
-                for ((stickerIndex, sticker) in chunk.withIndex()) {
-                    val newStickerId = java.util.UUID.randomUUID().toString()
-                    val sourceFile = storageManager.getAbsoluteFile(sticker.relativeFilePath)
-                    val bytes = if (sourceFile.exists()) {
-                        sourceFile.readBytes()
-                    } else {
-                        val fallback = java.io.File(storageManager.getPackDirectory(sticker.packIdentifier), "sticker_${sticker.id}.webp")
-                        if (fallback.exists()) fallback.readBytes() else ByteArray(0)
-                    }
-
-                    if (bytes.isNotEmpty()) {
-                        val savedFile = storageManager.saveStickerFile(newPackId, newStickerId, bytes)
-                        if (firstSavedFile == null) {
-                            firstSavedFile = savedFile
+                    for ((stickerIndex, sticker) in chunk.withIndex()) {
+                        val newStickerId = java.util.UUID.randomUUID().toString()
+                        val sourceFile = storageManager.getAbsoluteFile(sticker.relativeFilePath)
+                        val bytes = if (sourceFile.exists()) {
+                            sourceFile.readBytes()
+                        } else {
+                            val fallback = java.io.File(storageManager.getPackDirectory(sticker.packIdentifier), "sticker_${sticker.id}.webp")
+                            if (fallback.exists()) fallback.readBytes() else ByteArray(0)
                         }
-                        val relativePath = "sticker_packs/$newPackId/sticker_${newStickerId}.webp"
-                        val entity = StickerEntity(
-                            id = newStickerId,
-                            packIdentifier = newPackId,
-                            emoteId = sticker.emoteId,
-                            emoteName = sticker.emoteName,
-                            relativeFilePath = relativePath,
-                            emojis = sticker.emojis,
-                            fileLength = savedFile.length(),
-                            sortOrder = stickerIndex,
-                            provider = sticker.provider
-                        )
-                        newPackStickerEntities.add(entity)
-                        newPackStickers.add(
-                            PackSticker(
+
+                        if (bytes.isNotEmpty()) {
+                            val savedFile = storageManager.saveStickerFile(newPackId, newStickerId, bytes)
+                            if (firstSavedFile == null) {
+                                firstSavedFile = savedFile
+                            }
+                            val relativePath = "sticker_packs/$newPackId/sticker_${newStickerId}.webp"
+                            val entity = StickerEntity(
                                 id = newStickerId,
                                 packIdentifier = newPackId,
                                 emoteId = sticker.emoteId,
                                 emoteName = sticker.emoteName,
-                                filePath = savedFile.absolutePath,
+                                relativeFilePath = relativePath,
                                 emojis = sticker.emojis,
                                 fileLength = savedFile.length(),
                                 sortOrder = stickerIndex,
-                                provider = EmoteProvider.fromName(sticker.provider)
+                                provider = sticker.provider
                             )
-                        )
-                    }
-                }
-
-                var traySaved = false
-                for (srcId in sourcePackIdentifiers) {
-                    val srcTrayPng = java.io.File(storageManager.getPackDirectory(srcId), "tray_icon.png")
-                    if (srcTrayPng.exists() && srcTrayPng.length() > 0) {
-                        storageManager.saveTrayIcon(newPackId, srcTrayPng.readBytes())
-                        traySaved = true
-                        break
-                    }
-                    val srcTrayWebp = java.io.File(storageManager.getPackDirectory(srcId), "tray_icon.webp")
-                    if (srcTrayWebp.exists() && srcTrayWebp.length() > 0) {
-                        try {
-                            val bmp = BitmapFactory.decodeFile(srcTrayWebp.absolutePath)
-                            if (bmp != null) {
-                                val baos = java.io.ByteArrayOutputStream()
-                                bmp.compress(Bitmap.CompressFormat.PNG, 100, baos)
-                                storageManager.saveTrayIcon(newPackId, baos.toByteArray())
-                                bmp.recycle()
-                                traySaved = true
-                                break
-                            }
-                        } catch (_: Exception) {}
-                    }
-                }
-
-                if (!traySaved && firstSavedFile != null && firstSavedFile.exists()) {
-                    val stagingDir = java.io.File(packDir, "staging_tray").apply { mkdirs() }
-                    val trayOutFile = java.io.File(stagingDir, "tray_icon.png")
-                    val options = BitmapFactory.Options().apply { inPreferredConfig = Bitmap.Config.ARGB_8888 }
-                    var firstBitmap: Bitmap? = BitmapFactory.decodeFile(firstSavedFile.absolutePath, options)
-                    if (firstBitmap == null) {
-                        val frameExtractor = DefaultFrameExtractor()
-                        val framesResult = frameExtractor.extractFrames(firstSavedFile.readBytes())
-                        if (framesResult is StickerResult.Success && framesResult.data.isNotEmpty()) {
-                            firstBitmap = framesResult.data.first().bitmap
+                            newPackStickerEntities.add(entity)
+                            newPackStickers.add(
+                                PackSticker(
+                                    id = newStickerId,
+                                    packIdentifier = newPackId,
+                                    emoteId = sticker.emoteId,
+                                    emoteName = sticker.emoteName,
+                                    filePath = savedFile.absolutePath,
+                                    emojis = sticker.emojis,
+                                    fileLength = savedFile.length(),
+                                    sortOrder = stickerIndex,
+                                    provider = EmoteProvider.fromName(sticker.provider)
+                                )
+                            )
                         }
                     }
 
-                    if (firstBitmap != null) {
-                        try {
-                            val trayResult = mediaPipeline.processTrayIcon(firstBitmap, trayOutFile)
-                            if (trayResult is StickerResult.Success && trayOutFile.exists()) {
-                                storageManager.saveTrayIcon(newPackId, trayOutFile.readBytes())
-                            }
-                        } finally {
-                            stagingDir.deleteRecursively()
-                            if (!firstBitmap.isRecycled) firstBitmap.recycle()
+                    var traySaved = false
+                    for (srcId in sourcePackIdentifiers) {
+                        val srcTrayPng = java.io.File(storageManager.getPackDirectory(srcId), "tray_icon.png")
+                        if (srcTrayPng.exists() && srcTrayPng.length() > 0) {
+                            storageManager.saveTrayIcon(newPackId, srcTrayPng.readBytes())
+                            traySaved = true
+                            break
+                        }
+                        val srcTrayWebp = java.io.File(storageManager.getPackDirectory(srcId), "tray_icon.webp")
+                        if (srcTrayWebp.exists() && srcTrayWebp.length() > 0) {
+                            try {
+                                val bmp = BitmapFactory.decodeFile(srcTrayWebp.absolutePath)
+                                if (bmp != null) {
+                                    val baos = java.io.ByteArrayOutputStream()
+                                    bmp.compress(Bitmap.CompressFormat.PNG, 100, baos)
+                                    storageManager.saveTrayIcon(newPackId, baos.toByteArray())
+                                    bmp.recycle()
+                                    traySaved = true
+                                    break
+                                }
+                            } catch (_: Exception) {}
                         }
                     }
-                }
 
-                val createdAt = System.currentTimeMillis() + chunkIndex
-                val packEntity = StickerPackEntity(
-                    identifier = newPackId,
-                    name = packName,
-                    publisher = "7TV Stickers",
-                    trayImageRelativePath = "sticker_packs/$newPackId/tray_icon.png",
-                    isAnimated = isAnimated,
-                    isWhitelisted = false,
-                    createdAt = createdAt
-                )
-                stickerPackDao.insertPackWithStickers(packEntity, newPackStickerEntities)
+                    if (!traySaved && firstSavedFile != null && firstSavedFile.exists()) {
+                        val stagingDir = java.io.File(packDir, "staging_tray").apply { mkdirs() }
+                        val trayOutFile = java.io.File(stagingDir, "tray_icon.png")
+                        val options = BitmapFactory.Options().apply { inPreferredConfig = Bitmap.Config.ARGB_8888 }
+                        var firstBitmap: Bitmap? = BitmapFactory.decodeFile(firstSavedFile.absolutePath, options)
+                        if (firstBitmap == null) {
+                            val frameExtractor = DefaultFrameExtractor()
+                            val framesResult = frameExtractor.extractFrames(firstSavedFile.readBytes())
+                            if (framesResult is StickerResult.Success && framesResult.data.isNotEmpty()) {
+                                firstBitmap = framesResult.data.first().bitmap
+                            }
+                        }
 
-                createdPacks.add(
-                    StickerPack(
+                        if (firstBitmap != null) {
+                            try {
+                                val trayResult = mediaPipeline.processTrayIcon(firstBitmap, trayOutFile)
+                                if (trayResult is StickerResult.Success && trayOutFile.exists()) {
+                                    storageManager.saveTrayIcon(newPackId, trayOutFile.readBytes())
+                                }
+                            } finally {
+                                stagingDir.deleteRecursively()
+                                if (!firstBitmap.isRecycled) firstBitmap.recycle()
+                            }
+                        }
+                    }
+
+                    val createdAt = System.currentTimeMillis() + chunkIndex
+                    val trayRelativePath = "sticker_packs/$newPackId/tray_icon.png"
+                    val packEntity = StickerPackEntity(
                         identifier = newPackId,
                         name = packName,
                         publisher = "7TV Stickers",
-                        trayImagePath = "sticker_packs/$newPackId/tray_icon.webp",
+                        trayImageRelativePath = trayRelativePath,
                         isAnimated = isAnimated,
                         isWhitelisted = false,
-                        stickers = newPackStickers
+                        createdAt = createdAt
                     )
-                )
+                    packsToInsert.add(packEntity to newPackStickerEntities)
+
+                    createdPacks.add(
+                        StickerPack(
+                            identifier = newPackId,
+                            name = packName,
+                            publisher = "7TV Stickers",
+                            trayImagePath = storageManager.getAbsoluteFile(trayRelativePath).absolutePath,
+                            isAnimated = isAnimated,
+                            isWhitelisted = false,
+                            stickers = newPackStickers
+                        )
+                    )
+                }
+
+                stickerPackDao.replacePacksWithMerged(sourcePackIdentifiers, packsToInsert)
+
+                for (srcId in sourcePackIdentifiers) {
+                    storageManager.deletePackDirectory(srcId)
+                    notifyPackModified(srcId)
+                }
+
+                for (p in createdPacks) {
+                    notifyPackModified(p.identifier)
+                }
+                StickerResult.Success(createdPacks)
+            } catch (e: Throwable) {
+                for (dir in createdPackDirectories) {
+                    dir.deleteRecursively()
+                }
+                if (e is CancellationException) throw e
+                StickerResult.Failure(StickerError.StorageIoError(e))
             }
-
-            deletePacks(sourcePackIdentifiers)
-
-            StickerResult.Success(createdPacks)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -635,6 +658,8 @@ class DefaultStickerPackRepository(
                     return@withContext firstFailure.result as StickerResult.Failure
                 }
 
+                val savedFiles = mutableListOf<File>()
+                val entitiesToInsert = mutableListOf<StickerEntity>()
                 for (item in processedResults.sortedBy { it.index }) {
                     val processedSticker = (item.result as StickerResult.Success).data
                     val stickerBytes = processedSticker.file.readBytes()
@@ -643,6 +668,7 @@ class DefaultStickerPackRepository(
                         stickerId = item.stickerId,
                         bytes = stickerBytes
                     )
+                    savedFiles.add(savedFile)
 
                     val relativePath = "sticker_packs/$packIdentifier/sticker_${item.stickerId}.webp"
                     val entity = StickerEntity(
@@ -656,11 +682,21 @@ class DefaultStickerPackRepository(
                         sortOrder = currentCount + item.index,
                         provider = item.emote.provider.name
                     )
-                    stickerDao.insertSticker(entity)
+                    entitiesToInsert.add(entity)
+                }
+
+                val inserted = stickerPackDao.addStickersIfUnderLimit(packIdentifier, entitiesToInsert)
+                if (!inserted) {
+                    for (file in savedFiles) {
+                        file.delete()
+                    }
+                    stagingDir.deleteRecursively()
+                    return@withContext StickerResult.Failure(
+                        StickerError.ExceedsPackLimit(currentCount + entitiesToInsert.size, 30)
+                    )
                 }
 
                 stagingDir.deleteRecursively()
-                stickerPackDao.incrementImageDataVersion(packIdentifier)
                 notifyPackModified(packIdentifier)
                 StickerResult.Success(Unit)
             } catch (e: Exception) {
@@ -680,8 +716,14 @@ class DefaultStickerPackRepository(
         emojis: List<String>
     ): StickerResult<Unit> = withContext(dispatcher) {
         try {
+            val validEmojis = emojis.map { it.trim() }.filter { it.isNotEmpty() }
+            if (validEmojis.isEmpty() || validEmojis.size > 3) {
+                return@withContext StickerResult.Failure(
+                    StickerError.ValidationError("Cada sticker debe tener entre 1 y 3 emojis válidos.")
+                )
+            }
             val packIdentifier = stickerDao.getPackIdentifierForSticker(stickerId)
-            stickerDao.updateEmojis(stickerId, emojis)
+            stickerDao.updateEmojis(stickerId, validEmojis)
             if (packIdentifier != null) {
                 stickerPackDao.incrementImageDataVersion(packIdentifier)
                 notifyPackModified(packIdentifier)
@@ -914,14 +956,28 @@ class DefaultStickerPackRepository(
                     StickerError.NetworkError(message = "Repositorio de 7TV no disponible")
                 )
 
+            val existingEmoteIds = packWithStickers.stickers.map { it.emoteId }.toSet()
             when (val setResult = repo.getEmoteSet(originSetId)) {
                 is StickerResult.Success -> {
-                    val existingEmoteIds = packWithStickers.stickers.map { it.emoteId }.toSet()
                     val newEmotes = setResult.data.emotes.filter { !existingEmoteIds.contains(it.id) }
                     StickerResult.Success(newEmotes)
                 }
                 is StickerResult.Failure -> {
-                    StickerResult.Failure(setResult.error)
+                    val streamerName = packWithStickers.pack.originStreamerName
+                    if (!streamerName.isNullOrBlank()) {
+                        when (val channelResult = repo.getChannelData(streamerName)) {
+                            is StickerResult.Success -> {
+                                val channelEmotes = channelResult.data.activeSet.emotes
+                                val newEmotes = channelEmotes.filter { !existingEmoteIds.contains(it.id) }
+                                StickerResult.Success(newEmotes)
+                            }
+                            is StickerResult.Failure -> {
+                                StickerResult.Failure(setResult.error)
+                            }
+                        }
+                    } else {
+                        StickerResult.Failure(setResult.error)
+                    }
                 }
             }
         } catch (e: Exception) {

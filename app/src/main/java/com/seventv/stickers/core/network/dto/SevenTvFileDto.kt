@@ -4,7 +4,7 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class SevenTvFileDto(
-    val name: String,
+    val name: String = "",
     val format: String = "WEBP",
     val width: Int = 0,
     val height: Int = 0,

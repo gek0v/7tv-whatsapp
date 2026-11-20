@@ -5,8 +5,8 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class SevenTvEmoteSetDto(
-    val id: String,
-    val name: String,
+    val id: String = "",
+    val name: String = "",
     val flags: Int = 0,
     val emotes: List<SevenTvEmoteDto> = emptyList(),
     val capacity: Int = 0,

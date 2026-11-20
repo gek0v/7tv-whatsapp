@@ -4,6 +4,7 @@ import com.seventv.stickers.core.common.result.StickerError
 import com.seventv.stickers.core.common.result.StickerResult
 import com.seventv.stickers.core.network.model.DownloadedEmoteAsset
 import com.seventv.stickers.core.network.model.SevenTvEmote
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.MockResponse
@@ -282,5 +283,36 @@ class DefaultEmoteDownloaderTest {
         val asset = (result as StickerResult.Success<DownloadedEmoteAsset>).data
         assertEquals("GIF", asset.format)
         assertTrue(asset.isAnimated)
+    }
+
+    @Test
+    fun coroutineCancellationDeletesTempFile() = runTest {
+        val payload = ByteArray(1024 * 512) { 0x42 }
+        mockWebServer.enqueue(
+            MockResponse()
+                .setResponseCode(200)
+                .setBodyDelay(1, java.util.concurrent.TimeUnit.SECONDS)
+                .setBody(Buffer().write(payload))
+        )
+
+        val emote = SevenTvEmote(
+            id = "cancel_me",
+            name = "CancelEmote",
+            isAnimated = false,
+            isZeroWidth = false,
+            isNsfw = false,
+            bestAssetUrl = mockWebServer.url("/cancel_me/4x.webp").toString(),
+            availableScales = listOf("4x.webp")
+        )
+
+        val job = launch {
+            downloader.downloadEmote(emote)
+        }
+        kotlinx.coroutines.delay(50)
+        job.cancel()
+
+        val cacheFolder = File(tempDir, "7tv_emotes_cache")
+        val cacheFiles = cacheFolder.listFiles() ?: emptyArray()
+        assertTrue("No .tmp or leftover files should remain in cache after cancellation", cacheFiles.none { it.name.startsWith("cancel_me") })
     }
 }
