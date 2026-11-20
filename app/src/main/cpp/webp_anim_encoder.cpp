@@ -121,8 +121,12 @@ Java_com_seventv_stickers_core_media_animated_NativeWebPAnimEncoder_encode(
         }
 
         void* pixels = nullptr;
-        if (AndroidBitmap_lockPixels(env, bitmap_obj, &pixels) < 0 || pixels == nullptr) {
-            LOGE("AndroidBitmap_lockPixels failed for frame %d", i);
+        const int lock_res = AndroidBitmap_lockPixels(env, bitmap_obj, &pixels);
+        if (lock_res < 0 || pixels == nullptr) {
+            LOGE("AndroidBitmap_lockPixels failed for frame %d (res=%d)", i, lock_res);
+            if (lock_res >= 0 && pixels == nullptr) {
+                AndroidBitmap_unlockPixels(env, bitmap_obj);
+            }
             env->DeleteLocalRef(bitmap_obj);
             encode_failed = true;
             break;
@@ -163,6 +167,9 @@ Java_com_seventv_stickers_core_media_animated_NativeWebPAnimEncoder_encode(
         } else {
             int desired = timestamps[i] - timestamps[0];
             frame_timestamp = std::max(desired, prev_timestamp + 10);
+            if (frame_timestamp > 2990) {
+                frame_timestamp = 2990;
+            }
         }
 
         const int add_ok = WebPAnimEncoderAdd(enc, &pic, frame_timestamp, &config);
@@ -188,13 +195,20 @@ Java_com_seventv_stickers_core_media_animated_NativeWebPAnimEncoder_encode(
 
     // Finalize animation sequence: mark end timestamp with frame = nullptr
     // WhatsApp strictly requires every frame duration to be >= 8 ms. We enforce >= 10 ms.
+    // Total duration must never exceed 3000 ms.
     int last_duration = (num_frames > 1 && second_last_timestamp >= 0)
         ? (last_timestamp - second_last_timestamp)
         : 100;
     if (last_duration < 10) {
         last_duration = 10;
     }
-    const int end_time = last_timestamp + last_duration;
+    int end_time = last_timestamp + last_duration;
+    if (end_time > 3000) {
+        end_time = 3000;
+        if (end_time <= last_timestamp) {
+            end_time = last_timestamp + 10;
+        }
+    }
 
     if (!WebPAnimEncoderAdd(enc, nullptr, end_time, nullptr)) {
         LOGE("WebPAnimEncoderAdd flush failed at end timestamp %d", end_time);
@@ -292,8 +306,32 @@ Java_com_seventv_stickers_core_media_animated_NativeWebPAnimDecoder_decode(
     const int height = info.canvas_height;
     const int frame_count = info.frame_count;
 
+    if (width <= 0 || height <= 0 || frame_count <= 0) {
+        WebPAnimDecoderDelete(dec);
+        env->ReleaseByteArrayElements(webpBytes, bytes_ptr, JNI_ABORT);
+        return nullptr;
+    }
+
+    // Prevent 32-bit integer overflow on canvas dimensions
+    if (static_cast<int64_t>(width) * static_cast<int64_t>(height) > (2147483647LL / 4LL)) {
+        LOGE("Canvas dimensions too large: %dx%d", width, height);
+        WebPAnimDecoderDelete(dec);
+        env->ReleaseByteArrayElements(webpBytes, bytes_ptr, JNI_ABORT);
+        return nullptr;
+    }
+
     jclass bitmap_class = env->FindClass("android/graphics/Bitmap");
+    if (bitmap_class == nullptr) {
+        WebPAnimDecoderDelete(dec);
+        env->ReleaseByteArrayElements(webpBytes, bytes_ptr, JNI_ABORT);
+        return nullptr;
+    }
     jclass config_class = env->FindClass("android/graphics/Bitmap$Config");
+    if (config_class == nullptr) {
+        WebPAnimDecoderDelete(dec);
+        env->ReleaseByteArrayElements(webpBytes, bytes_ptr, JNI_ABORT);
+        return nullptr;
+    }
     jfieldID argb_field = env->GetStaticFieldID(config_class, "ARGB_8888", "Landroid/graphics/Bitmap$Config;");
     jobject argb_config = env->GetStaticObjectField(config_class, argb_field);
     jmethodID create_bitmap_mid = env->GetStaticMethodID(
@@ -301,12 +339,18 @@ Java_com_seventv_stickers_core_media_animated_NativeWebPAnimDecoder_decode(
         "createBitmap",
         "(IILandroid/graphics/Bitmap$Config;)Landroid/graphics/Bitmap;"
     );
+    if (create_bitmap_mid == nullptr || argb_config == nullptr) {
+        WebPAnimDecoderDelete(dec);
+        env->ReleaseByteArrayElements(webpBytes, bytes_ptr, JNI_ABORT);
+        return nullptr;
+    }
 
     jobjectArray bitmap_array = env->NewObjectArray(frame_count, bitmap_class, nullptr);
     jintArray durations_array = env->NewIntArray(frame_count);
     jintArray timestamps_array = env->NewIntArray(frame_count);
 
     if (bitmap_array == nullptr || durations_array == nullptr || timestamps_array == nullptr) {
+        if (env->ExceptionCheck()) env->ExceptionClear();
         WebPAnimDecoderDelete(dec);
         env->ReleaseByteArrayElements(webpBytes, bytes_ptr, JNI_ABORT);
         return nullptr;
@@ -314,9 +358,17 @@ Java_com_seventv_stickers_core_media_animated_NativeWebPAnimDecoder_decode(
 
     jint* durations_ptr = env->GetIntArrayElements(durations_array, nullptr);
     jint* timestamps_ptr = env->GetIntArrayElements(timestamps_array, nullptr);
+    if (durations_ptr == nullptr || timestamps_ptr == nullptr) {
+        if (durations_ptr != nullptr) env->ReleaseIntArrayElements(durations_array, durations_ptr, JNI_ABORT);
+        if (timestamps_ptr != nullptr) env->ReleaseIntArrayElements(timestamps_array, timestamps_ptr, JNI_ABORT);
+        WebPAnimDecoderDelete(dec);
+        env->ReleaseByteArrayElements(webpBytes, bytes_ptr, JNI_ABORT);
+        return nullptr;
+    }
 
     int frame_index = 0;
     int prev_timestamp = 0;
+    bool decode_failed = false;
 
     while (WebPAnimDecoderHasMoreFrames(dec) && frame_index < frame_count) {
         uint8_t* rgba_buf = nullptr;
@@ -333,15 +385,52 @@ Java_com_seventv_stickers_core_media_animated_NativeWebPAnimDecoder_decode(
             argb_config
         );
 
-        if (frame_bmp != nullptr) {
-            void* dst_pixels = nullptr;
-            if (AndroidBitmap_lockPixels(env, frame_bmp, &dst_pixels) >= 0 && dst_pixels != nullptr) {
-                std::memcpy(dst_pixels, rgba_buf, static_cast<size_t>(width * height * 4));
+        if (env->ExceptionCheck()) {
+            LOGE("Exception in Bitmap.createBitmap for frame %d", frame_index);
+            env->ExceptionClear();
+            decode_failed = true;
+            break;
+        }
+
+        if (frame_bmp == nullptr) {
+            LOGE("createBitmap returned null for frame %d", frame_index);
+            decode_failed = true;
+            break;
+        }
+
+        AndroidBitmapInfo dst_info;
+        if (AndroidBitmap_getInfo(env, frame_bmp, &dst_info) < 0) {
+            LOGE("AndroidBitmap_getInfo failed for frame %d", frame_index);
+            env->DeleteLocalRef(frame_bmp);
+            decode_failed = true;
+            break;
+        }
+
+        void* dst_pixels = nullptr;
+        const int lock_res = AndroidBitmap_lockPixels(env, frame_bmp, &dst_pixels);
+        if (lock_res < 0 || dst_pixels == nullptr) {
+            LOGE("AndroidBitmap_lockPixels failed for frame %d", frame_index);
+            if (lock_res >= 0 && dst_pixels == nullptr) {
                 AndroidBitmap_unlockPixels(env, frame_bmp);
             }
-            env->SetObjectArrayElement(bitmap_array, frame_index, frame_bmp);
             env->DeleteLocalRef(frame_bmp);
+            decode_failed = true;
+            break;
         }
+
+        // Row-by-row stride-aligned pixel copy to prevent skew/corruption
+        const uint8_t* src_row = rgba_buf;
+        uint8_t* dst_row = static_cast<uint8_t*>(dst_pixels);
+        const size_t row_bytes = static_cast<size_t>(width * 4);
+        for (int y = 0; y < height; ++y) {
+            std::memcpy(dst_row, src_row, row_bytes);
+            src_row += row_bytes;
+            dst_row += dst_info.stride;
+        }
+        AndroidBitmap_unlockPixels(env, frame_bmp);
+
+        env->SetObjectArrayElement(bitmap_array, frame_index, frame_bmp);
+        env->DeleteLocalRef(frame_bmp);
 
         int duration = (timestamp > prev_timestamp) ? (timestamp - prev_timestamp) : 100;
         if (duration < 10) duration = 10;
@@ -356,8 +445,62 @@ Java_com_seventv_stickers_core_media_animated_NativeWebPAnimDecoder_decode(
     env->ReleaseByteArrayElements(webpBytes, bytes_ptr, JNI_ABORT);
     WebPAnimDecoderDelete(dec);
 
-    if (frame_index == 0) {
+    if (decode_failed || frame_index == 0) {
+        // Clean up already allocated bitmaps in bitmap_array to prevent memory leak
+        jmethodID recycle_mid = env->GetMethodID(bitmap_class, "recycle", "()V");
+        for (int k = 0; k < frame_index; ++k) {
+            jobject b = env->GetObjectArrayElement(bitmap_array, k);
+            if (b != nullptr) {
+                if (recycle_mid != nullptr) env->CallVoidMethod(b, recycle_mid);
+                env->DeleteLocalRef(b);
+            }
+        }
         return nullptr;
+    }
+
+    jobjectArray final_bitmaps = bitmap_array;
+    jintArray final_durations = durations_array;
+    jintArray final_timestamps = timestamps_array;
+
+    if (frame_index < frame_count) {
+        final_bitmaps = env->NewObjectArray(frame_index, bitmap_class, nullptr);
+        final_durations = env->NewIntArray(frame_index);
+        final_timestamps = env->NewIntArray(frame_index);
+
+        if (final_bitmaps == nullptr || final_durations == nullptr || final_timestamps == nullptr) {
+            if (env->ExceptionCheck()) env->ExceptionClear();
+            jmethodID recycle_mid = env->GetMethodID(bitmap_class, "recycle", "()V");
+            for (int k = 0; k < frame_index; ++k) {
+                jobject b = env->GetObjectArrayElement(bitmap_array, k);
+                if (b != nullptr) {
+                    if (recycle_mid != nullptr) env->CallVoidMethod(b, recycle_mid);
+                    env->DeleteLocalRef(b);
+                }
+            }
+            return nullptr;
+        }
+
+        for (int k = 0; k < frame_index; ++k) {
+            jobject b = env->GetObjectArrayElement(bitmap_array, k);
+            env->SetObjectArrayElement(final_bitmaps, k, b);
+            if (b != nullptr) env->DeleteLocalRef(b);
+        }
+
+        jint* src_dur = env->GetIntArrayElements(durations_array, nullptr);
+        jint* dst_dur = env->GetIntArrayElements(final_durations, nullptr);
+        if (src_dur != nullptr && dst_dur != nullptr) {
+            std::memcpy(dst_dur, src_dur, sizeof(jint) * frame_index);
+        }
+        if (src_dur != nullptr) env->ReleaseIntArrayElements(durations_array, src_dur, JNI_ABORT);
+        if (dst_dur != nullptr) env->ReleaseIntArrayElements(final_durations, dst_dur, 0);
+
+        jint* src_ts = env->GetIntArrayElements(timestamps_array, nullptr);
+        jint* dst_ts = env->GetIntArrayElements(final_timestamps, nullptr);
+        if (src_ts != nullptr && dst_ts != nullptr) {
+            std::memcpy(dst_ts, src_ts, sizeof(jint) * frame_index);
+        }
+        if (src_ts != nullptr) env->ReleaseIntArrayElements(timestamps_array, src_ts, JNI_ABORT);
+        if (dst_ts != nullptr) env->ReleaseIntArrayElements(final_timestamps, dst_ts, 0);
     }
 
     jclass result_class = env->FindClass("com/seventv/stickers/core/media/animated/WebPDecodedFrames");
