@@ -1,7 +1,9 @@
 package com.seventv.stickers.ui.packs
 
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.RepeatMode
@@ -272,6 +274,10 @@ fun PackDetailScreen(
     val pack = state.selectedPackDetail
 
     val screenBody: @Composable () -> Unit = {
+    BackHandler(enabled = state.isReorderMode) {
+        viewModel.onSetReorderMode(false)
+    }
+
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
@@ -729,83 +735,121 @@ fun PackDetailScreen(
                         mode = state.chatSimulatorMode,
                         modifier = Modifier.fillMaxSize()
                     ) {
-                        LazyVerticalGrid(
-                            state = gridState,
-                            userScrollEnabled = !peekState.isActive && !dragDropState.isDragging,
-                            columns = GridCells.Fixed(3),
-                            contentPadding = PaddingValues(12.dp),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                            verticalArrangement = Arrangement.spacedBy(10.dp),
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .pointerInput(pack.identifier, state.isReorderMode) {
-                                    if (state.isReorderMode) {
-                                        detectDragGestures(
-                                            onDragStart = { offset ->
-                                                dragStartFirstStickerId = currentStickers.firstOrNull()?.id
-                                                dragDropState.onStartDrag(offset)
-                                            },
-                                            onDrag = { change, dragAmount ->
-                                                change.consume()
-                                                dragDropState.onDragBy(dragAmount)
-                                            },
-                                            onDragEnd = { dragDropState.onFinishDrag() },
-                                            onDragCancel = { dragDropState.onCancelDrag() }
-                                        )
-                                    }
-                                }
-                        ) {
-                            itemsIndexed(pack.stickers, key = { _, sticker -> sticker.id }) { index, sticker ->
-                                val isDragged = dragDropState.draggingItemKey == sticker.id
-                                val targetScale = if (isDragged) 1.08f else 1f
-                                val animatedScale by animateFloatAsState(
-                                    targetValue = targetScale,
-                                    animationSpec = spring(
-                                        dampingRatio = Spring.DampingRatioNoBouncy,
-                                        stiffness = Spring.StiffnessMedium
-                                    ),
-                                    label = "dragScale"
+                        if (pack.stickers.isEmpty()) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(24.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Info,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(48.dp)
                                 )
-                                val translation = if (isDragged) {
-                                    dragDropState.currentItemTranslation(sticker.id)
-                                } else {
-                                    Offset.Zero
-                                }
-                                val itemWobble = if (isReorderActive && !isDragged) {
-                                    if (index % 2 == 0) wobbleAngle else -wobbleAngle
-                                } else {
-                                    0f
-                                }
-
-                                Box(
-                                    modifier = Modifier
-                                        .then(
-                                            if (!isDragged) {
-                                                Modifier.animateItemPlacement(
-                                                    animationSpec = spring(
-                                                        dampingRatio = Spring.DampingRatioNoBouncy,
-                                                        stiffness = Spring.StiffnessMediumLow
-                                                    )
-                                                )
-                                            } else {
-                                                Modifier
-                                            }
-                                        )
-                                        .zIndex(if (isDragged) 10f else 0f)
-                                        .graphicsLayer {
-                                            translationX = translation.x
-                                            translationY = translation.y
-                                            scaleX = animatedScale
-                                            scaleY = animatedScale
-                                            rotationZ = itemWobble
-                                        }
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Text(
+                                    text = "Este paquete no tiene stickers",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text(
+                                    text = "Añade entre 3 y 30 stickers para poder exportarlo a WhatsApp.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                )
+                                Spacer(modifier = Modifier.height(16.dp))
+                                androidx.compose.material3.Button(
+                                    onClick = { viewModel.onOpenAddStickersDialog() }
                                 ) {
-                                    PackStickerCell(
-                                        sticker = sticker,
-                                        isTrayIcon = index == 0,
-                                        isDragged = isDragged,
-                                        isReorderActive = isReorderActive,
-                                        trayFlashAlpha = if (index == 0) slotZeroFlashAnim.value else 0f,
+                                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("Añadir stickers")
+                                }
+                            }
+                        } else {
+                            LazyVerticalGrid(
+                                state = gridState,
+                                userScrollEnabled = !peekState.isActive && !dragDropState.isDragging,
+                                columns = GridCells.Fixed(3),
+                                contentPadding = PaddingValues(12.dp),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                verticalArrangement = Arrangement.spacedBy(10.dp),
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .pointerInput(pack.identifier, state.isReorderMode) {
+                                        if (state.isReorderMode) {
+                                            detectDragGestures(
+                                                onDragStart = { offset ->
+                                                    dragStartFirstStickerId = currentStickers.firstOrNull()?.id
+                                                    dragDropState.onStartDrag(offset)
+                                                },
+                                                onDrag = { change, dragAmount ->
+                                                    change.consume()
+                                                    dragDropState.onDragBy(dragAmount)
+                                                },
+                                                onDragEnd = { dragDropState.onFinishDrag() },
+                                                onDragCancel = { dragDropState.onCancelDrag() }
+                                            )
+                                        }
+                                    }
+                            ) {
+                                itemsIndexed(pack.stickers, key = { _, sticker -> sticker.id }) { index, sticker ->
+                                    val isDragged = dragDropState.draggingItemKey == sticker.id
+                                    val targetScale = if (isDragged) 1.08f else 1f
+                                    val animatedScale by animateFloatAsState(
+                                        targetValue = targetScale,
+                                        animationSpec = spring(
+                                            dampingRatio = Spring.DampingRatioNoBouncy,
+                                            stiffness = Spring.StiffnessMedium
+                                        ),
+                                        label = "dragScale"
+                                    )
+                                    val itemWobble = if (isReorderActive && !isDragged) {
+                                        if (index % 2 == 0) wobbleAngle else -wobbleAngle
+                                    } else {
+                                        0f
+                                    }
+
+                                    Box(
+                                        modifier = Modifier
+                                            .then(
+                                                if (!isDragged) {
+                                                    Modifier.animateItemPlacement(
+                                                        animationSpec = spring(
+                                                            dampingRatio = Spring.DampingRatioNoBouncy,
+                                                            stiffness = Spring.StiffnessMediumLow
+                                                        )
+                                                    )
+                                                } else {
+                                                    Modifier
+                                                }
+                                            )
+                                            .zIndex(if (isDragged) 10f else 0f)
+                                            .graphicsLayer {
+                                                if (isDragged) {
+                                                    val translation = dragDropState.currentItemTranslation(sticker.id)
+                                                    translationX = translation.x
+                                                    translationY = translation.y
+                                                } else {
+                                                    translationX = 0f
+                                                    translationY = 0f
+                                                }
+                                                scaleX = animatedScale
+                                                scaleY = animatedScale
+                                                rotationZ = itemWobble
+                                            }
+                                    ) {
+                                        PackStickerCell(
+                                            sticker = sticker,
+                                            isTrayIcon = index == 0,
+                                            isDragged = isDragged,
+                                            isReorderActive = isReorderActive,
+                                            trayFlashAlpha = { if (index == 0) slotZeroFlashAnim.value else 0f },
                                         issue = state.stickerIssues[sticker.id],
                                         onClick = {
                                             if (!state.isReorderMode && !dragDropState.isDragging) {
@@ -871,6 +915,7 @@ fun PackDetailScreen(
                         }
                     }
                 }
+            }
 
                 // Bottom Export Button
                 WhatsAppAddButton(
@@ -887,19 +932,21 @@ fun PackDetailScreen(
 
     // Sticker Inspector Sheet Integration
     if (inspectedSticker != null && pack != null) {
+        val currentInspectedSticker = pack.stickers.firstOrNull { it.id == inspectedSticker!!.id } ?: inspectedSticker!!
         StickerInspectorSheet(
-            sticker = inspectedSticker!!,
+            sticker = currentInspectedSticker,
             onDismiss = { inspectedSticker = null },
             onUpdateEmojis = { emojis ->
-                viewModel.onUpdateStickerEmojis(pack.identifier, inspectedSticker!!.id, emojis)
+                viewModel.onUpdateStickerEmojis(pack.identifier, currentInspectedSticker.id, emojis)
+                inspectedSticker = currentInspectedSticker.copy(emojis = emojis)
             },
             onDeleteSticker = {
-                val toDelete = inspectedSticker!!
+                val toDelete = currentInspectedSticker
                 inspectedSticker = null
                 viewModel.onOpenDeleteStickerDialog(toDelete)
             },
             onSetAsTrayIcon = {
-                val targetId = inspectedSticker!!.id
+                val targetId = currentInspectedSticker.id
                 inspectedSticker = null
                 viewModel.onSetStickerAsTrayIcon(pack.identifier, targetId)
                 coroutineScope.launch {
@@ -908,18 +955,18 @@ fun PackDetailScreen(
                 }
             },
             isAnimated = pack.isAnimated,
-            isTrayIcon = pack.stickers.firstOrNull()?.id == inspectedSticker!!.id,
+            isTrayIcon = pack.stickers.firstOrNull()?.id == currentInspectedSticker.id,
             onFullscreenClick = {
-                fullscreenSticker = inspectedSticker
+                fullscreenSticker = currentInspectedSticker
             },
             onShareSticker = {
-                val targetSticker = inspectedSticker ?: return@StickerInspectorSheet
+                val targetSticker = currentInspectedSticker
                 val shareManager = (context.applicationContext as SevenTvApplication).container.stickerShareManager
                 coroutineScope.launch {
                     when (val result = shareManager.prepareStickerForShare(targetSticker, isAnimated = pack.isAnimated)) {
                         is StickerResult.Success -> {
                             if (!shareManager.launchShare(context, result.data)) {
-                                snackbarHostState.showSnackbar("No se encontr? ninguna aplicaci?n para compartir")
+                                snackbarHostState.showSnackbar("No se encontró ninguna aplicación para compartir")
                             }
                         }
                         is StickerResult.Failure -> {
@@ -1371,7 +1418,7 @@ private fun PackStickerCell(
     isTrayIcon: Boolean = false,
     isDragged: Boolean = false,
     isReorderActive: Boolean = false,
-    trayFlashAlpha: Float = 0f,
+    trayFlashAlpha: () -> Float = { 0f },
     issue: StickerIssue? = null,
     onClick: () -> Unit = {},
     onPreviewClick: () -> Unit = {},
@@ -1447,14 +1494,17 @@ private fun PackStickerCell(
         border = cardBorder,
         modifier = cardModifier
     ) {
-        Box(modifier = Modifier.fillMaxWidth()) {
-            if (trayFlashAlpha > 0f && isTrayIcon) {
-                Box(
-                    modifier = Modifier
-                        .matchParentSize()
-                        .background(SunsetYellow.copy(alpha = 0.35f * trayFlashAlpha))
-                )
-            }
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .drawWithContent {
+                    drawContent()
+                    val alpha = trayFlashAlpha()
+                    if (alpha > 0f && isTrayIcon) {
+                        drawRect(SunsetYellow.copy(alpha = 0.35f * alpha))
+                    }
+                }
+        ) {
 
             Column(
                 modifier = Modifier

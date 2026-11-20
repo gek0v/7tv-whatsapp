@@ -714,6 +714,33 @@ class PacksViewModelTest {
         assertEquals("¡Se han añadido 1 nuevos stickers al pack!", state.userFeedbackMessage)
     }
 
+    @Test
+    fun onCancelExportQueueClearsQueueAndEvent() = runTest(testDispatcher) {
+        val packageManager = shadowOf(context.packageManager)
+        packageManager.installPackage(
+            android.content.pm.PackageInfo().apply { packageName = WhatsAppConstants.PACKAGE_WHATSAPP }
+        )
+
+        val p1 = createSamplePack("p1", "Pack 1")
+        val p2 = createSamplePack("p2", "Pack 2")
+        fakeStickerPackRepository.packsFlow.value = listOf(p1, p2)
+        advanceUntilIdle()
+
+        viewModel.onTogglePackSelection("p1")
+        viewModel.onTogglePackSelection("p2")
+        viewModel.onStartBatchWhatsAppExport(context)
+
+        val activeExportState = viewModel.uiState.value
+        assertEquals(1, activeExportState.exportQueue.size)
+        assertNotNull(activeExportState.exportEvent)
+
+        viewModel.onCancelExportQueue()
+
+        val cancelledState = viewModel.uiState.value
+        assertTrue("Export queue should be empty", cancelledState.exportQueue.isEmpty())
+        assertNull("Export event should be null", cancelledState.exportEvent)
+    }
+
     private fun createSamplePack(
         id: String,
         name: String,

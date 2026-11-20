@@ -1,6 +1,7 @@
 package com.seventv.stickers.ui.explore
 
 import android.content.Context
+import androidx.lifecycle.SavedStateHandle
 import com.seventv.stickers.core.common.result.StickerError
 import com.seventv.stickers.core.common.result.StickerResult
 import com.seventv.stickers.core.domain.model.StickerPack
@@ -670,6 +671,54 @@ class ExploreViewModelTest {
         assertEquals(listOf(emote1), viewModel.uiState.value.draftEmotes)
         assertEquals("El paquete supera el límite de 30 stickers (actual: 31)", viewModel.uiState.value.addToPackErrorMessage)
         org.junit.Assert.assertNull(viewModel.uiState.value.addToPackSuccessMessage)
+    }
+
+    @Test
+    fun draftEmotesRestoredFromSavedStateHandleOnProcessDeath() = runTest(testDispatcher) {
+        val handle = SavedStateHandle()
+        val vm1 = ExploreViewModel(
+            sevenTvRepository = fakeSevenTvRepository,
+            stickerPackRepository = fakeStickerPackRepository,
+            savedStateHandle = handle
+        )
+
+        val emote1 = createSampleEmote("1", "emote1")
+        val emote2 = createSampleEmote("2", "emote2")
+        vm1.onToggleDraftEmote(emote1)
+        vm1.onToggleDraftEmote(emote2)
+        vm1.onDraftPackNameChanged("Restored Pack")
+
+        // Simulate Process Death: recreate ViewModel using the populated SavedStateHandle
+        val vm2 = ExploreViewModel(
+            sevenTvRepository = fakeSevenTvRepository,
+            stickerPackRepository = fakeStickerPackRepository,
+            savedStateHandle = handle
+        )
+
+        val restoredState = vm2.uiState.value
+        assertEquals("Restored Pack", restoredState.draftPackName)
+        assertEquals(2, restoredState.draftEmotes.size)
+        assertEquals("1", restoredState.draftEmotes[0].id)
+        assertEquals("2", restoredState.draftEmotes[1].id)
+    }
+
+    @Test
+    fun retrySearchExecutesCurrentSearchOrCategory() = runTest(testDispatcher) {
+        var searchCalls = 0
+        fakeSevenTvRepository.searchEmotesHandler = { _, _, _ ->
+            searchCalls++
+            StickerResult.Failure(StickerError.NetworkError(message = "Failed initially"))
+        }
+
+        viewModel.onQueryChanged("pepe")
+        advanceUntilIdle()
+        assertTrue(viewModel.uiState.value.searchResults is SearchResultsState.Error)
+        assertEquals(1, searchCalls)
+
+        // Retry search
+        viewModel.onRetrySearch()
+        advanceUntilIdle()
+        assertEquals(2, searchCalls)
     }
 
     private class FakeStickerPackRepository : StickerPackRepository {

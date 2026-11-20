@@ -128,6 +128,7 @@ class GridDragDropState(
 
     private var initialItemOffset: IntOffset = IntOffset.Zero
     private var initialItemSize: IntSize = IntSize.Zero
+    private var grabOffset: Offset = Offset.Zero
     private var totalDragDelta: Offset by mutableStateOf(Offset.Zero)
     private var pointerPosition: Offset by mutableStateOf(Offset.Zero)
     private var initialSlotZeroKey: Any? = null
@@ -157,6 +158,7 @@ class GridDragDropState(
         initialItemOffset = hitInfo.offset
         lastKnownLayoutOffset = hitInfo.offset
         initialItemSize = hitInfo.size
+        grabOffset = Offset(offset.x - hitInfo.offset.x, offset.y - hitInfo.offset.y)
         totalDragDelta = Offset.Zero
         pointerPosition = offset
         initialSlotZeroKey = gridState.layoutInfo.visibleItemsInfo.firstOrNull { it.index == 0 }?.key
@@ -180,8 +182,8 @@ class GridDragDropState(
 
         draggingItemIndex = currentIndex
 
-        val desiredTopLeftX = initialItemOffset.x + totalDragDelta.x
-        val desiredTopLeftY = initialItemOffset.y + totalDragDelta.y
+        val desiredTopLeftX = pointerPosition.x - grabOffset.x
+        val desiredTopLeftY = pointerPosition.y - grabOffset.y
         val centerX = desiredTopLeftX + initialItemSize.width / 2f
         val centerY = desiredTopLeftY + initialItemSize.height / 2f
 
@@ -227,8 +229,8 @@ class GridDragDropState(
         } else {
             lastKnownLayoutOffset
         }
-        val desiredX = initialItemOffset.x + totalDragDelta.x
-        val desiredY = initialItemOffset.y + totalDragDelta.y
+        val desiredX = pointerPosition.x - grabOffset.x
+        val desiredY = pointerPosition.y - grabOffset.y
         return Offset(
             x = desiredX - currentOffset.x,
             y = desiredY - currentOffset.y
@@ -261,6 +263,7 @@ class GridDragDropState(
         initialItemOffset = IntOffset.Zero
         lastKnownLayoutOffset = IntOffset.Zero
         initialItemSize = IntSize.Zero
+        grabOffset = Offset.Zero
         totalDragDelta = Offset.Zero
         pointerPosition = Offset.Zero
         initialSlotZeroKey = null

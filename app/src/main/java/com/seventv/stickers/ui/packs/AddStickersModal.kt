@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -214,7 +215,7 @@ fun AddStickersModal(
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                         modifier = Modifier.weight(1f)
                     ) {
-                        itemsIndexed(state.searchResults, key = { index, emote -> "${emote.id}_$index" }) { _, emote ->
+                        items(state.searchResults, key = { it.id }) { emote ->
                             val alreadyInPack = pack.stickers.any { it.emoteId == emote.id }
                             val isCompatible = !pack.isAnimated || emote.isAnimated
                             EmoteSearchResultCard(

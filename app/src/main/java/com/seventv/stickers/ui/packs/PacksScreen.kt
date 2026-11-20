@@ -1,5 +1,6 @@
 package com.seventv.stickers.ui.packs
 
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
@@ -128,11 +129,13 @@ fun PacksScreen(
         pendingExportPackId?.let { packId ->
             if (result.resultCode == android.app.Activity.RESULT_OK && validationError.isNullOrBlank()) {
                 viewModel.markPackSynced(packId)
+                pendingExportPackId = null
+                viewModel.onAdvanceExportQueue(context)
             } else {
                 viewModel.syncWhitelist(context, packId)
+                pendingExportPackId = null
+                viewModel.onCancelExportQueue()
             }
-            pendingExportPackId = null
-            viewModel.onAdvanceExportQueue(context)
         }
     }
 
@@ -183,6 +186,10 @@ fun PacksScreen(
 
     val currentPacks = (state.loadState as? PacksLoadState.Success)?.packs.orEmpty()
     val updateState = updateManager?.state?.collectAsStateWithLifecycle()?.value
+
+    BackHandler(enabled = state.isSelectionMode) {
+        viewModel.onClearSelection()
+    }
 
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),

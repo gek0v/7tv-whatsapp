@@ -1,8 +1,12 @@
 package com.seventv.stickers.ui.explore
 
+import android.os.Bundle
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.viewmodel.CreationExtras
 import com.seventv.stickers.core.common.result.StickerError
 import com.seventv.stickers.core.common.result.StickerResult
 import com.seventv.stickers.core.network.model.EmoteProvider
@@ -27,7 +31,8 @@ import kotlinx.coroutines.launch
 class ExploreViewModel(
     private val sevenTvRepository: SevenTvRepository,
     private val stickerPackRepository: StickerPackRepository,
-    private val aggregatedRepository: AggregatedEmoteCatalogRepository? = null
+    private val aggregatedRepository: AggregatedEmoteCatalogRepository? = null,
+    private val savedStateHandle: SavedStateHandle? = null
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ExploreUiState())
@@ -43,6 +48,19 @@ class ExploreViewModel(
                 _uiState.update { it.copy(existingPacks = packs) }
             }
         }
+
+        // Restore draft state from SavedStateHandle across process death
+        val savedDraftStrings = savedStateHandle?.get<ArrayList<String>>(KEY_DRAFT_EMOTES)
+        val savedDrafts = savedDraftStrings?.mapNotNull { it.toSevenTvEmote() }
+        val savedPackName = savedStateHandle?.get<String>(KEY_DRAFT_PACK_NAME)
+        if (!savedDrafts.isNullOrEmpty() || !savedPackName.isNullOrEmpty()) {
+            _uiState.update { state ->
+                state.copy(
+                    draftEmotes = savedDrafts ?: state.draftEmotes,
+                    draftPackName = savedPackName ?: state.draftPackName
+                )
+            }
+        }
     }
 
     companion object {
@@ -51,6 +69,21 @@ class ExploreViewModel(
         const val MIN_DRAFT_STICKERS = 3
         const val DEFAULT_PACK_NAME = "7TV Pack"
         const val DEFAULT_PUBLISHER = "7TV"
+        const val KEY_DRAFT_EMOTES = "explore_draft_emotes"
+        const val KEY_DRAFT_PACK_NAME = "explore_draft_pack_name"
+    }
+
+    private fun persistDrafts(emotes: List<SevenTvEmote>) {
+        if (savedStateHandle != null) {
+            val encoded = ArrayList(emotes.map { it.toEncodedString() })
+            savedStateHandle[KEY_DRAFT_EMOTES] = encoded
+        }
+    }
+
+    private fun persistDraftPackName(name: String) {
+        if (savedStateHandle != null) {
+            savedStateHandle[KEY_DRAFT_PACK_NAME] = name
+        }
     }
 
     /**
@@ -150,12 +183,26 @@ class ExploreViewModel(
      */
     fun onCategorySelected(category: ExploreCategory) {
         if (_uiState.value.selectedCategory == category && _uiState.value.searchResults !is SearchResultsState.Error) return
+        searchJob?.cancel()
+        prefetchJob?.cancel()
         _uiState.update { it.copy(selectedCategory = category) }
         val currentQuery = _uiState.value.query.trim()
         if (currentQuery.isNotEmpty()) {
             performSearch(currentQuery, null)
         } else {
             loadCategoryEmotes(category)
+        }
+    }
+
+    /**
+     * Retries the previous failed search or category load.
+     */
+    fun onRetrySearch() {
+        val query = _uiState.value.query.trim()
+        if (query.isNotEmpty()) {
+            performSearch(query, null)
+        } else {
+            loadCategoryEmotes(_uiState.value.selectedCategory)
         }
     }
 
@@ -421,15 +468,17 @@ class ExploreViewModel(
         _uiState.update { state ->
             val current = state.draftEmotes
             val exists = current.any { it.id == emote.id }
-            if (exists) {
-                state.copy(draftEmotes = current.filterNot { it.id == emote.id })
+            val newDrafts = if (exists) {
+                current.filterNot { it.id == emote.id }
             } else {
                 if (current.size >= MAX_DRAFT_STICKERS) {
-                    state
+                    current
                 } else {
-                    state.copy(draftEmotes = current + emote)
+                    current + emote
                 }
             }
+            persistDrafts(newDrafts)
+            state.copy(draftEmotes = newDrafts)
         }
     }
 
@@ -437,6 +486,7 @@ class ExploreViewModel(
      * Clears all emotes from the active draft.
      */
     fun onClearDraft() {
+        persistDrafts(emptyList())
         _uiState.update { it.copy(draftEmotes = emptyList()) }
     }
 
@@ -463,6 +513,7 @@ class ExploreViewModel(
      * Updates the proposed pack name in the save dialog.
      */
     fun onDraftPackNameChanged(name: String) {
+        persistDraftPackName(name)
         _uiState.update { it.copy(draftPackName = name) }
     }
 
@@ -506,6 +557,7 @@ class ExploreViewModel(
         viewModelScope.launch {
             when (val result = stickerPackRepository.createPacksFromEmotes(packName, publisher, emotesToSave)) {
                 is StickerResult.Success -> {
+                    persistDrafts(emptyList())
                     _uiState.update {
                         it.copy(
                             draftEmotes = emptyList(),
@@ -582,10 +634,12 @@ class ExploreViewModel(
             when (val result = stickerPackRepository.addEmotesToPack(packIdentifier, emotesToAdd)) {
                 is StickerResult.Success -> {
                     val addedIds = emotesToAdd.map { it.id }.toSet()
+                    val remainingDrafts = _uiState.value.draftEmotes.filterNot { it.id in addedIds }
+                    persistDrafts(remainingDrafts)
                     _uiState.update { state ->
                         state.copy(
                             isAddingToPack = false,
-                            draftEmotes = state.draftEmotes.filterNot { it.id in addedIds },
+                            draftEmotes = remainingDrafts,
                             emotesToAddToPack = emptyList(),
                             addToPackSuccessMessage = "¡${emotesToAdd.size} sticker${if (emotesToAdd.size > 1) "s" else ""} añadido${if (emotesToAdd.size > 1) "s" else ""} a \"$packName\"!",
                             addToPackErrorMessage = null
@@ -645,8 +699,49 @@ class ExploreViewModel(
         private val aggregatedRepository: AggregatedEmoteCatalogRepository? = null
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
+        override fun <T : ViewModel> create(modelClass: Class<T>, extras: CreationExtras): T {
+            val savedStateHandle = extras.createSavedStateHandle()
+            return ExploreViewModel(sevenTvRepository, stickerPackRepository, aggregatedRepository, savedStateHandle) as T
+        }
+
+        @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             return ExploreViewModel(sevenTvRepository, stickerPackRepository, aggregatedRepository) as T
         }
     }
+}
+
+private fun SevenTvEmote.toEncodedString(): String {
+    val scales = availableScales.joinToString(",")
+    return listOf(
+        id,
+        name,
+        isAnimated.toString(),
+        isZeroWidth.toString(),
+        isNsfw.toString(),
+        bestAssetUrl,
+        scales,
+        previewUrl,
+        gifUrl ?: "",
+        provider.name,
+        originalOwner ?: ""
+    ).joinToString("\u001F")
+}
+
+private fun String.toSevenTvEmote(): SevenTvEmote? {
+    val parts = split("\u001F")
+    if (parts.size < 11) return null
+    return SevenTvEmote(
+        id = parts[0],
+        name = parts[1],
+        isAnimated = parts[2].toBoolean(),
+        isZeroWidth = parts[3].toBoolean(),
+        isNsfw = parts[4].toBoolean(),
+        bestAssetUrl = parts[5],
+        availableScales = if (parts[6].isEmpty()) emptyList() else parts[6].split(","),
+        previewUrl = parts[7],
+        gifUrl = parts[8].ifEmpty { null },
+        provider = runCatching { EmoteProvider.valueOf(parts[9]) }.getOrDefault(EmoteProvider.SEVENTV),
+        originalOwner = parts[10].ifEmpty { null }
+    )
 }
