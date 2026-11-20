@@ -57,6 +57,7 @@ class StickerContentProvider : ContentProvider() {
 
     private lateinit var database: AppDatabase
     private lateinit var storageManager: StickerStorageManager
+    private val trayGenerationLock = Any()
 
     override fun onCreate(): Boolean {
         val ctx = context ?: return false
@@ -69,6 +70,7 @@ class StickerContentProvider : ContentProvider() {
         return true
     }
 
+    @Synchronized
     private fun ensureInitialized() {
         if (!::database.isInitialized || !::storageManager.isInitialized) {
             val ctx = context ?: throw IllegalStateException("Context is null in StickerContentProvider")
@@ -148,10 +150,15 @@ class StickerContentProvider : ContentProvider() {
             STICKERS_CODE -> {
                 val c = MatrixCursor(STICKER_COLUMNS)
                 val packId = uri.lastPathSegment ?: ""
-                val pack = database.stickerPackDao().getPackByIdentifierDirect(packId)
+                val pack = try {
+                    database.stickerPackDao().getPackByIdentifierDirect(packId)
+                } catch (_: Exception) {
+                    null
+                }
                 if (pack != null) {
                     val packDir = storageManager.getPackDirectory(packId)
                     val sortedStickers = pack.stickers.sortedBy { it.sortOrder }
+                    val validStickers = mutableListOf<Triple<String, String, String>>()
                     for (sticker in sortedStickers) {
                         val fileName = File(sticker.relativeFilePath).name
                         val stickerFile = File(packDir, fileName)
@@ -166,13 +173,10 @@ class StickerContentProvider : ContentProvider() {
                         }
                         val maxA11y = if (pack.pack.isAnimated) 255 else 125
                         val a11yText = sticker.emoteName.take(maxA11y)
-                        c.addRow(
-                            arrayOf(
-                                fileName,
-                                emojisString,
-                                a11yText
-                            )
-                        )
+                        validStickers.add(Triple(fileName, emojisString, a11yText))
+                    }
+                    for ((fileName, emojis, a11y) in validStickers) {
+                        c.addRow(arrayOf(fileName, emojis, a11y))
                     }
                 }
                 c
@@ -210,45 +214,30 @@ class StickerContentProvider : ContentProvider() {
         }
         val packIdentifier = pathSegments[1]
         val fileName = pathSegments[2]
+
+        // Strict input sanitization preventing path traversal attacks
+        if (!packIdentifier.matches(Regex("^[a-zA-Z0-9_-]+$")) || packIdentifier.contains("..")) {
+            throw SecurityException("Path traversal attempt detected in pack identifier: $packIdentifier")
+        }
+        if (!fileName.matches(Regex("^[a-zA-Z0-9_.-]+$")) || fileName.contains("..")) {
+            throw SecurityException("Path traversal attempt detected: $fileName")
+        }
+
         val packDir = storageManager.getPackDirectory(packIdentifier)
+        val baseDir = storageManager.getPackDirectory("anchor").parentFile
+        if (baseDir != null && !packDir.canonicalPath.startsWith(baseDir.canonicalPath)) {
+            throw SecurityException("Pack directory traversal attempt detected: $packIdentifier")
+        }
+
         val file = File(packDir, fileName)
         if (file.canonicalFile.parentFile?.canonicalPath != packDir.canonicalPath) {
             throw SecurityException("Path traversal attempt detected: $fileName")
         }
         if (!file.exists()) {
             if (fileName == "tray_icon.png") {
-                val legacyWebp = File(packDir, "tray_icon.webp")
-                var trayGenerated = false
-                if (legacyWebp.exists() && legacyWebp.length() > 0) {
-                    val bitmap = android.graphics.BitmapFactory.decodeFile(legacyWebp.absolutePath)
-                    if (bitmap != null) {
-                        val scaled = if (bitmap.width != 96 || bitmap.height != 96) {
-                            android.graphics.Bitmap.createScaledBitmap(bitmap, 96, 96, true)
-                        } else bitmap
-                        java.io.FileOutputStream(file).use { out ->
-                            scaled.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, out)
-                        }
-                        if (scaled != bitmap) scaled.recycle()
-                        bitmap.recycle()
-                        trayGenerated = file.exists() && file.length() > 0
-                    }
-                }
-                if (!trayGenerated) {
-                    val stickerFiles = packDir.listFiles { _, name -> name.startsWith("sticker_") && name.endsWith(".webp") }
-                    val firstSticker = stickerFiles?.firstOrNull { it.length() > 0 }
-                    if (firstSticker != null) {
-                        val extractor = com.seventv.stickers.core.media.animated.DefaultFrameExtractor()
-                        val framesResult = extractor.extractFrames(firstSticker.readBytes())
-                        if (framesResult is com.seventv.stickers.core.common.result.StickerResult.Success && framesResult.data.isNotEmpty()) {
-                            val bmp = framesResult.data.first().bitmap
-                            val normalizer = com.seventv.stickers.core.media.normalizer.CanvasStickerNormalizer()
-                            val trayBmp = normalizer.normalizeToTrayIcon(bmp)
-                            java.io.FileOutputStream(file).use { out ->
-                                trayBmp.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, out)
-                            }
-                            if (trayBmp !== bmp) trayBmp.recycle()
-                            bmp.recycle()
-                        }
+                synchronized(trayGenerationLock) {
+                    if (!file.exists()) {
+                        generateTrayIconSafely(packDir, file)
                     }
                 }
             }
@@ -257,6 +246,91 @@ class StickerContentProvider : ContentProvider() {
             throw FileNotFoundException("Asset not found: $fileName in pack $packIdentifier")
         }
         return file
+    }
+
+    private fun generateTrayIconSafely(packDir: File, file: File) {
+        val legacyWebp = File(packDir, "tray_icon.webp")
+        var trayGenerated = false
+        if (legacyWebp.exists() && legacyWebp.length() > 0) {
+            val bitmap = android.graphics.BitmapFactory.decodeFile(legacyWebp.absolutePath)
+            if (bitmap != null) {
+                var scaled: android.graphics.Bitmap? = null
+                try {
+                    scaled = if (bitmap.width != 96 || bitmap.height != 96) {
+                        android.graphics.Bitmap.createScaledBitmap(bitmap, 96, 96, true)
+                    } else bitmap
+
+                    val tempFile = File.createTempFile("tray_", ".tmp", packDir)
+                    try {
+                        java.io.FileOutputStream(tempFile).use { out ->
+                            scaled.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, out)
+                        }
+                        if (tempFile.length() > 0L) {
+                            if (!tempFile.renameTo(file)) {
+                                tempFile.copyTo(file, overwrite = true)
+                                tempFile.delete()
+                            }
+                            trayGenerated = file.exists() && file.length() > 0L
+                        } else {
+                            tempFile.delete()
+                        }
+                    } catch (_: Exception) {
+                        tempFile.delete()
+                    }
+                } finally {
+                    if (scaled != null && scaled !== bitmap && !scaled.isRecycled) {
+                        scaled.recycle()
+                    }
+                    if (!bitmap.isRecycled) {
+                        bitmap.recycle()
+                    }
+                }
+            }
+        }
+        if (!trayGenerated) {
+            val stickerFiles = packDir.listFiles { _, name -> name.startsWith("sticker_") && name.endsWith(".webp") }
+            val firstSticker = stickerFiles?.firstOrNull { it.length() > 0 }
+            if (firstSticker != null) {
+                val extractor = com.seventv.stickers.core.media.animated.DefaultFrameExtractor()
+                val framesResult = extractor.extractFrames(firstSticker.readBytes())
+                if (framesResult is com.seventv.stickers.core.common.result.StickerResult.Success && framesResult.data.isNotEmpty()) {
+                    val frames = framesResult.data
+                    try {
+                        val bmp = frames.first().bitmap
+                        val normalizer = com.seventv.stickers.core.media.normalizer.CanvasStickerNormalizer()
+                        val trayBmp = normalizer.normalizeToTrayIcon(bmp)
+                        try {
+                            val tempFile = File.createTempFile("tray_", ".tmp", packDir)
+                            try {
+                                java.io.FileOutputStream(tempFile).use { out ->
+                                    trayBmp.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, out)
+                                }
+                                if (tempFile.length() > 0L) {
+                                    if (!tempFile.renameTo(file)) {
+                                        tempFile.copyTo(file, overwrite = true)
+                                        tempFile.delete()
+                                    }
+                                } else {
+                                    tempFile.delete()
+                                }
+                            } catch (_: Exception) {
+                                tempFile.delete()
+                            }
+                        } finally {
+                            if (trayBmp !== bmp && !trayBmp.isRecycled) {
+                                trayBmp.recycle()
+                            }
+                        }
+                    } finally {
+                        for (frame in frames) {
+                            if (!frame.bitmap.isRecycled) {
+                                frame.bitmap.recycle()
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 
     override fun getType(uri: Uri): String? {

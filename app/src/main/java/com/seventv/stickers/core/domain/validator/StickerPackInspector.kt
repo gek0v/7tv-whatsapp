@@ -28,6 +28,7 @@ object StickerPackInspector {
     const val MAX_ANIMATED_BYTES = 500 * 1024L
     const val MIN_FRAME_DURATION_MS = 8
     const val MAX_TOTAL_DURATION_MS = 3000
+    const val MAX_TRAY_BYTES = 50 * 1024L
     const val REQUIRED_DIMENSION = 512
     const val MIN_STICKERS = 3
     const val MAX_STICKERS = 30
@@ -52,6 +53,23 @@ object StickerPackInspector {
             packIssues.add("El paquete tiene ${pack.stickers.size} stickers. WhatsApp requiere un mínimo de 3 stickers por paquete.")
         } else if (pack.stickers.size > MAX_STICKERS) {
             packIssues.add("El paquete tiene ${pack.stickers.size} stickers. WhatsApp permite un máximo de 30 stickers por paquete.")
+        }
+
+        // Tray icon checks
+        if (pack.trayImagePath.isBlank()) {
+            packIssues.add("El paquete no tiene un icono de bandeja asignado.")
+        } else {
+            val trayFile = resolveFile(pack.trayImagePath, baseDir)
+            if (trayFile.exists()) {
+                if (trayFile.length() == 0L) {
+                    packIssues.add("El icono de bandeja (tray icon) está vacío (0 bytes).")
+                } else if (trayFile.length() > MAX_TRAY_BYTES) {
+                    val trayKb = trayFile.length() / 1024
+                    packIssues.add("El icono de bandeja supera el límite de 50 KB de WhatsApp (${trayKb} KB > 50 KB).")
+                }
+            } else if (baseDir != null || File(pack.trayImagePath).isAbsolute) {
+                packIssues.add("El icono de bandeja (tray icon) no existe: ${trayFile.name}")
+            }
         }
 
         // Check each sticker
@@ -107,8 +125,9 @@ object StickerPackInspector {
                 continue
             }
 
-            // Emoji count checks
-            if (sticker.emojis.size < MIN_EMOJIS) {
+            // Emoji count checks (excluding blanks)
+            val validEmojis = sticker.emojis.filter { it.isNotBlank() }
+            if (validEmojis.size < MIN_EMOJIS) {
                 issues.add(
                     StickerIssue(
                         stickerId = sticker.id,
@@ -117,12 +136,12 @@ object StickerPackInspector {
                     )
                 )
                 continue
-            } else if (sticker.emojis.size > MAX_EMOJIS) {
+            } else if (validEmojis.size > MAX_EMOJIS) {
                 issues.add(
                     StickerIssue(
                         stickerId = sticker.id,
                         emoteName = sticker.emoteName,
-                        reason = "Tiene demasiados emojis asociados (${sticker.emojis.size} > máximo 3)."
+                        reason = "Tiene demasiados emojis asociados (${validEmojis.size} > máximo 3)."
                     )
                 )
                 continue

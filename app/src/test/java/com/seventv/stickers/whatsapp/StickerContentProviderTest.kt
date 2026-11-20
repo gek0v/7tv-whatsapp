@@ -386,6 +386,22 @@ class StickerContentProviderTest {
     }
 
     @Test
+    fun openAssetFile_rejectsPathTraversalInPackIdentifier() {
+        val packDir = storageManager.getPackDirectory("pack-asset")
+        packDir.mkdirs()
+
+        val traversalPackUri = Uri.parse("content://$authority/stickers_asset/..%2Fdatabases/file.db")
+        try {
+            provider.openAssetFile(traversalPackUri, "r")
+            fail("Expected SecurityException or FileNotFoundException for packIdentifier path traversal")
+        } catch (e: SecurityException) {
+            assertTrue(e.message!!.contains("Path traversal attempt detected"))
+        } catch (e: FileNotFoundException) {
+            // Also acceptable if resolved as not found
+        }
+    }
+
+    @Test
     fun openAssetFile_throwsFileNotFound_whenFileDoesNotExist() {
         val packDir = storageManager.getPackDirectory("pack-asset")
         packDir.mkdirs()
