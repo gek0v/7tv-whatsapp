@@ -2,6 +2,7 @@ package com.seventv.stickers.core.media.animated
 
 import android.graphics.Bitmap
 import com.seventv.stickers.core.media.model.AnimationFrame
+import com.seventv.stickers.core.media.model.StickerSpecs
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -184,5 +185,15 @@ class FrameThrottlerTest {
         val truncated = throttler.truncateDuration(frames, 3000)
         assertEquals(1, truncated.size)
         assertTrue(truncated.all { it.durationMs >= 10 })
+    }
+
+    @Test
+    fun decimateFramerateNeverExceeds3000MsDurationLimit() {
+        val frames = (0 until 90).map { i ->
+            AnimationFrame(mockBitmap(), 33, (i + 1) * 33)
+        }
+        val decimated = throttler.decimateFramerate(frames, targetFps = 15)
+        assertTrue(decimated.last().timestampMs <= StickerSpecs.ANIMATED_MAX_DURATION_MS)
+        assertTrue(decimated.sumOf { it.durationMs } <= StickerSpecs.ANIMATED_MAX_DURATION_MS)
     }
 }

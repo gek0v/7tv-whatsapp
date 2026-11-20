@@ -1,6 +1,7 @@
 package com.seventv.stickers.core.media
 
 import android.graphics.Bitmap
+import android.graphics.Canvas
 import com.seventv.stickers.core.common.result.StickerError
 import com.seventv.stickers.core.common.result.StickerResult
 import com.seventv.stickers.core.media.animated.AnimatedWebPEncoder
@@ -17,6 +18,8 @@ import com.seventv.stickers.core.media.normalizer.StickerNormalizer
 import com.seventv.stickers.core.media.optimizer.StickerSizeOptimizer
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.IOException
@@ -44,6 +47,8 @@ class StickerMediaPipeline(
 ) {
 
     companion object {
+        private val processingSemaphore = Semaphore(2)
+
         private val ANIMATED_QUALITY_STEPS = floatArrayOf(75f, 65f, 50f, 40f, 30f)
         private val ANIMATED_QUALITY_STEPS_TIER2 = floatArrayOf(50f, 35f, 25f)
         private val ANIMATED_QUALITY_STEPS_TIER3 = floatArrayOf(35f, 25f, 18f)
@@ -69,12 +74,14 @@ class StickerMediaPipeline(
         if (input.bytes.isEmpty()) {
             return@withContext StickerResult.Failure(StickerError.CorruptedSourceData)
         }
-        outputDir.mkdirs()
+        processingSemaphore.withPermit {
+            outputDir.mkdirs()
 
-        if (!input.isAnimated) {
-            processStaticInternal(input.bytes, outputDir)
-        } else {
-            processAnimatedInternal(input.bytes, outputDir)
+            if (!input.isAnimated) {
+                processStaticInternal(input.bytes, outputDir)
+            } else {
+                processAnimatedInternal(input.bytes, outputDir)
+            }
         }
     }
 
@@ -249,6 +256,7 @@ class StickerMediaPipeline(
 
         // Decimate framerate if source FPS > 30 fps (FrameThrottler recycles dropped frames)
         var currentFrames = frameThrottler.decimateFramerate(truncatedFrames, StickerSpecs.ANIMATED_MAX_FPS)
+        currentFrames = frameThrottler.truncateDuration(currentFrames, StickerSpecs.ANIMATED_MAX_DURATION_MS)
         if (currentFrames.isEmpty()) {
             return StickerResult.Failure(StickerError.CorruptedSourceData)
         }
@@ -272,7 +280,10 @@ class StickerMediaPipeline(
             // Tier 2: Secondary decimation step to 15 fps
             val decimated15Frames = frameThrottler.decimateFramerate(currentFrames, SECONDARY_DECIMATE_FPS)
             val didDecimateFurther = decimated15Frames.size < currentFrames.size
-            currentFrames = ensureAtLeastTwoFrames(decimated15Frames)
+            currentFrames = frameThrottler.truncateDuration(
+                ensureAtLeastTwoFrames(decimated15Frames),
+                StickerSpecs.ANIMATED_MAX_DURATION_MS
+            )
 
             if (didDecimateFurther && currentFrames.isNotEmpty()) {
                 val secondaryResult = tryEncodeFrameSequence(
@@ -292,7 +303,10 @@ class StickerMediaPipeline(
             // Tier 3: Tertiary decimation step to 10 fps
             val decimated10Frames = frameThrottler.decimateFramerate(currentFrames, TERTIARY_DECIMATE_FPS)
             val didDecimate10Further = decimated10Frames.size < currentFrames.size
-            currentFrames = ensureAtLeastTwoFrames(decimated10Frames)
+            currentFrames = frameThrottler.truncateDuration(
+                ensureAtLeastTwoFrames(decimated10Frames),
+                StickerSpecs.ANIMATED_MAX_DURATION_MS
+            )
 
             if (didDecimate10Further && currentFrames.isNotEmpty()) {
                 val tertiaryResult = tryEncodeFrameSequence(
@@ -338,8 +352,19 @@ class StickerMediaPipeline(
                         b.recycle()
                     }
                 }
-                val clonedBitmap = firstFrame.bitmap.copy(Bitmap.Config.ARGB_8888, true) ?: firstFrame.bitmap
-                if (clonedBitmap.width > 0 && clonedBitmap.height > 0) {
+                val clonedBitmap = try {
+                    firstFrame.bitmap.copy(Bitmap.Config.ARGB_8888, true)
+                } catch (_: Throwable) {
+                    null
+                } ?: Bitmap.createBitmap(
+                    firstFrame.bitmap.width,
+                    firstFrame.bitmap.height,
+                    Bitmap.Config.ARGB_8888
+                ).also { canvasBitmap ->
+                    val canvas = Canvas(canvasBitmap)
+                    canvas.drawBitmap(firstFrame.bitmap, 0f, 0f, null)
+                }
+                if (clonedBitmap.isMutable && clonedBitmap.width > 0 && clonedBitmap.height > 0) {
                     val p = clonedBitmap.getPixel(0, 0)
                     clonedBitmap.setPixel(0, 0, p xor 0x00000001)
                 }

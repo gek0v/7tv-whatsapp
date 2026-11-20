@@ -313,4 +313,35 @@ class StickerPackInspectorTest {
         assertTrue(issue != null)
         assertTrue(issue!!.reason.contains("emoji", ignoreCase = true))
     }
+
+    @Test
+    fun totalDurationExceeding3000msReportsIssue() {
+        // WhatsApp requires total animation duration <= 3000ms (3 seconds)
+        // 35 frames of 100ms = 3500ms > 3000ms
+        val longAnimBytes = createWebpBytes(
+            isAnimated = true,
+            frameCount = 35,
+            frameDurationsMs = List(35) { 100 }
+        )
+        val longFile = createStickerFile("long.webp", longAnimBytes)
+
+        val pack = StickerPack(
+            identifier = "pack",
+            name = "Pack",
+            publisher = "Test",
+            trayImagePath = "tray.png",
+            isAnimated = true,
+            stickers = listOf(
+                PackSticker(id = "long_id", packIdentifier = "pack", emoteId = "e1", emoteName = "LongEmote", filePath = longFile.absolutePath, emojis = listOf("⏳")),
+                PackSticker(id = "2", packIdentifier = "pack", emoteId = "e2", emoteName = "A2", filePath = createStickerFile("a2.webp", createWebpBytes(true)).absolutePath),
+                PackSticker(id = "3", packIdentifier = "pack", emoteId = "e3", emoteName = "A3", filePath = createStickerFile("a3.webp", createWebpBytes(true)).absolutePath)
+            )
+        )
+
+        val report = StickerPackInspector.inspect(pack)
+        assertFalse(report.isValid)
+        val issue = report.issues.find { it.stickerId == "long_id" }
+        assertTrue(issue != null)
+        assertTrue(issue!!.reason.contains("3.000 ms", ignoreCase = true))
+    }
 }

@@ -97,11 +97,21 @@ class FrameThrottler {
 
         for (chunk in chunks) {
             val kept = chunk.first()
-            val totalChunkDuration = chunk.sumOf { it.durationMs }.coerceAtLeast(10)
+            var totalChunkDuration = chunk.sumOf { it.durationMs }.coerceAtLeast(10)
+            if (currentTimestamp + totalChunkDuration > StickerSpecs.ANIMATED_MAX_DURATION_MS) {
+                totalChunkDuration = (StickerSpecs.ANIMATED_MAX_DURATION_MS - currentTimestamp).coerceAtLeast(10)
+            }
             currentTimestamp += totalChunkDuration
             result.add(kept.copy(durationMs = totalChunkDuration, timestampMs = currentTimestamp))
             for (i in 1 until chunk.size) {
                 dropped.add(chunk[i])
+            }
+            if (currentTimestamp >= StickerSpecs.ANIMATED_MAX_DURATION_MS) {
+                val chunkIdx = chunks.indexOf(chunk)
+                for (j in (chunkIdx + 1) until chunks.size) {
+                    dropped.addAll(chunks[j])
+                }
+                break
             }
         }
 

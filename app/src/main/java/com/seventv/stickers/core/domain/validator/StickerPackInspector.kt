@@ -27,7 +27,7 @@ object StickerPackInspector {
     const val MAX_STATIC_BYTES = 100 * 1024L
     const val MAX_ANIMATED_BYTES = 500 * 1024L
     const val MIN_FRAME_DURATION_MS = 8
-    const val MAX_TOTAL_DURATION_MS = 10000
+    const val MAX_TOTAL_DURATION_MS = 3000
     const val REQUIRED_DIMENSION = 512
     const val MIN_STICKERS = 3
     const val MAX_STICKERS = 30
@@ -180,7 +180,7 @@ object StickerPackInspector {
                         StickerIssue(
                             stickerId = sticker.id,
                             emoteName = sticker.emoteName,
-                            reason = "La duración total supera el máximo de WhatsApp (${metadata.totalDurationMs} ms > 10.000 ms)."
+                            reason = "La duración total supera el máximo de WhatsApp (${metadata.totalDurationMs} ms > 3.000 ms)."
                         )
                     )
                     continue
