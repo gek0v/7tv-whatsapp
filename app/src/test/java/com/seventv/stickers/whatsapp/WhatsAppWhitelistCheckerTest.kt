@@ -3,6 +3,7 @@ package com.seventv.stickers.whatsapp
 import android.content.ContentProvider
 import android.content.ContentValues
 import android.content.Context
+import android.content.pm.PackageInfo
 import android.content.pm.ProviderInfo
 import android.database.Cursor
 import android.database.MatrixCursor
@@ -17,6 +18,7 @@ import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
+import org.robolectric.Shadows
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
@@ -161,5 +163,28 @@ class WhatsAppWhitelistCheckerTest {
             "content://com.whatsapp.provider.sticker_whitelist_check/is_whitelisted?authority=com.custom.authority&identifier=pack_custom",
             MockWhitelistContentProvider.lastQueriedUri.toString()
         )
+    }
+
+    @Test
+    fun returnsFalse_whenProviderBelongsToUntrustedPackage() {
+        val cursor = MatrixCursor(arrayOf(WhatsAppConstants.WHITELIST_QUERY_RESULT_COLUMN)).apply {
+            addRow(arrayOf(1))
+        }
+        MockWhitelistContentProvider.cursorToReturn = cursor
+
+        val untrustedProviderInfo = ProviderInfo().apply {
+            authority = WhatsAppConstants.WHITELIST_AUTHORITY
+            packageName = "com.untrusted.fake_whatsapp"
+        }
+        val shadowPm = Shadows.shadowOf(context.packageManager)
+        shadowPm.addPackage(
+            PackageInfo().apply {
+                packageName = "com.untrusted.fake_whatsapp"
+                providers = arrayOf(untrustedProviderInfo)
+            }
+        )
+
+        val isWhitelisted = WhatsAppWhitelistChecker.isPackWhitelisted(context, "test_pack_1")
+        assertFalse(isWhitelisted)
     }
 }

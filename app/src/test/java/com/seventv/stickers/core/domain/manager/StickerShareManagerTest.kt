@@ -63,6 +63,8 @@ class StickerShareManagerTest {
         assertEquals("image/webp", intent.type)
         assertEquals(testUri, intent.getParcelableExtra(Intent.EXTRA_STREAM))
         assertEquals("com.whatsapp", intent.`package`)
+        assertNotNull(intent.clipData)
+        assertEquals(testUri, intent.clipData?.getItemAt(0)?.uri)
         assertTrue((intent.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION) != 0)
         assertTrue((intent.flags and Intent.FLAG_ACTIVITY_NEW_TASK) != 0)
     }
@@ -83,6 +85,8 @@ class StickerShareManagerTest {
 
         assertEquals(Intent.ACTION_CHOOSER, chooserIntent.action)
         assertEquals("Compartir imagen WebP", chooserIntent.getStringExtra(Intent.EXTRA_TITLE))
+        assertNotNull(chooserIntent.clipData)
+        assertEquals(testUri, chooserIntent.clipData?.getItemAt(0)?.uri)
         assertTrue((chooserIntent.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION) != 0)
         assertTrue((chooserIntent.flags and Intent.FLAG_ACTIVITY_NEW_TASK) != 0)
 

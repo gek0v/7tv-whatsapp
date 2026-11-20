@@ -21,6 +21,15 @@ object WhatsAppWhitelistChecker {
         authority: String
     ): Boolean {
         return try {
+            val providerInfo = context.packageManager.resolveContentProvider(whitelistAuthority, 0)
+            if (providerInfo != null) {
+                val pkgName = providerInfo.packageName
+                if (pkgName != WhatsAppConstants.PACKAGE_WHATSAPP &&
+                    pkgName != WhatsAppConstants.PACKAGE_WHATSAPP_SMB) {
+                    return false
+                }
+            }
+
             val queryUri = Uri.Builder()
                 .scheme("content")
                 .authority(whitelistAuthority)

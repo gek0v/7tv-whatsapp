@@ -344,4 +344,71 @@ class StickerPackInspectorTest {
         assertTrue(issue != null)
         assertTrue(issue!!.reason.contains("3.000 ms", ignoreCase = true))
     }
+
+    @Test
+    fun trayIconExceeding50KbReportsIssue() {
+        val heavyTrayFile = tempFolder.newFile("heavy_tray.png")
+        heavyTrayFile.writeBytes(ByteArray(51 * 1024)) // 51 KB > 50 KB
+
+        val pack = StickerPack(
+            identifier = "pack",
+            name = "Pack",
+            publisher = "Test",
+            trayImagePath = heavyTrayFile.absolutePath,
+            isAnimated = false,
+            stickers = listOf(
+                PackSticker(id = "1", packIdentifier = "pack", emoteId = "e1", emoteName = "S1", filePath = createStickerFile("s1.webp", createWebpBytes(false)).absolutePath, emojis = listOf("😀")),
+                PackSticker(id = "2", packIdentifier = "pack", emoteId = "e2", emoteName = "S2", filePath = createStickerFile("s2.webp", createWebpBytes(false)).absolutePath, emojis = listOf("😀")),
+                PackSticker(id = "3", packIdentifier = "pack", emoteId = "e3", emoteName = "S3", filePath = createStickerFile("s3.webp", createWebpBytes(false)).absolutePath, emojis = listOf("😀"))
+            )
+        )
+
+        val report = StickerPackInspector.inspect(pack)
+        assertFalse(report.isValid)
+        assertTrue(report.packIssues.any { it.contains("50 KB", ignoreCase = true) })
+    }
+
+    @Test
+    fun trayIconMissingReportsIssue() {
+        val missingTray = File(tempFolder.root, "missing_tray.png")
+        val pack = StickerPack(
+            identifier = "pack",
+            name = "Pack",
+            publisher = "Test",
+            trayImagePath = missingTray.absolutePath,
+            isAnimated = false,
+            stickers = listOf(
+                PackSticker(id = "1", packIdentifier = "pack", emoteId = "e1", emoteName = "S1", filePath = createStickerFile("s1.webp", createWebpBytes(false)).absolutePath, emojis = listOf("😀")),
+                PackSticker(id = "2", packIdentifier = "pack", emoteId = "e2", emoteName = "S2", filePath = createStickerFile("s2.webp", createWebpBytes(false)).absolutePath, emojis = listOf("😀")),
+                PackSticker(id = "3", packIdentifier = "pack", emoteId = "e3", emoteName = "S3", filePath = createStickerFile("s3.webp", createWebpBytes(false)).absolutePath, emojis = listOf("😀"))
+            )
+        )
+
+        val report = StickerPackInspector.inspect(pack)
+        assertFalse(report.isValid)
+        assertTrue(report.packIssues.any { it.contains("no existe", ignoreCase = true) })
+    }
+
+    @Test
+    fun stickerWithBlankEmojisReportsIssue() {
+        val s1 = createStickerFile("s1.webp", createWebpBytes(isAnimated = false))
+        val pack = StickerPack(
+            identifier = "pack",
+            name = "Pack",
+            publisher = "Test",
+            trayImagePath = "tray.png",
+            isAnimated = false,
+            stickers = listOf(
+                PackSticker(id = "blank_emoji_id", packIdentifier = "pack", emoteId = "e1", emoteName = "BlankEmoji", filePath = s1.absolutePath, emojis = listOf(" ", "")),
+                PackSticker(id = "2", packIdentifier = "pack", emoteId = "e2", emoteName = "S2", filePath = createStickerFile("s2.webp", createWebpBytes(false)).absolutePath, emojis = listOf("😀")),
+                PackSticker(id = "3", packIdentifier = "pack", emoteId = "e3", emoteName = "S3", filePath = createStickerFile("s3.webp", createWebpBytes(false)).absolutePath, emojis = listOf("😀"))
+            )
+        )
+
+        val report = StickerPackInspector.inspect(pack)
+        assertFalse(report.isValid)
+        val issue = report.issues.find { it.stickerId == "blank_emoji_id" }
+        assertTrue(issue != null)
+        assertTrue(issue!!.reason.contains("emoji", ignoreCase = true))
+    }
 }

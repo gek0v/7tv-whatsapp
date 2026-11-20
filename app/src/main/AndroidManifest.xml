@@ -45,6 +45,7 @@
             android:authorities="com.seventv.stickers.stickercontentprovider"
             android:enabled="true"
             android:exported="true"
+            android:grantUriPermissions="true"
             android:readPermission="com.whatsapp.sticker.READ" />
 
         <provider

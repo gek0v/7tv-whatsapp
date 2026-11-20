@@ -723,6 +723,9 @@ class PacksViewModelTest {
         originStreamerName: String? = null
     ): StickerPack {
         val packDir = File(context.cacheDir, "test_packs/$id").apply { mkdirs() }
+        val trayFile = File(packDir, "tray.png").apply {
+            writeBytes(ByteArray(100))
+        }
         val webpBytes = createMinimalWebp(isAnimated)
         val stickers = (1..3).map { i ->
             val file = File(packDir, "sticker_$i.webp").apply {
@@ -743,7 +746,7 @@ class PacksViewModelTest {
             identifier = id,
             name = name,
             publisher = "7TV Stickers",
-            trayImagePath = "/data/pack/$id/tray.png",
+            trayImagePath = trayFile.absolutePath,
             isAnimated = isAnimated,
             isWhitelisted = isWhitelisted,
             stickers = stickers,
