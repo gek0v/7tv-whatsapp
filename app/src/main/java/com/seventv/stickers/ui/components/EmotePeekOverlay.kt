@@ -326,38 +326,41 @@ fun Modifier.emotePeekGesture(
                 }
 
                 if (longPressFired) {
-                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                    val coords = coordsHolder.coords
-                    val bounds = coords?.takeIf { it.isAttached }?.boundsInRoot() ?: Rect(
-                        startPosition.x - 40f,
-                        startPosition.y - 40f,
-                        startPosition.x + 40f,
-                        startPosition.y + 40f
-                    )
-                    currentStart(bounds)
-                    val initialRootPos = coords?.takeIf { it.isAttached }?.localToRoot(startPosition) ?: startPosition
-                    currentMove(initialRootPos)
+                    try {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        val coords = coordsHolder.coords
+                        val bounds = coords?.takeIf { it.isAttached }?.boundsInRoot() ?: Rect(
+                            startPosition.x - 40f,
+                            startPosition.y - 40f,
+                            startPosition.x + 40f,
+                            startPosition.y + 40f
+                        )
+                        currentStart(bounds)
+                        val initialRootPos = coords?.takeIf { it.isAttached }?.localToRoot(startPosition) ?: startPosition
+                        currentMove(initialRootPos)
 
-                    // Track continuous drag movements in Initial pass and consume them
-                    while (true) {
-                        val event = awaitPointerEvent(PointerEventPass.Initial)
-                        event.changes.forEach { it.consume() }
+                        // Track continuous drag movements in Initial pass and consume them
+                        while (true) {
+                            val event = awaitPointerEvent(PointerEventPass.Initial)
+                            event.changes.forEach { it.consume() }
 
-                        val activeChange = event.changes.firstOrNull { it.id == down.id }
-                            ?: event.changes.firstOrNull()
+                            val activeChange = event.changes.firstOrNull { it.id == down.id }
+                                ?: event.changes.firstOrNull()
 
-                        if (activeChange == null || !activeChange.pressed) {
-                            currentRelease()
-                            break
+                            if (activeChange == null || !activeChange.pressed) {
+                                break
+                            }
+
+                            val activeCoords = coordsHolder.coords
+                            val rootPos = if (activeCoords != null && activeCoords.isAttached) {
+                                activeCoords.localToRoot(activeChange.position)
+                            } else {
+                                activeChange.position
+                            }
+                            currentMove(rootPos)
                         }
-
-                        val activeCoords = coordsHolder.coords
-                        val rootPos = if (activeCoords != null && activeCoords.isAttached) {
-                            activeCoords.localToRoot(activeChange.position)
-                        } else {
-                            activeChange.position
-                        }
-                        currentMove(rootPos)
+                    } finally {
+                        currentRelease()
                     }
                 }
             }

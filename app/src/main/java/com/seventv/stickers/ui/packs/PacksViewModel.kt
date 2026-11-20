@@ -358,6 +358,15 @@ class PacksViewModel(
         }
     }
 
+    fun onCancelExportQueue() {
+        _uiState.update {
+            it.copy(
+                exportQueue = emptyList(),
+                exportEvent = null
+            )
+        }
+    }
+
     // --- Merge Packs ---
     fun onOpenMergeDialog() {
         val packs = (_uiState.value.loadState as? PacksLoadState.Success)?.packs ?: return
@@ -819,6 +828,7 @@ class PacksViewModel(
         viewModelScope.launch {
             when (val result = stickerPackRepository.addEmotesToPack(sync.packIdentifier, emotesToAdd)) {
                 is com.seventv.stickers.core.common.result.StickerResult.Success -> {
+                    onSelectPackDetail(sync.packIdentifier)
                     _uiState.update {
                         it.copy(
                             syncState = PackSyncState.Idle,
