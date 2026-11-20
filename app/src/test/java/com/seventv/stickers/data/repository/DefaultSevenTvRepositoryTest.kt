@@ -583,6 +583,28 @@ class DefaultSevenTvRepositoryTest {
     }
 
     @Test
+    fun searchEmotesWithGraphQlErrorsReturnsNetworkError() = runTest(testDispatcher) {
+        fakeApi.searchEmotesHandler = { _ ->
+            Response.success(
+                SevenTvGqlResponse(
+                    data = null,
+                    errors = listOf(
+                        com.seventv.stickers.core.network.dto.SevenTvGqlError(
+                            message = "Rate limit exceeded"
+                        )
+                    )
+                )
+            )
+        }
+
+        val result = repository.searchEmotes("test")
+        assertTrue(result is StickerResult.Failure)
+        val error = (result as StickerResult.Failure).error
+        assertTrue(error is StickerError.NetworkError)
+        assertEquals("Rate limit exceeded", (error as StickerError.NetworkError).message)
+    }
+
+    @Test
     fun coroutineCancellationExceptionIsRethrown() = runTest(testDispatcher) {
         fakeApi.getEmoteHandler = {
             throw CancellationException("Job was cancelled")

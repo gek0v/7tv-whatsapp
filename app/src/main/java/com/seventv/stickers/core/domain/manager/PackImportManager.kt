@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import java.util.concurrent.atomic.AtomicBoolean
 
 sealed interface PackImportProgress {
     data object Idle : PackImportProgress
@@ -36,63 +37,68 @@ class PackImportManager(
     private val stickerPackRepository: StickerPackRepository,
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 ) {
+    private val isImportActive = AtomicBoolean(false)
     private val _progress = MutableStateFlow<PackImportProgress>(PackImportProgress.Idle)
     val progress: StateFlow<PackImportProgress> = _progress.asStateFlow()
 
-    fun isImporting(): Boolean = _progress.value is PackImportProgress.Running
+    fun isImporting(): Boolean = isImportActive.get() || _progress.value is PackImportProgress.Running
 
     fun startImport(streamerName: String, plans: List<SplitPlan>, originSetId: String? = null) {
         if (plans.isEmpty()) return
-        if (isImporting()) return
+        if (!isImportActive.compareAndSet(false, true)) return
 
         scope.launch {
-            val allCreatedPacks = mutableListOf<StickerPack>()
+            try {
+                val allCreatedPacks = mutableListOf<StickerPack>()
 
-            for ((index, plan) in plans.withIndex()) {
-                _progress.value = PackImportProgress.Running(
-                    streamerName = streamerName,
-                    currentPack = index + 1,
-                    totalPacks = plans.size,
-                    currentSticker = 0,
-                    totalStickers = plan.emotes.size
-                )
+                for ((index, plan) in plans.withIndex()) {
+                    _progress.value = PackImportProgress.Running(
+                        streamerName = streamerName,
+                        currentPack = index + 1,
+                        totalPacks = plans.size,
+                        currentSticker = 0,
+                        totalStickers = plan.emotes.size
+                    )
 
-                val result = stickerPackRepository.createPacksFromEmotes(
-                    basePackName = plan.packName,
-                    publisher = streamerName,
-                    emotes = plan.emotes,
-                    onProgress = { current, total ->
-                        _progress.value = PackImportProgress.Running(
-                            streamerName = streamerName,
-                            currentPack = index + 1,
-                            totalPacks = plans.size,
-                            currentSticker = current,
-                            totalStickers = total
-                        )
-                    },
-                    originSetId = originSetId,
-                    originStreamerName = streamerName
-                )
+                    val result = stickerPackRepository.createPacksFromEmotes(
+                        basePackName = plan.packName,
+                        publisher = streamerName,
+                        emotes = plan.emotes,
+                        onProgress = { current, total ->
+                            _progress.value = PackImportProgress.Running(
+                                streamerName = streamerName,
+                                currentPack = index + 1,
+                                totalPacks = plans.size,
+                                currentSticker = current,
+                                totalStickers = total
+                            )
+                        },
+                        originSetId = originSetId,
+                        originStreamerName = streamerName
+                    )
 
-                when (result) {
-                    is StickerResult.Success -> {
-                        allCreatedPacks.addAll(result.data)
-                    }
-                    is StickerResult.Failure -> {
-                        _progress.value = PackImportProgress.Failed(
-                            streamerName = streamerName,
-                            errorMessage = "Error creando el pack '${plan.packName}': ${result.error}"
-                        )
-                        return@launch
+                    when (result) {
+                        is StickerResult.Success -> {
+                            allCreatedPacks.addAll(result.data)
+                        }
+                        is StickerResult.Failure -> {
+                            _progress.value = PackImportProgress.Failed(
+                                streamerName = streamerName,
+                                errorMessage = "Error creando el pack '${plan.packName}': ${result.error}"
+                            )
+                            return@launch
+                        }
                     }
                 }
-            }
 
-            _progress.value = PackImportProgress.Completed(
-                streamerName = streamerName,
-                packsCount = allCreatedPacks.size,
-                createdPacks = allCreatedPacks
-            )
+                _progress.value = PackImportProgress.Completed(
+                    streamerName = streamerName,
+                    packsCount = allCreatedPacks.size,
+                    createdPacks = allCreatedPacks
+                )
+            } finally {
+                isImportActive.set(false)
+            }
         }
     }
 

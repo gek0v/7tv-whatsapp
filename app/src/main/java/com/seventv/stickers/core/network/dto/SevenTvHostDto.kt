@@ -4,6 +4,6 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class SevenTvHostDto(
-    val url: String,
+    val url: String = "",
     val files: List<SevenTvFileDto> = emptyList()
 )

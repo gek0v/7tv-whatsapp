@@ -88,6 +88,23 @@ class PackImportManagerTest {
         assertEquals(PackImportProgress.Idle, manager.progress.value)
     }
 
+    @Test
+    fun concurrentStartImportIsIgnored() = runTest(testDispatcher) {
+        val emotes = (1..3).map { createSampleEmote("id_$it", "emote_$it") }
+        val plans1 = listOf(SplitPlan(packName = "Pack 1", isAnimated = false, emotes = emotes))
+        val plans2 = listOf(SplitPlan(packName = "Pack 2", isAnimated = false, emotes = emotes))
+
+        fakeRepository.hangOnImport = true
+        manager.startImport("Streamer1", plans1)
+        manager.startImport("Streamer2", plans2)
+
+        testDispatcher.scheduler.runCurrent()
+
+        val state = manager.progress.value
+        assertTrue("State should be Running for Streamer1", state is PackImportProgress.Running)
+        assertEquals("Streamer1", (state as PackImportProgress.Running).streamerName)
+    }
+
     private fun createSampleEmote(id: String, name: String) = SevenTvEmote(
         id = id,
         name = name,
@@ -100,6 +117,7 @@ class PackImportManagerTest {
 
     private class FakeTestStickerPackRepository : StickerPackRepository {
         var shouldFail = false
+        var hangOnImport = false
 
         override fun observeAllPacks(): Flow<List<StickerPack>> = flowOf(emptyList())
         override suspend fun getPack(identifier: String): StickerResult<StickerPack> =
@@ -113,6 +131,9 @@ class PackImportManagerTest {
             originSetId: String?,
             originStreamerName: String?
         ): StickerResult<List<StickerPack>> {
+            if (hangOnImport) {
+                kotlinx.coroutines.awaitCancellation()
+            }
             if (shouldFail) {
                 return StickerResult.Failure(StickerError.CorruptedSourceData)
             }

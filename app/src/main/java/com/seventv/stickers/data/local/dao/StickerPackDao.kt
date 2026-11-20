@@ -40,6 +40,37 @@ interface StickerPackDao {
         insertStickers(stickers)
     }
 
+    @Transaction
+    suspend fun replacePacksWithMerged(
+        deletePackIds: List<String>,
+        newPacksWithStickers: List<Pair<StickerPackEntity, List<StickerEntity>>>
+    ) {
+        for ((pack, stickers) in newPacksWithStickers) {
+            insertPack(pack)
+            insertStickers(stickers)
+        }
+        deletePacks(deletePackIds)
+    }
+
+    @Transaction
+    suspend fun addStickersIfUnderLimit(
+        packIdentifier: String,
+        stickers: List<StickerEntity>,
+        maxStickers: Int = 30
+    ): Boolean {
+        val current = getPackByIdentifier(packIdentifier) ?: return false
+        if (current.stickers.size + stickers.size > maxStickers) {
+            return false
+        }
+        val startSortOrder = (current.stickers.maxOfOrNull { it.sortOrder } ?: -1) + 1
+        val updatedStickers = stickers.mapIndexed { idx, s ->
+            s.copy(sortOrder = startSortOrder + idx)
+        }
+        insertStickers(updatedStickers)
+        incrementImageDataVersion(packIdentifier)
+        return true
+    }
+
     @Query("UPDATE sticker_packs SET isWhitelisted = :isWhitelisted, lastSyncedVersion = CASE WHEN :isWhitelisted = 0 THEN 0 ELSE lastSyncedVersion END WHERE identifier = :identifier")
     suspend fun updateWhitelisted(identifier: String, isWhitelisted: Boolean)
 

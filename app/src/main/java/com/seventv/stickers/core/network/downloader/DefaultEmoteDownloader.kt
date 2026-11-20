@@ -88,47 +88,51 @@ class DefaultEmoteDownloader(
         }
 
         var responseContentType: String? = null
-        val downloadResult = downloadToFile(emote.bestAssetUrl, tempFile) { response ->
-            responseContentType = response.header("Content-Type")
-        }
-
-        if (downloadResult is StickerResult.Failure) {
-            tempFile.delete()
-            return@withContext downloadResult
-        }
-
-        // Atomic rename / move to cache target file
         try {
-            try {
-                Files.move(
-                    tempFile.toPath(),
-                    cachedFile.toPath(),
-                    StandardCopyOption.REPLACE_EXISTING,
-                    StandardCopyOption.ATOMIC_MOVE
-                )
-            } catch (e: AtomicMoveNotSupportedException) {
-                Files.move(
-                    tempFile.toPath(),
-                    cachedFile.toPath(),
-                    StandardCopyOption.REPLACE_EXISTING
-                )
+            val downloadResult = downloadToFile(emote.bestAssetUrl, tempFile) { response ->
+                responseContentType = response.header("Content-Type")
             }
 
-            val bytes = cachedFile.readBytes()
-            val format = resolveFormat(emote.bestAssetUrl, responseContentType, bytes)
-            StickerResult.Success(
-                DownloadedEmoteAsset(
-                    emoteId = emote.id,
-                    emoteName = emote.name,
-                    bytes = bytes,
-                    isAnimated = emote.isAnimated,
-                    format = format
+            if (downloadResult is StickerResult.Failure) {
+                return@withContext downloadResult
+            }
+
+            // Atomic rename / move to cache target file
+            try {
+                try {
+                    Files.move(
+                        tempFile.toPath(),
+                        cachedFile.toPath(),
+                        StandardCopyOption.REPLACE_EXISTING,
+                        StandardCopyOption.ATOMIC_MOVE
+                    )
+                } catch (e: AtomicMoveNotSupportedException) {
+                    Files.move(
+                        tempFile.toPath(),
+                        cachedFile.toPath(),
+                        StandardCopyOption.REPLACE_EXISTING
+                    )
+                }
+
+                val bytes = cachedFile.readBytes()
+                val format = resolveFormat(emote.bestAssetUrl, responseContentType, bytes)
+                StickerResult.Success(
+                    DownloadedEmoteAsset(
+                        emoteId = emote.id,
+                        emoteName = emote.name,
+                        bytes = bytes,
+                        isAnimated = emote.isAnimated,
+                        format = format
+                    )
                 )
-            )
-        } catch (e: Exception) {
-            if (e is CancellationException) throw e
-            tempFile.delete()
-            StickerResult.Failure(StickerError.StorageIoError(e))
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                StickerResult.Failure(StickerError.StorageIoError(e))
+            }
+        } finally {
+            if (tempFile.exists()) {
+                try { tempFile.delete() } catch (_: Exception) {}
+            }
         }
     }
 
@@ -158,6 +162,9 @@ class DefaultEmoteDownloader(
                 downloadToStream(url, outputStream, onResponse)
             }
         } catch (e: Exception) {
+            if (targetFile.exists()) {
+                try { targetFile.delete() } catch (_: Exception) {}
+            }
             if (e is CancellationException) throw e
             StickerResult.Failure(StickerError.StorageIoError(e))
         }

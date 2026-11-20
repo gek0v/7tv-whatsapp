@@ -41,8 +41,8 @@ data class SevenTvGqlUsersData(
 
 @Serializable
 data class SevenTvGqlUserDto(
-    val id: String,
-    val username: String,
+    val id: String = "",
+    val username: String = "",
     @SerialName("display_name")
     val displayName: String? = null,
     @SerialName("avatar_url")
@@ -65,8 +65,8 @@ data class SevenTvGqlUserConnectionDto(
 
 @Serializable
 data class SevenTvGqlEmoteSetRefDto(
-    val id: String,
-    val name: String,
+    val id: String = "",
+    val name: String = "",
     val capacity: Int? = null,
     @SerialName("emote_count")
     val emoteCount: Int = 0

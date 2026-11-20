@@ -15,6 +15,7 @@ import com.seventv.stickers.core.common.result.StickerError
 import com.seventv.stickers.core.common.result.StickerResult
 import com.seventv.stickers.core.domain.model.StickerPack
 import com.seventv.stickers.core.media.StickerMediaPipeline
+import com.seventv.stickers.core.network.model.ChannelSearchResult
 import com.seventv.stickers.core.network.model.DownloadedEmoteAsset
 import com.seventv.stickers.core.network.model.SevenTvEmote
 import com.seventv.stickers.core.network.model.SevenTvEmoteSet
@@ -1193,9 +1194,172 @@ class DefaultStickerPackRepositoryTest {
         assertTrue((missingSticker as StickerResult.Failure).error is StickerError.ValidationError)
     }
 
+    @Test
+    fun updateStickerEmojisRejectsInvalidCounts() = runTest(testDispatcher) {
+        val packId = "pack-emoji-val"
+        val packEntity = StickerPackEntity(
+            identifier = packId,
+            name = "Emoji Validation Pack",
+            publisher = "Tester",
+            trayImageRelativePath = "tray.png",
+            isAnimated = false,
+            isWhitelisted = false,
+            createdAt = 1000L
+        )
+        val sticker = StickerEntity(
+            id = "s-em-val",
+            packIdentifier = packId,
+            emoteId = "e-1",
+            emoteName = "EmoteVal",
+            relativeFilePath = "path.webp",
+            emojis = listOf("😀"),
+            fileLength = 100L,
+            sortOrder = 0
+        )
+        packDao.insertPackWithStickers(packEntity, listOf(sticker))
+
+        val emptyResult = repository.updateStickerEmojis("s-em-val", emptyList())
+        assertTrue("Empty emojis should fail", emptyResult is StickerResult.Failure)
+        assertTrue((emptyResult as StickerResult.Failure).error is StickerError.ValidationError)
+
+        val blankResult = repository.updateStickerEmojis("s-em-val", listOf("   ", ""))
+        assertTrue("Blank emojis should fail", blankResult is StickerResult.Failure)
+        assertTrue((blankResult as StickerResult.Failure).error is StickerError.ValidationError)
+
+        val excessResult = repository.updateStickerEmojis("s-em-val", listOf("😀", "😃", "😄", "😁"))
+        assertTrue("More than 3 emojis should fail", excessResult is StickerResult.Failure)
+        assertTrue((excessResult as StickerResult.Failure).error is StickerError.ValidationError)
+
+        val validResult = repository.updateStickerEmojis("s-em-val", listOf("🔥", "🎉"))
+        assertTrue("1-3 emojis should succeed", validResult is StickerResult.Success)
+    }
+
+    @Test
+    fun checkForPackUpdatesFallsBackToChannelData() = runTest(testDispatcher) {
+        val packId = "pack-update-fallback"
+        val packEntity = StickerPackEntity(
+            identifier = packId,
+            name = "Update Fallback Pack",
+            publisher = "Tester",
+            trayImageRelativePath = "tray.png",
+            isAnimated = false,
+            isWhitelisted = false,
+            createdAt = 1000L,
+            originSetId = "synthetic-set-id",
+            originStreamerName = "cool_streamer"
+        )
+        val sticker = StickerEntity(
+            id = "s-existing",
+            packIdentifier = packId,
+            emoteId = "e-old",
+            emoteName = "OldEmote",
+            relativeFilePath = "path.webp",
+            emojis = listOf("😀"),
+            fileLength = 100L,
+            sortOrder = 0
+        )
+        packDao.insertPackWithStickers(packEntity, listOf(sticker))
+
+        val fakeSevenTv = FakeSevenTvRepository()
+        fakeSevenTv.emoteSetHandler = { _ -> StickerResult.Failure(StickerError.ResourceNotFound) }
+        val newEmote = SevenTvEmote(
+            id = "e-new",
+            name = "NewEmote",
+            isAnimated = false,
+            isZeroWidth = false,
+            isNsfw = false,
+            bestAssetUrl = "http://example.com/e-new.webp",
+            availableScales = listOf("1x", "2x", "4x")
+        )
+        fakeSevenTv.channelDataHandler = { streamer ->
+            assertEquals("cool_streamer", streamer)
+            StickerResult.Success(
+                ChannelSearchResult(
+                    streamerName = "cool_streamer",
+                    username = "cool_streamer",
+                    availableSets = emptyList(),
+                    activeSet = SevenTvEmoteSet(
+                        id = "real-set-id",
+                        name = "Real Set",
+                        ownerName = "cool_streamer",
+                        emotes = listOf(
+                            SevenTvEmote(id = "e-old", name = "OldEmote", isAnimated = false, isZeroWidth = false, isNsfw = false, bestAssetUrl = "", availableScales = emptyList()),
+                            newEmote
+                        )
+                    )
+                )
+            )
+        }
+
+        val repoWithFake = DefaultStickerPackRepository(
+            stickerPackDao = packDao,
+            stickerDao = stickerDao,
+            storageManager = storageManager,
+            sevenTvRepository = fakeSevenTv,
+            mediaPipeline = mediaPipeline,
+            emoteBridge = emoteBridge,
+            dispatcher = testDispatcher
+        )
+
+        val result = repoWithFake.checkForPackUpdates(packId)
+        assertTrue("Expected Success, got $result", result is StickerResult.Success)
+        val newEmotes = (result as StickerResult.Success).data
+        assertEquals(1, newEmotes.size)
+        assertEquals("e-new", newEmotes.first().id)
+    }
+
+    @Test
+    fun mergePacksRollbackOnFailureCleansUpDisk() = runTest(testDispatcher) {
+        val p1 = "merge-fail-1"
+        val p2 = "merge-fail-2"
+        val d1 = storageManager.getPackDirectory(p1).apply { mkdirs() }
+        val d2 = storageManager.getPackDirectory(p2).apply { mkdirs() }
+        val s1File = File(d1, "s1.webp").apply { writeBytes(byteArrayOf(1, 2, 3)) }
+        val s2File = File(d1, "s2.webp").apply { writeBytes(byteArrayOf(4, 5, 6)) }
+        val s3File = File(d2, "s3.webp").apply { writeBytes(byteArrayOf(7, 8, 9)) }
+
+        val pack1 = StickerPackEntity(p1, "Pack 1", "P", "tray.png", false, false, 1000L)
+        val pack2 = StickerPackEntity(p2, "Pack 2", "P", "tray.png", false, false, 2000L)
+        packDao.insertPackWithStickers(pack1, listOf(
+            StickerEntity("s1", p1, "e1", "Emote1", "sticker_packs/$p1/s1.webp", listOf("😀"), s1File.length(), 0),
+            StickerEntity("s2", p1, "e2", "Emote2", "sticker_packs/$p1/s2.webp", listOf("😀"), s2File.length(), 1)
+        ))
+        packDao.insertPackWithStickers(pack2, listOf(
+            StickerEntity("s3", p2, "e3", "Emote3", "sticker_packs/$p2/s3.webp", listOf("😀"), s3File.length(), 0)
+        ))
+
+        val throwingDao = object : StickerPackDao by packDao {
+            override suspend fun replacePacksWithMerged(
+                deletePackIds: List<String>,
+                newPacksWithStickers: List<Pair<StickerPackEntity, List<StickerEntity>>>
+            ) {
+                throw java.sql.SQLException("Simulated DB failure")
+            }
+        }
+        val failingRepo = DefaultStickerPackRepository(
+            stickerPackDao = throwingDao,
+            stickerDao = stickerDao,
+            storageManager = storageManager,
+            mediaPipeline = mediaPipeline,
+            emoteBridge = emoteBridge,
+            dispatcher = testDispatcher
+        )
+
+        val result = failingRepo.mergePacks(listOf(p1, p2), "Merged Pack")
+        assertTrue("Expected Failure, got $result", result is StickerResult.Failure)
+        assertTrue((result as StickerResult.Failure).error is StickerError.StorageIoError)
+
+        assertNotNull(packDao.getPackByIdentifier(p1))
+        assertNotNull(packDao.getPackByIdentifier(p2))
+
+        val packs = packDao.getAllPacksDirect()
+        assertEquals(2, packs.size)
+    }
+
     private class FakeSevenTvRepository : SevenTvRepository {
         var downloadHandler: (suspend (SevenTvEmote) -> StickerResult<DownloadedEmoteAsset>)? = null
         var emoteSetHandler: (suspend (String) -> StickerResult<SevenTvEmoteSet>)? = null
+        var channelDataHandler: (suspend (String) -> StickerResult<ChannelSearchResult>)? = null
 
         override suspend fun downloadEmote(emote: SevenTvEmote): StickerResult<DownloadedEmoteAsset> {
             return downloadHandler?.invoke(emote)
@@ -1217,6 +1381,10 @@ class DefaultStickerPackRepositoryTest {
 
         override suspend fun getEmoteSet(setId: String): StickerResult<SevenTvEmoteSet> {
             return emoteSetHandler?.invoke(setId) ?: StickerResult.Failure(StickerError.ResourceNotFound)
+        }
+
+        override suspend fun getChannelData(query: String): StickerResult<ChannelSearchResult> {
+            return channelDataHandler?.invoke(query) ?: super.getChannelData(query)
         }
     }
 }

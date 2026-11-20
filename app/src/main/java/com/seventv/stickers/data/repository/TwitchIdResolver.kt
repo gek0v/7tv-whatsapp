@@ -37,70 +37,74 @@ class TwitchIdResolver(
         cache[trimmed]?.let { return it }
 
         val mutex = keyMutexes.computeIfAbsent(trimmed) { Mutex() }
-        return mutex.withLock {
-            cache[trimmed]?.let { return@withLock it }
+        try {
+            return mutex.withLock {
+                cache[trimmed]?.let { return@withLock it }
 
-            // 1. Try Twitch IVR user lookup (fast direct login -> id)
-            if (twitchApi != null) {
-                try {
-                    val resp = twitchApi.getUser(trimmed)
-                    if (resp.isSuccessful) {
-                        val userId = resp.body()?.firstOrNull {
-                            it.login.equals(trimmed, ignoreCase = true)
-                        }?.id?.takeIf { it.isNotBlank() }
-                            ?: resp.body()?.firstOrNull()?.id?.takeIf { it.isNotBlank() }
-                        if (userId != null) {
-                            cache[trimmed] = userId
-                            return@withLock userId
+                // 1. Try Twitch IVR user lookup (fast direct login -> id)
+                if (twitchApi != null) {
+                    try {
+                        val resp = twitchApi.getUser(trimmed)
+                        if (resp.isSuccessful) {
+                            val userId = resp.body()?.firstOrNull {
+                                it.login.equals(trimmed, ignoreCase = true)
+                            }?.id?.takeIf { it.isNotBlank() }
+                                ?: resp.body()?.firstOrNull()?.id?.takeIf { it.isNotBlank() }
+                            if (userId != null) {
+                                cache[trimmed] = userId
+                                return@withLock userId
+                            }
                         }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (_: Exception) {
                     }
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (_: Exception) {
                 }
-            }
 
-            // 2. Try FFZ room lookup (returns room.twitch_id)
-            if (ffzApi != null) {
-                try {
-                    val resp = ffzApi.getRoom(trimmed)
-                    if (resp.isSuccessful) {
-                        val twitchId = resp.body()?.room?.twitchId?.toString()
-                        if (!twitchId.isNullOrBlank()) {
-                            cache[trimmed] = twitchId
-                            return@withLock twitchId
+                // 2. Try FFZ room lookup (returns room.twitch_id)
+                if (ffzApi != null) {
+                    try {
+                        val resp = ffzApi.getRoom(trimmed)
+                        if (resp.isSuccessful) {
+                            val twitchId = resp.body()?.room?.twitchId?.toString()
+                            if (!twitchId.isNullOrBlank()) {
+                                cache[trimmed] = twitchId
+                                return@withLock twitchId
+                            }
                         }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (_: Exception) {
                     }
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (_: Exception) {
                 }
-            }
 
-            // 3. Try 7TV user search connections
-            if (sevenTvApi != null) {
-                try {
-                    val resp = sevenTvApi.searchUsers(SevenTvGqlQueries.searchUsersRequest(trimmed, limit = 5))
-                    if (resp.isSuccessful) {
-                        val users = resp.body()?.data?.users.orEmpty()
-                        val user = users.firstOrNull { it.username.equals(trimmed, ignoreCase = true) }
-                            ?: users.firstOrNull()
-                        val twitchId = user?.connections
-                            ?.firstOrNull { it.platform.equals("TWITCH", ignoreCase = true) }
-                            ?.id
-                            ?.takeIf { it.isNotBlank() }
-                        if (twitchId != null) {
-                            cache[trimmed] = twitchId
-                            return@withLock twitchId
+                // 3. Try 7TV user search connections
+                if (sevenTvApi != null) {
+                    try {
+                        val resp = sevenTvApi.searchUsers(SevenTvGqlQueries.searchUsersRequest(trimmed, limit = 5))
+                        if (resp.isSuccessful) {
+                            val users = resp.body()?.data?.users.orEmpty()
+                            val user = users.firstOrNull { it.username.equals(trimmed, ignoreCase = true) }
+                                ?: users.firstOrNull()
+                            val twitchId = user?.connections
+                                ?.firstOrNull { it.platform.equals("TWITCH", ignoreCase = true) }
+                                ?.id
+                                ?.takeIf { it.isNotBlank() }
+                            if (twitchId != null) {
+                                cache[trimmed] = twitchId
+                                return@withLock twitchId
+                            }
                         }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (_: Exception) {
                     }
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (_: Exception) {
                 }
-            }
 
-            null
+                null
+            }
+        } finally {
+            keyMutexes.remove(trimmed, mutex)
         }
     }
 }
