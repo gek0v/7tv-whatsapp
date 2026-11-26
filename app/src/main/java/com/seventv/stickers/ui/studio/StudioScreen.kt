@@ -104,6 +104,7 @@ import com.seventv.stickers.core.media.sound.AndroidVideoFrameExtractor
 import com.seventv.stickers.core.media.sound.SoundStickerSpecs
 import com.seventv.stickers.core.media.sound.StudioCanvasBackground
 import com.seventv.stickers.core.media.sound.StudioLoopMode
+import com.seventv.stickers.core.media.sound.StudioScaleMode
 import com.seventv.stickers.ui.components.CoilSetup
 import com.seventv.stickers.ui.theme.DarkBackground
 import com.seventv.stickers.ui.theme.DarkOnSurface
@@ -272,6 +273,7 @@ fun StudioScreen(
             visual = state.visual,
             audio = readyAudio,
             canvasBackground = state.canvasBackground,
+            scaleMode = state.scaleMode,
             isPlaying = state.isAudioPreviewPlaying,
             onTogglePlay = {
                 if (readyAudio != null) {
@@ -444,6 +446,46 @@ fun StudioScreen(
                                     )
                                 }
                             }
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+            Text(
+                text = "Encuadre en el lienzo:",
+                style = MaterialTheme.typography.labelSmall,
+                color = DarkOnSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                StudioScaleMode.entries.forEach { mode ->
+                    val selected = state.scaleMode == mode
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = if (selected) ElectricCyan.copy(alpha = 0.2f) else DarkSurfaceContainer,
+                        border = BorderStroke(
+                            width = if (selected) 1.5.dp else 1.dp,
+                            color = if (selected) ElectricCyan else GlassBorder
+                        ),
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable { viewModel.onSelectScaleMode(mode) }
+                    ) {
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp)
+                        ) {
+                            Text(
+                                text = mode.label,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (selected) ElectricCyan else DarkOnSurfaceVariant,
+                                fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal
+                            )
                         }
                     }
                 }
@@ -747,6 +789,7 @@ private fun StudioPreviewCard(
     visual: StudioVisualSelection,
     audio: StudioAudioSelection.Ready?,
     canvasBackground: StudioCanvasBackground,
+    scaleMode: StudioScaleMode,
     isPlaying: Boolean,
     onTogglePlay: () -> Unit
 ) {
@@ -799,10 +842,19 @@ private fun StudioPreviewCard(
                         Image(
                             bitmap = thumb.asImageBitmap(),
                             contentDescription = "Vista previa del vídeo",
-                            contentScale = ContentScale.Fit,
+                            contentScale = when (scaleMode) {
+                                StudioScaleMode.CONTAIN -> ContentScale.Fit
+                                StudioScaleMode.CROP -> ContentScale.Crop
+                            },
                             modifier = Modifier
                                 .fillMaxSize()
-                                .padding(14.dp)
+                                .then(
+                                    if (scaleMode == StudioScaleMode.CONTAIN) {
+                                        Modifier.padding(14.dp)
+                                    } else {
+                                        Modifier
+                                    }
+                                )
                         )
                     } else {
                         Column(
@@ -853,10 +905,19 @@ private fun StudioPreviewCard(
                             .crossfade(true)
                             .build(),
                         contentDescription = "Vista previa del sticker",
-                        contentScale = ContentScale.Fit,
+                        contentScale = when (scaleMode) {
+                            StudioScaleMode.CONTAIN -> ContentScale.Fit
+                            StudioScaleMode.CROP -> ContentScale.Crop
+                        },
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(14.dp)
+                            .then(
+                                if (scaleMode == StudioScaleMode.CONTAIN) {
+                                    Modifier.padding(14.dp)
+                                } else {
+                                    Modifier
+                                }
+                            )
                     )
                 } else {
                     Column(

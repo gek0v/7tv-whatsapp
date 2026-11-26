@@ -212,4 +212,50 @@ class SoundStickerSpecsTest {
             assertTrue("Sample should stay non-negative without inversion: $s", s in 0..20_000)
         }
     }
+
+    @Test
+    fun computeDrawRectHandlesPanoramicVerticalAndSquareInContainAndCrop() {
+        val dstW = 512
+        val dstH = 512
+        val pad = 16
+
+        // Panoramic (200x100)
+        val panoContain = SoundStickerSpecs.computeDrawRect(200, 100, dstW, dstH, pad, StudioScaleMode.CONTAIN)
+        assertEquals(16f, panoContain[0], 0.01f)
+        assertEquals(136f, panoContain[1], 0.01f)
+        assertEquals(496f, panoContain[2], 0.01f)
+        assertEquals(376f, panoContain[3], 0.01f)
+
+        val panoCrop = SoundStickerSpecs.computeDrawRect(200, 100, dstW, dstH, pad, StudioScaleMode.CROP)
+        assertEquals(-256f, panoCrop[0], 0.01f)
+        assertEquals(0f, panoCrop[1], 0.01f)
+        assertEquals(768f, panoCrop[2], 0.01f)
+        assertEquals(512f, panoCrop[3], 0.01f)
+
+        // Vertical (100x200)
+        val vertContain = SoundStickerSpecs.computeDrawRect(100, 200, dstW, dstH, pad, StudioScaleMode.CONTAIN)
+        assertEquals(136f, vertContain[0], 0.01f)
+        assertEquals(16f, vertContain[1], 0.01f)
+        assertEquals(376f, vertContain[2], 0.01f)
+        assertEquals(496f, vertContain[3], 0.01f)
+
+        val vertCrop = SoundStickerSpecs.computeDrawRect(100, 200, dstW, dstH, pad, StudioScaleMode.CROP)
+        assertEquals(0f, vertCrop[0], 0.01f)
+        assertEquals(-256f, vertCrop[1], 0.01f)
+        assertEquals(512f, vertCrop[2], 0.01f)
+        assertEquals(768f, vertCrop[3], 0.01f)
+
+        // Square (100x100)
+        val squareContain = SoundStickerSpecs.computeDrawRect(100, 100, dstW, dstH, pad, StudioScaleMode.CONTAIN)
+        assertEquals(16f, squareContain[0], 0.01f)
+        assertEquals(16f, squareContain[1], 0.01f)
+        assertEquals(496f, squareContain[2], 0.01f)
+        assertEquals(496f, squareContain[3], 0.01f)
+
+        val squareCrop = SoundStickerSpecs.computeDrawRect(100, 100, dstW, dstH, pad, StudioScaleMode.CROP)
+        assertEquals(0f, squareCrop[0], 0.01f)
+        assertEquals(0f, squareCrop[1], 0.01f)
+        assertEquals(512f, squareCrop[2], 0.01f)
+        assertEquals(512f, squareCrop[3], 0.01f)
+    }
 }

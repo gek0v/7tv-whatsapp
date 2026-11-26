@@ -6,6 +6,7 @@ import com.seventv.stickers.core.media.sound.SoundStickerExportResult
 import com.seventv.stickers.core.media.sound.SoundStickerSpecs
 import com.seventv.stickers.core.media.sound.StudioCanvasBackground
 import com.seventv.stickers.core.media.sound.StudioLoopMode
+import com.seventv.stickers.core.media.sound.StudioScaleMode
 import com.seventv.stickers.core.media.sound.VoiceRecordingState
 import com.seventv.stickers.core.network.model.SevenTvEmote
 
@@ -68,6 +69,7 @@ data class StudioUiState(
     val audio: StudioAudioSelection = StudioAudioSelection.None,
     val canvasBackground: StudioCanvasBackground = StudioCanvasBackground.WHATSAPP_DARK,
     val loopMode: StudioLoopMode = StudioLoopMode.LOOP,
+    val scaleMode: StudioScaleMode = StudioScaleMode.CONTAIN,
     val recordingState: VoiceRecordingState = VoiceRecordingState(),
     val isAudioPreviewPlaying: Boolean = false,
     val isLoadingAudio: Boolean = false,

@@ -17,6 +17,7 @@ import com.seventv.stickers.core.media.sound.SoundStickerExporter
 import com.seventv.stickers.core.media.sound.SoundStickerSpecs
 import com.seventv.stickers.core.media.sound.StudioCanvasBackground
 import com.seventv.stickers.core.media.sound.StudioLoopMode
+import com.seventv.stickers.core.media.sound.StudioScaleMode
 import com.seventv.stickers.core.media.sound.VoiceRecorderController
 import com.seventv.stickers.core.media.sound.VoiceRecordingState
 import com.seventv.stickers.core.network.model.DownloadedEmoteAsset
@@ -124,6 +125,7 @@ class StudioViewModelTest {
         assertEquals(4_500L, fakeExporter.lastTrimEndMs)
         assertEquals(StudioCanvasBackground.NIGHT_PURPLE, fakeExporter.lastBackground)
         assertEquals(StudioLoopMode.LOOP, fakeExporter.lastLoopMode)
+        assertEquals(StudioScaleMode.CONTAIN, fakeExporter.lastScaleMode)
     }
 
     @Test
@@ -150,6 +152,31 @@ class StudioViewModelTest {
         viewModel.onSelectLoopMode(StudioLoopMode.LOOP)
         assertEquals(StudioLoopMode.LOOP, viewModel.uiState.value.loopMode)
         assertTrue(viewModel.uiState.value.exportState is StudioExportState.Idle)
+    }
+
+    @Test
+    fun selectScaleModeUpdatesStateResetsExportAndForwardsToExporter() = runTest(testDispatcher) {
+        val emote = sampleEmote(id = "catJam", isAnimated = false)
+        fakeAudioInspector.nextDurationMs = 5_000L
+
+        assertEquals(StudioScaleMode.CONTAIN, viewModel.uiState.value.scaleMode)
+
+        viewModel.onSelectEmoteVisual(emote)
+        viewModel.onImportAudioUri(Uri.parse("content://audio/cat.mp3"))
+        advanceUntilIdle()
+
+        viewModel.onGenerateSoundSticker()
+        advanceUntilIdle()
+        assertTrue(viewModel.uiState.value.exportState is StudioExportState.Success)
+
+        viewModel.onSelectScaleMode(StudioScaleMode.CROP)
+        assertEquals(StudioScaleMode.CROP, viewModel.uiState.value.scaleMode)
+        assertEquals(StudioExportState.Idle, viewModel.uiState.value.exportState)
+
+        viewModel.onGenerateSoundSticker()
+        advanceUntilIdle()
+        assertTrue(viewModel.uiState.value.exportState is StudioExportState.Success)
+        assertEquals(StudioScaleMode.CROP, fakeExporter.lastScaleMode)
     }
 
     @Test
@@ -307,6 +334,7 @@ class StudioViewModelTest {
         var lastTrimEndMs: Long = -1L
         var lastBackground: StudioCanvasBackground? = null
         var lastLoopMode: StudioLoopMode? = null
+        var lastScaleMode: StudioScaleMode? = null
         var lastVideoUri: Uri? = null
         var lastVisualBytes: ByteArray = ByteArray(0)
 
@@ -317,6 +345,7 @@ class StudioViewModelTest {
             trimEndMs: Long,
             background: StudioCanvasBackground,
             loopMode: StudioLoopMode,
+            scaleMode: StudioScaleMode,
             onProgress: (Float, String) -> Unit
         ): StickerResult<SoundStickerExportResult> = exportMp4(
             visualBytes = visualBytes,
@@ -325,6 +354,7 @@ class StudioViewModelTest {
             trimEndMs = trimEndMs,
             background = background,
             loopMode = loopMode,
+            scaleMode = scaleMode,
             videoUri = null,
             preExtractedFrames = null,
             onProgress = onProgress
@@ -337,6 +367,7 @@ class StudioViewModelTest {
             trimEndMs: Long,
             background: StudioCanvasBackground,
             loopMode: StudioLoopMode,
+            scaleMode: StudioScaleMode,
             videoUri: Uri?,
             preExtractedFrames: List<AnimationFrame>?,
             onProgress: (Float, String) -> Unit
@@ -347,6 +378,7 @@ class StudioViewModelTest {
             lastTrimEndMs = trimEndMs
             lastBackground = background
             lastLoopMode = loopMode
+            lastScaleMode = scaleMode
             onProgress(1f, "¡Listo!")
             return StickerResult.Success(
                 SoundStickerExportResult(

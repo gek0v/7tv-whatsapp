@@ -13,6 +13,7 @@ import com.seventv.stickers.core.media.sound.SoundStickerExporter
 import com.seventv.stickers.core.media.sound.SoundStickerSpecs
 import com.seventv.stickers.core.media.sound.StudioCanvasBackground
 import com.seventv.stickers.core.media.sound.StudioLoopMode
+import com.seventv.stickers.core.media.sound.StudioScaleMode
 import com.seventv.stickers.core.media.sound.VoiceRecorderController
 import com.seventv.stickers.core.network.downloader.EmoteDownloader
 import com.seventv.stickers.core.network.model.EmoteProvider
@@ -185,6 +186,15 @@ class StudioViewModel(
         _uiState.update {
             it.copy(
                 loopMode = mode,
+                exportState = StudioExportState.Idle
+            )
+        }
+    }
+
+    fun onSelectScaleMode(mode: StudioScaleMode) {
+        _uiState.update {
+            it.copy(
+                scaleMode = mode,
                 exportState = StudioExportState.Idle
             )
         }
@@ -400,6 +410,7 @@ class StudioViewModel(
                     trimEndMs = audio.trimEndMs,
                     background = state.canvasBackground,
                     loopMode = state.loopMode,
+                    scaleMode = state.scaleMode,
                     videoUri = videoUri,
                     onProgress = { progress, msg ->
                         _uiState.update {
