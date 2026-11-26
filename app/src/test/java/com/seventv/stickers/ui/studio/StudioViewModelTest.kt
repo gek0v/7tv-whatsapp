@@ -9,6 +9,7 @@ import com.seventv.stickers.core.media.sound.AudioTrackInfo
 import com.seventv.stickers.core.media.sound.SoundStickerExportResult
 import com.seventv.stickers.core.media.sound.SoundStickerExporter
 import com.seventv.stickers.core.media.sound.StudioCanvasBackground
+import com.seventv.stickers.core.media.sound.StudioLoopMode
 import com.seventv.stickers.core.media.sound.VoiceRecorderController
 import com.seventv.stickers.core.media.sound.VoiceRecordingState
 import com.seventv.stickers.core.network.model.DownloadedEmoteAsset
@@ -113,6 +114,33 @@ class StudioViewModelTest {
         assertEquals(1_500L, fakeExporter.lastTrimStartMs)
         assertEquals(4_500L, fakeExporter.lastTrimEndMs)
         assertEquals(StudioCanvasBackground.NIGHT_PURPLE, fakeExporter.lastBackground)
+        assertEquals(StudioLoopMode.LOOP, fakeExporter.lastLoopMode)
+    }
+
+    @Test
+    fun selectLoopModeUpdatesStateAndPassesChoiceToExporter() = runTest(testDispatcher) {
+        val emote = sampleEmote(id = "catJAM", isAnimated = true)
+        fakeAudioInspector.nextDurationMs = 4_000L
+
+        assertEquals(StudioLoopMode.LOOP, viewModel.uiState.value.loopMode)
+
+        viewModel.onSelectEmoteVisual(emote)
+        viewModel.onImportAudioUri(Uri.parse("content://audio/catjam.mp3"))
+        advanceUntilIdle()
+
+        viewModel.onSelectLoopMode(StudioLoopMode.HOLD_LAST_FRAME)
+        assertEquals(StudioLoopMode.HOLD_LAST_FRAME, viewModel.uiState.value.loopMode)
+
+        viewModel.onGenerateSoundSticker()
+        advanceUntilIdle()
+
+        assertTrue(viewModel.uiState.value.exportState is StudioExportState.Success)
+        assertEquals(StudioLoopMode.HOLD_LAST_FRAME, fakeExporter.lastLoopMode)
+
+        // Changing loop mode after export resets exportState back to Idle
+        viewModel.onSelectLoopMode(StudioLoopMode.LOOP)
+        assertEquals(StudioLoopMode.LOOP, viewModel.uiState.value.loopMode)
+        assertTrue(viewModel.uiState.value.exportState is StudioExportState.Idle)
     }
 
     @Test
@@ -185,6 +213,7 @@ class StudioViewModelTest {
         var lastTrimStartMs: Long = -1L
         var lastTrimEndMs: Long = -1L
         var lastBackground: StudioCanvasBackground? = null
+        var lastLoopMode: StudioLoopMode? = null
 
         override suspend fun exportMp4(
             visualBytes: ByteArray,
@@ -192,11 +221,13 @@ class StudioViewModelTest {
             trimStartMs: Long,
             trimEndMs: Long,
             background: StudioCanvasBackground,
+            loopMode: StudioLoopMode,
             onProgress: (Float, String) -> Unit
         ): StickerResult<SoundStickerExportResult> {
             lastTrimStartMs = trimStartMs
             lastTrimEndMs = trimEndMs
             lastBackground = background
+            lastLoopMode = loopMode
             onProgress(1f, "¡Listo!")
             return StickerResult.Success(
                 SoundStickerExportResult(

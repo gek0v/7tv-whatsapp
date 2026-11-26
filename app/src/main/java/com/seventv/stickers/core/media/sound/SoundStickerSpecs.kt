@@ -59,9 +59,13 @@ object SoundStickerSpecs {
 
     /**
      * Computes which animation frame index should be displayed at [elapsedMs]
-     * when looping through [frameDurationsMs].
+     * for [frameDurationsMs] according to [loopMode].
      */
-    fun selectAnimationFrameIndex(elapsedMs: Long, frameDurationsMs: List<Int>): Int {
+    fun selectAnimationFrameIndex(
+        elapsedMs: Long,
+        frameDurationsMs: List<Int>,
+        loopMode: StudioLoopMode = StudioLoopMode.LOOP
+    ): Int {
         if (frameDurationsMs.isEmpty()) return 0
         if (frameDurationsMs.size == 1) return 0
 
@@ -72,11 +76,19 @@ object SoundStickerSpecs {
         }
         if (totalDuration <= 0L) return 0
 
-        val loopPos = ((elapsedMs % totalDuration) + totalDuration) % totalDuration
+        if (loopMode == StudioLoopMode.HOLD_LAST_FRAME && elapsedMs >= totalDuration) {
+            return normalizedDurations.lastIndex
+        }
+
+        val pos = if (loopMode == StudioLoopMode.HOLD_LAST_FRAME) {
+            elapsedMs.coerceAtLeast(0L)
+        } else {
+            ((elapsedMs % totalDuration) + totalDuration) % totalDuration
+        }
         var accum = 0L
         for (i in normalizedDurations.indices) {
             accum += normalizedDurations[i]
-            if (loopPos < accum) {
+            if (pos < accum) {
                 return i
             }
         }
@@ -169,6 +181,11 @@ object SoundStickerSpecs {
         }
         return out
     }
+}
+
+enum class StudioLoopMode(val label: String) {
+    LOOP("Repetir bucle"),
+    HOLD_LAST_FRAME("Congelar final")
 }
 
 enum class StudioCanvasBackground(val label: String, val argbColor: Int) {

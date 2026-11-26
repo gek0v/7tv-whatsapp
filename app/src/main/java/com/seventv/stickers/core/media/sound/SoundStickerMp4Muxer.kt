@@ -38,6 +38,7 @@ interface SoundStickerExporter {
         trimStartMs: Long,
         trimEndMs: Long,
         background: StudioCanvasBackground,
+        loopMode: StudioLoopMode = StudioLoopMode.LOOP,
         onProgress: (Float, String) -> Unit = { _, _ -> }
     ): StickerResult<SoundStickerExportResult>
 }
@@ -69,6 +70,7 @@ class DefaultSoundStickerExporter(
         trimStartMs: Long,
         trimEndMs: Long,
         background: StudioCanvasBackground,
+        loopMode: StudioLoopMode,
         onProgress: (Float, String) -> Unit
     ): StickerResult<SoundStickerExportResult> = withContext(dispatcher) {
         if (visualBytes.isEmpty()) {
@@ -118,6 +120,7 @@ class DefaultSoundStickerExporter(
                 frameDurations = frameDurations,
                 durationMs = clipDurationMs,
                 outputFile = tempVideo,
+                loopMode = loopMode,
                 onVideoProgress = { frac ->
                     onProgress(0.20f + frac * 0.40f, "Codificando vídeo 512x512...")
                 }
@@ -237,6 +240,7 @@ class DefaultSoundStickerExporter(
         frameDurations: List<Int>,
         durationMs: Long,
         outputFile: File,
+        loopMode: StudioLoopMode = StudioLoopMode.LOOP,
         onVideoProgress: (Float) -> Unit
     ) {
         val w = SoundStickerSpecs.VIDEO_WIDTH
@@ -273,7 +277,7 @@ class DefaultSoundStickerExporter(
                         } else {
                             val elapsedMs = (frameIdx * 1000L) / fps
                             val ptsUs = (frameIdx * 1_000_000L) / fps
-                            val yuvIdx = SoundStickerSpecs.selectAnimationFrameIndex(elapsedMs, frameDurations)
+                            val yuvIdx = SoundStickerSpecs.selectAnimationFrameIndex(elapsedMs, frameDurations, loopMode)
                             val yuv = yuvFrames[yuvIdx]
 
                             val image = try {

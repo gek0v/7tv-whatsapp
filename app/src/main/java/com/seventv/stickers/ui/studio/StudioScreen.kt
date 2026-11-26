@@ -51,6 +51,7 @@ import androidx.compose.material.icons.filled.MovieCreation
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.Button
@@ -98,6 +99,7 @@ import coil.request.ImageRequest
 import com.seventv.stickers.core.domain.manager.StickerShareManager
 import com.seventv.stickers.core.media.sound.SoundStickerSpecs
 import com.seventv.stickers.core.media.sound.StudioCanvasBackground
+import com.seventv.stickers.core.media.sound.StudioLoopMode
 import com.seventv.stickers.ui.components.CoilSetup
 import com.seventv.stickers.ui.theme.DarkBackground
 import com.seventv.stickers.ui.theme.DarkOnSurface
@@ -378,6 +380,63 @@ fun StudioScreen(
                                 color = if (selected) ElectricCyan else DarkOnSurfaceVariant,
                                 fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal
                             )
+                        }
+                    }
+                }
+            }
+
+            AnimatedVisibility(visible = state.isVisualAnimated) {
+                Column {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(
+                        text = "Si el audio dura más que la animación:",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = DarkOnSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        StudioLoopMode.entries.forEach { mode ->
+                            val selected = state.loopMode == mode
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = if (selected) ElectricCyan.copy(alpha = 0.2f) else DarkSurfaceContainer,
+                                border = BorderStroke(
+                                    width = if (selected) 1.5.dp else 1.dp,
+                                    color = if (selected) ElectricCyan else GlassBorder
+                                ),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .clickable { viewModel.onSelectLoopMode(mode) }
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.Center,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = when (mode) {
+                                            StudioLoopMode.LOOP -> Icons.Default.Repeat
+                                            StudioLoopMode.HOLD_LAST_FRAME -> Icons.Default.Pause
+                                        },
+                                        contentDescription = null,
+                                        tint = if (selected) ElectricCyan else DarkOnSurfaceVariant,
+                                        modifier = Modifier.size(15.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = mode.label,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = if (selected) ElectricCyan else DarkOnSurfaceVariant,
+                                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
                         }
                     }
                 }

@@ -12,6 +12,7 @@ import com.seventv.stickers.core.media.sound.AudioInspector
 import com.seventv.stickers.core.media.sound.SoundStickerExporter
 import com.seventv.stickers.core.media.sound.SoundStickerSpecs
 import com.seventv.stickers.core.media.sound.StudioCanvasBackground
+import com.seventv.stickers.core.media.sound.StudioLoopMode
 import com.seventv.stickers.core.media.sound.VoiceRecorderController
 import com.seventv.stickers.core.network.downloader.EmoteDownloader
 import com.seventv.stickers.core.network.model.EmoteProvider
@@ -120,6 +121,15 @@ class StudioViewModel(
         _uiState.update {
             it.copy(
                 canvasBackground = background,
+                exportState = StudioExportState.Idle
+            )
+        }
+    }
+
+    fun onSelectLoopMode(mode: StudioLoopMode) {
+        _uiState.update {
+            it.copy(
+                loopMode = mode,
                 exportState = StudioExportState.Idle
             )
         }
@@ -329,6 +339,7 @@ class StudioViewModel(
                     trimStartMs = audio.trimStartMs,
                     trimEndMs = audio.trimEndMs,
                     background = state.canvasBackground,
+                    loopMode = state.loopMode,
                     onProgress = { progress, msg ->
                         _uiState.update {
                             it.copy(exportState = StudioExportState.Processing(progress, msg))

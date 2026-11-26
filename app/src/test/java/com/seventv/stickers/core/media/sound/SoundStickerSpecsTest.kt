@@ -59,6 +59,19 @@ class SoundStickerSpecsTest {
     }
 
     @Test
+    fun selectAnimationFrameIndexHoldLastFrameClampsAfterTotalDuration() {
+        val durations = listOf(100, 200, 100) // total = 400ms, lastIndex = 2
+        assertEquals(0, SoundStickerSpecs.selectAnimationFrameIndex(0L, durations, StudioLoopMode.HOLD_LAST_FRAME))
+        assertEquals(1, SoundStickerSpecs.selectAnimationFrameIndex(150L, durations, StudioLoopMode.HOLD_LAST_FRAME))
+        assertEquals(2, SoundStickerSpecs.selectAnimationFrameIndex(399L, durations, StudioLoopMode.HOLD_LAST_FRAME))
+        // Once elapsedMs >= totalDuration, HOLD_LAST_FRAME freezes on last frame while LOOP wraps
+        assertEquals(2, SoundStickerSpecs.selectAnimationFrameIndex(400L, durations, StudioLoopMode.HOLD_LAST_FRAME))
+        assertEquals(2, SoundStickerSpecs.selectAnimationFrameIndex(450L, durations, StudioLoopMode.HOLD_LAST_FRAME))
+        assertEquals(2, SoundStickerSpecs.selectAnimationFrameIndex(2_500L, durations, StudioLoopMode.HOLD_LAST_FRAME))
+        assertEquals(0, SoundStickerSpecs.selectAnimationFrameIndex(450L, durations, StudioLoopMode.LOOP))
+    }
+
+    @Test
     fun argbToPlanarYuv420ProducesExpectedStudioSwingLumaForWhiteAndBlack() {
         val w = 4
         val h = 4
