@@ -577,11 +577,14 @@ class DefaultSoundStickerExporter(
                                 val maxShortsCapacity = (encBuf.capacity() / 2) and 1.inv() // even short count (stereo)
                                 val maxAllowedShorts = (remainingFrames * 2L).coerceAtMost(maxShortsCapacity.toLong()).toInt()
                                 val toWriteShorts = minOf(pendingStereoShorts.size and 1.inv(), maxAllowedShorts)
+                                val chunk = ShortArray(toWriteShorts) { pendingStereoShorts.removeFirst() }
+                                SoundStickerSpecs.applyPcmEdgeFade(
+                                    stereoSamples = chunk,
+                                    stereoFrameOffset = encodedStereoFramesWritten,
+                                    totalTargetStereoFrames = targetStereoFrames
+                                )
                                 encBuf.order(ByteOrder.LITTLE_ENDIAN)
-                                val sb = encBuf.asShortBuffer()
-                                for (k in 0 until toWriteShorts) {
-                                    sb.put(pendingStereoShorts.removeFirst())
-                                }
+                                encBuf.asShortBuffer().put(chunk)
                                 val ptsUs = (encodedStereoFramesWritten * 1_000_000L) / SoundStickerSpecs.AUDIO_SAMPLE_RATE
                                 encodedStereoFramesWritten += (toWriteShorts / 2)
                                 encoder.queueInputBuffer(encInIdx, 0, toWriteShorts * 2, ptsUs, 0)

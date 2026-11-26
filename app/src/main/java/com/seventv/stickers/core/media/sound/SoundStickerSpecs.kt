@@ -18,6 +18,7 @@ object SoundStickerSpecs {
     const val AUDIO_SAMPLE_RATE = 44100
     const val AUDIO_CHANNEL_COUNT = 2
     const val AUDIO_BITRATE = 128_000
+    const val AUDIO_EDGE_FADE_MS = 8L
 
     const val MIN_CLIP_DURATION_MS = 1_000L
     const val MAX_STATIC_CLIP_DURATION_MS = 10_000L
@@ -180,6 +181,54 @@ object SoundStickerSpecs {
             out[df * 2 + 1] = right.toShort()
         }
         return out
+    }
+
+    /**
+     * Applies a linear fade-in (`0f..1f`) at the start and fade-out (`1f..0f`) at the end
+     * of a trimmed 16-bit stereo PCM stream in-place to avoid clicks/pops at cut boundaries.
+     * For clips shorter than `2 * fadeDurationMs`, the fade length is clamped to half the
+     * clip duration so fade-in and fade-out never overlap or invert.
+     */
+    fun applyPcmEdgeFade(
+        stereoSamples: ShortArray,
+        stereoFrameOffset: Long,
+        totalTargetStereoFrames: Long,
+        sampleRate: Int = AUDIO_SAMPLE_RATE,
+        fadeDurationMs: Long = AUDIO_EDGE_FADE_MS
+    ) {
+        if (stereoSamples.size < 2 || totalTargetStereoFrames <= 0L || sampleRate <= 0 || fadeDurationMs <= 0L) {
+            return
+        }
+
+        val requestedFadeFrames = (fadeDurationMs * sampleRate) / 1000L
+        val fadeFrames = minOf(requestedFadeFrames, totalTargetStereoFrames / 2L)
+        if (fadeFrames <= 0L) return
+
+        val fadeOutStart = totalTargetStereoFrames - fadeFrames
+        val frameCount = stereoSamples.size / 2
+        for (i in 0 until frameCount) {
+            val globalFrame = stereoFrameOffset + i
+            if (globalFrame < 0L || globalFrame >= totalTargetStereoFrames) continue
+
+            val gain = when {
+                globalFrame < fadeFrames -> globalFrame.toFloat() / fadeFrames.toFloat()
+                globalFrame >= fadeOutStart -> (totalTargetStereoFrames - 1L - globalFrame).toFloat() / fadeFrames.toFloat()
+                else -> 1f
+            }
+
+            if (gain < 1f) {
+                val leftIdx = i * 2
+                val rightIdx = leftIdx + 1
+                stereoSamples[leftIdx] = (stereoSamples[leftIdx] * gain)
+                    .roundToInt()
+                    .coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt())
+                    .toShort()
+                stereoSamples[rightIdx] = (stereoSamples[rightIdx] * gain)
+                    .roundToInt()
+                    .coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt())
+                    .toShort()
+            }
+        }
     }
 }
 
