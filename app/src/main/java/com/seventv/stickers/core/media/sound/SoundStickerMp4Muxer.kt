@@ -40,6 +40,7 @@ interface SoundStickerExporter {
         trimEndMs: Long,
         background: StudioCanvasBackground,
         loopMode: StudioLoopMode = StudioLoopMode.LOOP,
+        scaleMode: StudioScaleMode = StudioScaleMode.CONTAIN,
         onProgress: (Float, String) -> Unit = { _, _ -> }
     ): StickerResult<SoundStickerExportResult>
 
@@ -50,6 +51,7 @@ interface SoundStickerExporter {
         trimEndMs: Long,
         background: StudioCanvasBackground,
         loopMode: StudioLoopMode = StudioLoopMode.LOOP,
+        scaleMode: StudioScaleMode = StudioScaleMode.CONTAIN,
         videoUri: Uri? = null,
         preExtractedFrames: List<AnimationFrame>? = null,
         onProgress: (Float, String) -> Unit = { _, _ -> }
@@ -60,6 +62,7 @@ interface SoundStickerExporter {
         trimEndMs = trimEndMs,
         background = background,
         loopMode = loopMode,
+        scaleMode = scaleMode,
         onProgress = onProgress
     )
 }
@@ -93,6 +96,7 @@ class DefaultSoundStickerExporter(
         trimEndMs: Long,
         background: StudioCanvasBackground,
         loopMode: StudioLoopMode,
+        scaleMode: StudioScaleMode,
         onProgress: (Float, String) -> Unit
     ): StickerResult<SoundStickerExportResult> = exportMp4(
         visualBytes = visualBytes,
@@ -101,6 +105,7 @@ class DefaultSoundStickerExporter(
         trimEndMs = trimEndMs,
         background = background,
         loopMode = loopMode,
+        scaleMode = scaleMode,
         videoUri = null,
         preExtractedFrames = null,
         onProgress = onProgress
@@ -113,6 +118,7 @@ class DefaultSoundStickerExporter(
         trimEndMs: Long,
         background: StudioCanvasBackground,
         loopMode: StudioLoopMode,
+        scaleMode: StudioScaleMode,
         videoUri: Uri?,
         preExtractedFrames: List<AnimationFrame>?,
         onProgress: (Float, String) -> Unit
@@ -168,7 +174,7 @@ class DefaultSoundStickerExporter(
             val frameDurations = mutableListOf<Int>()
             try {
                 for (frame in rawFrames) {
-                    yuvFrames.add(convertFrameToYuv(frame.bitmap, background.argbColor))
+                    yuvFrames.add(convertFrameToYuv(frame.bitmap, background.argbColor, scaleMode))
                     frameDurations.add(frame.durationMs)
                 }
             } finally {
@@ -237,7 +243,11 @@ class DefaultSoundStickerExporter(
         }
     }
 
-    private fun convertFrameToYuv(source: Bitmap, bgArgb: Int): YuvFrame {
+    private fun convertFrameToYuv(
+        source: Bitmap,
+        bgArgb: Int,
+        scaleMode: StudioScaleMode = StudioScaleMode.CONTAIN
+    ): YuvFrame {
         val w = SoundStickerSpecs.VIDEO_WIDTH
         val h = SoundStickerSpecs.VIDEO_HEIGHT
         val pad = SoundStickerSpecs.CANVAS_PADDING_PX
@@ -247,14 +257,15 @@ class DefaultSoundStickerExporter(
             val canvas = Canvas(normalized)
             canvas.drawColor(bgArgb)
 
-            val usableW = (w - 2 * pad).toFloat()
-            val usableH = (h - 2 * pad).toFloat()
-            val scale = minOf(usableW / source.width.coerceAtLeast(1), usableH / source.height.coerceAtLeast(1))
-            val dstW = source.width * scale
-            val dstH = source.height * scale
-            val left = (w - dstW) / 2f
-            val top = (h - dstH) / 2f
-            val dstRect = RectF(left, top, left + dstW, top + dstH)
+            val drawRect = SoundStickerSpecs.computeDrawRect(
+                srcWidth = source.width,
+                srcHeight = source.height,
+                dstWidth = w,
+                dstHeight = h,
+                paddingPx = pad,
+                scaleMode = scaleMode
+            )
+            val dstRect = RectF(drawRect[0], drawRect[1], drawRect[2], drawRect[3])
             val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
             canvas.drawBitmap(source, null, dstRect, paint)
 

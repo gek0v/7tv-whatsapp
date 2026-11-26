@@ -230,6 +230,51 @@ object SoundStickerSpecs {
             }
         }
     }
+
+    /**
+     * Computes the destination drawing rectangle `[left, top, right, bottom]` inside a
+     * `[dstWidth] x [dstHeight]` canvas for a source frame of `[srcWidth] x [srcHeight]`.
+     *
+     * - [StudioScaleMode.CONTAIN] fits the entire source inside the inset area
+     *   `[dstWidth - 2 * paddingPx, dstHeight - 2 * paddingPx]` centered.
+     * - [StudioScaleMode.CROP] scales the source to completely fill `[0, 0, dstWidth, dstHeight]`
+     *   centered (center-crop / cover), overflowing edges outside the canvas bounds.
+     */
+    fun computeDrawRect(
+        srcWidth: Int,
+        srcHeight: Int,
+        dstWidth: Int,
+        dstHeight: Int,
+        paddingPx: Int,
+        scaleMode: StudioScaleMode
+    ): FloatArray {
+        val safeSrcW = srcWidth.coerceAtLeast(1).toFloat()
+        val safeSrcH = srcHeight.coerceAtLeast(1).toFloat()
+        val safeDstW = dstWidth.coerceAtLeast(1).toFloat()
+        val safeDstH = dstHeight.coerceAtLeast(1).toFloat()
+
+        val scale = when (scaleMode) {
+            StudioScaleMode.CONTAIN -> {
+                val usableW = (dstWidth - 2 * paddingPx).coerceAtLeast(1).toFloat()
+                val usableH = (dstHeight - 2 * paddingPx).coerceAtLeast(1).toFloat()
+                minOf(usableW / safeSrcW, usableH / safeSrcH)
+            }
+            StudioScaleMode.CROP -> {
+                maxOf(safeDstW / safeSrcW, safeDstH / safeSrcH)
+            }
+        }
+
+        val drawW = safeSrcW * scale
+        val drawH = safeSrcH * scale
+        val left = (safeDstW - drawW) / 2f
+        val top = (safeDstH - drawH) / 2f
+        return floatArrayOf(left, top, left + drawW, top + drawH)
+    }
+}
+
+enum class StudioScaleMode(val label: String) {
+    CONTAIN("Contener"),
+    CROP("Recortar")
 }
 
 enum class StudioLoopMode(val label: String) {
