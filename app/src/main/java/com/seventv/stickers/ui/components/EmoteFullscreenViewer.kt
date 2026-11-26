@@ -25,6 +25,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -97,7 +98,8 @@ fun EmoteFullscreenViewer(
     fileSizeText: String? = null,
     emojis: List<String>? = null,
     onShareSticker: (() -> Unit)? = null,
-    isSharingSticker: Boolean = false
+    isSharingSticker: Boolean = false,
+    onCreateWithAudio: (() -> Unit)? = null
 ) {
     var simMode by remember { mutableStateOf(ChatSimulatorMode.WHATSAPP_DARK) }
     var scale by remember { mutableFloatStateOf(1f) }
@@ -388,6 +390,33 @@ fun EmoteFullscreenViewer(
                                     fontWeight = FontWeight.Bold
                                 )
                             }
+                        }
+                    }
+
+                    // Create Sound Sticker Action Button
+                    if (onCreateWithAudio != null) {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        OutlinedButton(
+                            onClick = {
+                                onCreateWithAudio()
+                                onDismiss()
+                            },
+                            shape = MaterialTheme.shapes.medium,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.MusicNote,
+                                contentDescription = null,
+                                tint = com.seventv.stickers.ui.theme.SunsetYellow,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Crear Sticker con Audio",
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = com.seventv.stickers.ui.theme.SunsetYellow
+                            )
                         }
                     }
 

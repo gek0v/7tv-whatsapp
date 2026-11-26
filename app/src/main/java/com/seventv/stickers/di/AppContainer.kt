@@ -5,6 +5,14 @@ import android.content.pm.PackageManager
 import android.os.Build
 import com.seventv.stickers.BuildConfig
 import com.seventv.stickers.core.media.DefaultStickerMediaPipeline
+import com.seventv.stickers.core.media.sound.AndroidAudioInspector
+import com.seventv.stickers.core.media.sound.AndroidVoiceRecorderManager
+import com.seventv.stickers.core.media.sound.AudioInspector
+import com.seventv.stickers.core.media.sound.DefaultSoundStickerExporter
+import com.seventv.stickers.core.media.sound.SoundStickerExporter
+import com.seventv.stickers.core.media.sound.VoiceRecorderController
+import com.seventv.stickers.ui.studio.StudioVisualSelection
+import kotlinx.coroutines.flow.MutableStateFlow
 import com.seventv.stickers.core.network.api.SevenTvNetworkFactory
 import com.seventv.stickers.core.network.downloader.DefaultEmoteDownloader
 import com.seventv.stickers.core.network.downloader.EmoteDownloader
@@ -38,6 +46,11 @@ interface AppContainer {
     val packImportManager: com.seventv.stickers.core.domain.manager.PackImportManager
     val stickerShareManager: com.seventv.stickers.core.domain.manager.StickerShareManager
     val appUpdateManager: AppUpdateManager
+    val emoteDownloader: EmoteDownloader
+    val audioInspector: AudioInspector
+    val voiceRecorderManager: VoiceRecorderController
+    val soundStickerExporter: SoundStickerExporter
+    val pendingStudioVisual: MutableStateFlow<StudioVisualSelection?>
 }
 
 class DefaultAppContainer(private val context: Context) : AppContainer {
@@ -70,9 +83,23 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
         SevenTvNetworkFactory.createTwitchEmotesApi(okHttpClient = okHttpClient)
     }
 
-    private val emoteDownloader: EmoteDownloader by lazy {
+    override val emoteDownloader: EmoteDownloader by lazy {
         DefaultEmoteDownloader(File(context.cacheDir, "7tv_emotes_cache"), okHttpClient = okHttpClient)
     }
+
+    override val audioInspector: AudioInspector by lazy {
+        AndroidAudioInspector(context)
+    }
+
+    override val voiceRecorderManager: VoiceRecorderController by lazy {
+        AndroidVoiceRecorderManager(context)
+    }
+
+    override val soundStickerExporter: SoundStickerExporter by lazy {
+        DefaultSoundStickerExporter(context)
+    }
+
+    override val pendingStudioVisual: MutableStateFlow<StudioVisualSelection?> = MutableStateFlow(null)
 
     override val sevenTvRepository: SevenTvRepository by lazy {
         DefaultSevenTvRepository(sevenTvApi, emoteDownloader)

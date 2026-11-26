@@ -14,6 +14,9 @@ class AppNavigationTest {
         assertEquals("channel", Screen.Channel.route)
         assertEquals("Canales", Screen.Channel.title)
 
+        assertEquals("studio", Screen.Studio.route)
+        assertEquals("Crear", Screen.Studio.title)
+
         assertEquals("packs", Screen.Packs.route)
         assertEquals("Mis Packs", Screen.Packs.title)
 
@@ -24,9 +27,10 @@ class AppNavigationTest {
 
     @Test
     fun bottomNavItemsContainExpectedScreens() {
-        assertEquals(3, bottomNavItems.size)
+        assertEquals(4, bottomNavItems.size)
         assertTrue(bottomNavItems.contains(Screen.Explore))
         assertTrue(bottomNavItems.contains(Screen.Channel))
+        assertTrue(bottomNavItems.contains(Screen.Studio))
         assertTrue(bottomNavItems.contains(Screen.Packs))
     }
 

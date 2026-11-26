@@ -60,6 +60,7 @@ import androidx.compose.material.icons.filled.DragIndicator
 import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Warning
 import com.seventv.stickers.core.domain.validator.StickerIssue
@@ -146,6 +147,7 @@ fun PackDetailScreen(
     packId: String,
     viewModel: PacksViewModel,
     onNavigateBack: () -> Unit,
+    onCreateWithAudio: ((PackSticker, Boolean) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -902,8 +904,17 @@ fun PackDetailScreen(
                                                             icon = Icons.Default.Share,
                                                             accentColor = NeonFuchsia,
                                                             onClick = { shareSticker(sticker, pack.isAnimated) }
-                                                        )
-                                                    )
+                                                        ),
+                                                        if (onCreateWithAudio != null) {
+                                                            EmotePeekAction(
+                                                                id = "audio",
+                                                                label = "Audio",
+                                                                icon = Icons.Default.MusicNote,
+                                                                accentColor = SunsetYellow,
+                                                                onClick = { onCreateWithAudio(sticker, pack.isAnimated) }
+                                                            )
+                                                        } else null
+                                                    ).filterNotNull()
                                                 )
                                             )
                                         },
@@ -974,6 +985,9 @@ fun PackDetailScreen(
                         }
                     }
                 }
+            },
+            onCreateWithAudio = onCreateWithAudio?.let { cb ->
+                { cb(currentInspectedSticker, pack.isAnimated) }
             }
         )
     }
@@ -1398,6 +1412,9 @@ fun PackDetailScreen(
                         }
                     }
                 }
+            },
+            onCreateWithAudio = onCreateWithAudio?.let { cb ->
+                { cb(sticker, pack.isAnimated) }
             }
         )
     }
