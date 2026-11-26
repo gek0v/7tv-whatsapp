@@ -23,6 +23,7 @@ import com.seventv.stickers.core.common.result.StickerError
 import com.seventv.stickers.core.common.result.StickerResult
 import com.seventv.stickers.core.media.animated.DefaultFrameExtractor
 import com.seventv.stickers.core.media.animated.FrameExtractor
+import com.seventv.stickers.core.media.model.AnimationFrame
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -41,6 +42,26 @@ interface SoundStickerExporter {
         loopMode: StudioLoopMode = StudioLoopMode.LOOP,
         onProgress: (Float, String) -> Unit = { _, _ -> }
     ): StickerResult<SoundStickerExportResult>
+
+    suspend fun exportMp4(
+        visualBytes: ByteArray = ByteArray(0),
+        audioUri: Uri,
+        trimStartMs: Long,
+        trimEndMs: Long,
+        background: StudioCanvasBackground,
+        loopMode: StudioLoopMode = StudioLoopMode.LOOP,
+        videoUri: Uri? = null,
+        preExtractedFrames: List<AnimationFrame>? = null,
+        onProgress: (Float, String) -> Unit = { _, _ -> }
+    ): StickerResult<SoundStickerExportResult> = exportMp4(
+        visualBytes = visualBytes,
+        audioUri = audioUri,
+        trimStartMs = trimStartMs,
+        trimEndMs = trimEndMs,
+        background = background,
+        loopMode = loopMode,
+        onProgress = onProgress
+    )
 }
 
 /**
@@ -50,6 +71,7 @@ interface SoundStickerExporter {
 class DefaultSoundStickerExporter(
     private val context: Context,
     private val frameExtractor: FrameExtractor = DefaultFrameExtractor(),
+    private val videoFrameExtractor: VideoFrameExtractor = AndroidVideoFrameExtractor(context),
     private val dispatcher: CoroutineDispatcher = Dispatchers.IO
 ) : SoundStickerExporter {
 
@@ -72,8 +94,30 @@ class DefaultSoundStickerExporter(
         background: StudioCanvasBackground,
         loopMode: StudioLoopMode,
         onProgress: (Float, String) -> Unit
+    ): StickerResult<SoundStickerExportResult> = exportMp4(
+        visualBytes = visualBytes,
+        audioUri = audioUri,
+        trimStartMs = trimStartMs,
+        trimEndMs = trimEndMs,
+        background = background,
+        loopMode = loopMode,
+        videoUri = null,
+        preExtractedFrames = null,
+        onProgress = onProgress
+    )
+
+    override suspend fun exportMp4(
+        visualBytes: ByteArray,
+        audioUri: Uri,
+        trimStartMs: Long,
+        trimEndMs: Long,
+        background: StudioCanvasBackground,
+        loopMode: StudioLoopMode,
+        videoUri: Uri?,
+        preExtractedFrames: List<AnimationFrame>?,
+        onProgress: (Float, String) -> Unit
     ): StickerResult<SoundStickerExportResult> = withContext(dispatcher) {
-        if (visualBytes.isEmpty()) {
+        if (preExtractedFrames.isNullOrEmpty() && videoUri == null && visualBytes.isEmpty()) {
             return@withContext StickerResult.Failure(StickerError.CorruptedSourceData)
         }
         val clipDurationMs = trimEndMs - trimStartMs
@@ -89,16 +133,37 @@ class DefaultSoundStickerExporter(
 
         try {
             onProgress(0.05f, "Extrayendo fotogramas...")
-            val extractedResult = frameExtractor.extractFrames(visualBytes)
-            val rawFrames = when (extractedResult) {
-                is StickerResult.Success -> extractedResult.data
-                is StickerResult.Failure -> return@withContext extractedResult
+            var ownsFrameBitmaps = false
+            val rawFrames: List<AnimationFrame> = when {
+                !preExtractedFrames.isNullOrEmpty() -> preExtractedFrames
+                videoUri != null -> {
+                    ownsFrameBitmaps = true
+                    val maxVideoDur = clipDurationMs.coerceAtMost(SoundStickerSpecs.MAX_ANIMATED_CLIP_DURATION_MS)
+                    val videoStartMs = if (audioUri == videoUri) trimStartMs else 0L
+                    when (
+                        val extractedResult = videoFrameExtractor.extractFrames(
+                            uri = videoUri,
+                            startMs = videoStartMs,
+                            maxDurationMs = maxVideoDur
+                        )
+                    ) {
+                        is StickerResult.Success -> extractedResult.data.frames
+                        is StickerResult.Failure -> return@withContext extractedResult
+                    }
+                }
+                else -> {
+                    ownsFrameBitmaps = true
+                    when (val extractedResult = frameExtractor.extractFrames(visualBytes)) {
+                        is StickerResult.Success -> extractedResult.data
+                        is StickerResult.Failure -> return@withContext extractedResult
+                    }
+                }
             }
             if (rawFrames.isEmpty()) {
                 return@withContext StickerResult.Failure(StickerError.CorruptedSourceData)
             }
 
-            // Limit precomputed unique frames to keep memory bounded on huge GIFs
+            // Limit precomputed unique frames to keep memory bounded on huge GIFs/videos
             val yuvFrames = mutableListOf<YuvFrame>()
             val frameDurations = mutableListOf<Int>()
             try {
@@ -107,9 +172,11 @@ class DefaultSoundStickerExporter(
                     frameDurations.add(frame.durationMs)
                 }
             } finally {
-                for (frame in rawFrames) {
-                    if (!frame.bitmap.isRecycled) {
-                        frame.bitmap.recycle()
+                if (ownsFrameBitmaps) {
+                    for (frame in rawFrames) {
+                        if (!frame.bitmap.isRecycled) {
+                            frame.bitmap.recycle()
+                        }
                     }
                 }
             }

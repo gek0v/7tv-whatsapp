@@ -93,18 +93,73 @@ class StudioViewModel(
         )
     }
 
+    private data class ResolvedGalleryMetadata(
+        val displayName: String,
+        val isAnimated: Boolean,
+        val isVideo: Boolean
+    )
+
     fun onSelectGalleryVisual(uri: Uri) {
         viewModelScope.launch {
-            val (displayName, isAnimated) = withContext(ioDispatcher) {
+            val metadata = withContext(ioDispatcher) {
                 resolveVisualMetadata(uri)
             }
             applyVisualSelection(
                 StudioVisualSelection.GalleryVisual(
                     uri = uri,
-                    displayName = displayName,
-                    isAnimated = isAnimated
+                    displayName = metadata.displayName,
+                    isAnimated = metadata.isAnimated || metadata.isVideo,
+                    isVideo = metadata.isVideo
                 )
             )
+            if (metadata.isVideo &&
+                _uiState.value.audio is StudioAudioSelection.None &&
+                !_uiState.value.recordingState.isRecording
+            ) {
+                tryAutoImportVideoAudio(uri)
+            }
+        }
+    }
+
+    private suspend fun tryAutoImportVideoAudio(uri: Uri) {
+        _uiState.update {
+            it.copy(
+                isLoadingAudio = true,
+                audioError = null,
+                isAudioPreviewPlaying = false
+            )
+        }
+        when (val result = audioInspector.inspect(uri)) {
+            is StickerResult.Success -> {
+                val info = result.data
+                _uiState.update { state ->
+                    if (state.audio !is StudioAudioSelection.None || state.recordingState.isRecording) {
+                        state.copy(isLoadingAudio = false)
+                    } else {
+                        val maxDur = state.maxClipDurationMs
+                        val (startMs, endMs) = SoundStickerSpecs.clampTrimRange(
+                            startMs = 0L,
+                            endMs = minOf(info.durationMs, maxDur),
+                            totalDurationMs = info.durationMs,
+                            maxClipDurationMs = maxDur
+                        )
+                        state.copy(
+                            isLoadingAudio = false,
+                            audioError = null,
+                            audio = StudioAudioSelection.Ready(
+                                info = info,
+                                trimStartMs = startMs,
+                                trimEndMs = endMs,
+                                isFromMicrophone = false
+                            )
+                        )
+                    }
+                }
+            }
+            is StickerResult.Failure -> {
+                // Silent videos without an audio track are valid visuals; keep audio empty without error
+                _uiState.update { it.copy(isLoadingAudio = false) }
+            }
         }
     }
 
@@ -323,10 +378,15 @@ class StudioViewModel(
             }
 
             try {
-                val visualBytes = withContext(ioDispatcher) {
-                    loadVisualBytes(visual)
+                val videoUri = (visual as? StudioVisualSelection.GalleryVisual)?.takeIf { it.isVideo }?.uri
+                val visualBytes = if (videoUri != null) {
+                    ByteArray(0)
+                } else {
+                    withContext(ioDispatcher) {
+                        loadVisualBytes(visual)
+                    } ?: ByteArray(0)
                 }
-                if (visualBytes == null || visualBytes.isEmpty()) {
+                if (videoUri == null && visualBytes.isEmpty()) {
                     _uiState.update {
                         it.copy(exportState = StudioExportState.Error("No se pudo cargar la imagen o emote seleccionado."))
                     }
@@ -340,6 +400,7 @@ class StudioViewModel(
                     trimEndMs = audio.trimEndMs,
                     background = state.canvasBackground,
                     loopMode = state.loopMode,
+                    videoUri = videoUri,
                     onProgress = { progress, msg ->
                         _uiState.update {
                             it.copy(exportState = StudioExportState.Processing(progress, msg))
@@ -414,7 +475,7 @@ class StudioViewModel(
         }
     }
 
-    private fun resolveVisualMetadata(uri: Uri): Pair<String, Boolean> {
+    private fun resolveVisualMetadata(uri: Uri): ResolvedGalleryMetadata {
         val name = try {
             context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
                 if (cursor.moveToFirst()) {
@@ -424,13 +485,63 @@ class StudioViewModel(
             }
         } catch (_: Exception) {
             null
-        } ?: (uri.lastPathSegment ?: "Imagen")
+        } ?: (uri.lastPathSegment ?: "Archivo")
 
         val mime = context.contentResolver.getType(uri) ?: ""
+        val isVideo = isVideoSource(uri = uri, mime = mime, displayName = name)
+        if (isVideo) {
+            return ResolvedGalleryMetadata(
+                displayName = name,
+                isAnimated = true,
+                isVideo = true
+            )
+        }
+
         val isGifOrWebpAnim = mime.equals("image/gif", ignoreCase = true) ||
             name.endsWith(".gif", ignoreCase = true) ||
             detectAnimatedBytes(uri)
-        return name to isGifOrWebpAnim
+        return ResolvedGalleryMetadata(
+            displayName = name,
+            isAnimated = isGifOrWebpAnim,
+            isVideo = false
+        )
+    }
+
+    private fun isVideoSource(uri: Uri, mime: String, displayName: String): Boolean {
+        if (mime.startsWith("video/", ignoreCase = true)) {
+            return true
+        }
+        val lowerName = displayName.lowercase()
+        val lowerPath = uri.lastPathSegment?.lowercase() ?: ""
+        val videoExtensions = listOf(".mp4", ".webm", ".mkv", ".mov", ".m4v", ".3gp")
+        if (videoExtensions.any { lowerName.endsWith(it) || lowerPath.endsWith(it) }) {
+            return true
+        }
+        if (mime.startsWith("image/", ignoreCase = true)) {
+            return false
+        }
+        return detectVideoContainerBytes(uri)
+    }
+
+    private fun detectVideoContainerBytes(uri: Uri): Boolean {
+        return try {
+            val head = ByteArray(16)
+            val read = context.contentResolver.openInputStream(uri)?.use { it.read(head) } ?: 0
+            if (read < 8) return false
+            // ISO BMFF / MP4 / MOV: ....ftyp
+            val isIsoBmff = head[4] == 'f'.code.toByte() &&
+                head[5] == 't'.code.toByte() &&
+                head[6] == 'y'.code.toByte() &&
+                head[7] == 'p'.code.toByte()
+            // EBML / WebM / Matroska: 0x1A 0x45 0xDF 0xA3
+            val isEbml = head[0] == 0x1A.toByte() &&
+                head[1] == 0x45.toByte() &&
+                head[2] == 0xDF.toByte() &&
+                head[3] == 0xA3.toByte()
+            isIsoBmff || isEbml
+        } catch (_: Exception) {
+            false
+        }
     }
 
     private fun detectAnimatedBytes(uri: Uri): Boolean {

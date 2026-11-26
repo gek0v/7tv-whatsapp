@@ -3,6 +3,7 @@ package com.seventv.stickers.ui.studio
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
 import android.media.MediaPlayer
 import android.net.Uri
 import android.widget.Toast
@@ -17,6 +18,7 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -85,6 +87,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -97,6 +100,7 @@ import androidx.core.content.FileProvider
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.seventv.stickers.core.domain.manager.StickerShareManager
+import com.seventv.stickers.core.media.sound.AndroidVideoFrameExtractor
 import com.seventv.stickers.core.media.sound.SoundStickerSpecs
 import com.seventv.stickers.core.media.sound.StudioCanvasBackground
 import com.seventv.stickers.core.media.sound.StudioLoopMode
@@ -114,7 +118,9 @@ import com.seventv.stickers.ui.theme.RetroViolet
 import com.seventv.stickers.ui.theme.SunsetYellow
 import com.seventv.stickers.ui.theme.WhatsAppGlow
 import com.seventv.stickers.whatsapp.WhatsAppConstants
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.Locale
 
@@ -127,7 +133,7 @@ fun StudioScreen(
     val state by viewModel.uiState.collectAsState()
     val context = LocalContext.current
 
-    // Gallery visual picker (photo, GIF, WebP)
+    // Gallery visual picker (photo, GIF, WebP, MP4/WebM video)
     val pickVisualLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia()
     ) { uri ->
@@ -277,7 +283,7 @@ fun StudioScreen(
         // Step 1: Visual Selection
         StudioSectionCard(
             stepNumber = "1",
-            title = "Imagen o Emote",
+            title = "Imagen, Vídeo o Emote",
             accent = ElectricCyan
         ) {
             Row(
@@ -287,17 +293,18 @@ fun StudioScreen(
                 OutlinedButton(
                     onClick = {
                         pickVisualLauncher.launch(
-                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)
                         )
                     },
                     shape = RoundedCornerShape(14.dp),
                     border = BorderStroke(1.dp, ElectricCyan.copy(alpha = 0.6f)),
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = ElectricCyan),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 10.dp),
                     modifier = Modifier.weight(1f)
                 ) {
                     Icon(Icons.Default.PhotoLibrary, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("Galería", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text("Galería (Img / Vídeo)", fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
 
                 Button(
@@ -744,10 +751,27 @@ private fun StudioPreviewCard(
     onTogglePlay: () -> Unit
 ) {
     val context = LocalContext.current
+    val isVideoVisual = visual is StudioVisualSelection.GalleryVisual && visual.isVideo
+    var videoThumbnail by remember(visual) { mutableStateOf<Bitmap?>(null) }
+
+    LaunchedEffect(visual) {
+        videoThumbnail = if (visual is StudioVisualSelection.GalleryVisual && visual.isVideo) {
+            withContext(Dispatchers.IO) {
+                AndroidVideoFrameExtractor.extractThumbnailSync(
+                    context = context,
+                    uri = visual.uri,
+                    maxDimensionPx = SoundStickerSpecs.VIDEO_WIDTH
+                )
+            }
+        } else {
+            null
+        }
+    }
+
     val previewModel: Any? = when (visual) {
         StudioVisualSelection.None -> null
         is StudioVisualSelection.EmoteVisual -> visual.emote.previewUrl
-        is StudioVisualSelection.GalleryVisual -> visual.uri
+        is StudioVisualSelection.GalleryVisual -> if (visual.isVideo) null else visual.uri
         is StudioVisualSelection.LocalFileVisual -> File(visual.filePath)
     }
 
@@ -769,7 +793,55 @@ private fun StudioPreviewCard(
                 .clickable(enabled = audio != null) { onTogglePlay() }
         ) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                if (previewModel != null) {
+                if (isVideoVisual) {
+                    val thumb = videoThumbnail
+                    if (thumb != null) {
+                        Image(
+                            bitmap = thumb.asImageBitmap(),
+                            contentDescription = "Vista previa del vídeo",
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(14.dp)
+                        )
+                    } else {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.padding(16.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.MovieCreation,
+                                contentDescription = null,
+                                tint = ElectricCyan.copy(alpha = 0.8f),
+                                modifier = Modifier.size(44.dp)
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = "Vídeo seleccionado",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = DarkOnSurfaceVariant,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
+
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = DarkBackground.copy(alpha = 0.8f),
+                        border = BorderStroke(1.dp, ElectricCyan.copy(alpha = 0.6f)),
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .padding(10.dp)
+                    ) {
+                        Text(
+                            text = "VÍDEO · 5s",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = ElectricCyan,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
+                } else if (previewModel != null) {
                     AsyncImage(
                         model = ImageRequest.Builder(context)
                             .data(previewModel)
@@ -799,7 +871,7 @@ private fun StudioPreviewCard(
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "Elige una imagen o emote para empezar",
+                            text = "Elige una imagen, vídeo o emote para empezar",
                             style = MaterialTheme.typography.bodySmall,
                             color = DarkOnSurfaceVariant,
                             textAlign = TextAlign.Center
