@@ -97,4 +97,106 @@ class SoundStickerSpecsTest {
         }
         assertEquals(1000.toShort(), stereoOut[0])
     }
+
+    @Test
+    fun applyPcmEdgeFadeFadesEdgesAndKeepsMiddleSamplesIntact() {
+        assertEquals(8L, SoundStickerSpecs.AUDIO_EDGE_FADE_MS)
+
+        // 100 stereo frames at 1000 Hz with 8 ms fade => 8 fade-in frames, 8 fade-out frames
+        val totalFrames = 100L
+        val chunk1 = ShortArray(40 * 2) { idx -> if (idx % 2 == 0) 10_000 else -10_000 }
+        val chunk2 = ShortArray(60 * 2) { idx -> if (idx % 2 == 0) 10_000 else -10_000 }
+
+        SoundStickerSpecs.applyPcmEdgeFade(
+            stereoSamples = chunk1,
+            stereoFrameOffset = 0L,
+            totalTargetStereoFrames = totalFrames,
+            sampleRate = 1000,
+            fadeDurationMs = 8L
+        )
+        SoundStickerSpecs.applyPcmEdgeFade(
+            stereoSamples = chunk2,
+            stereoFrameOffset = 40L,
+            totalTargetStereoFrames = totalFrames,
+            sampleRate = 1000,
+            fadeDurationMs = 8L
+        )
+
+        // Fade-in: frame 0 is 0, midpoint frame 4 is 5000/-5000, monotonically increasing up to frame 7
+        assertEquals(0.toShort(), chunk1[0])
+        assertEquals(0.toShort(), chunk1[1])
+        assertEquals(5_000.toShort(), chunk1[4 * 2])
+        assertEquals((-5_000).toShort(), chunk1[4 * 2 + 1])
+        for (f in 0 until 7) {
+            assertTrue(chunk1[f * 2] < chunk1[(f + 1) * 2])
+        }
+        assertEquals(8_750.toShort(), chunk1[7 * 2])
+
+        // Middle frames (8..39 in chunk1, 40..91 -> local 0..51 in chunk2) remain 1.0x intact
+        for (f in 8 until 40) {
+            assertEquals(10_000.toShort(), chunk1[f * 2])
+            assertEquals((-10_000).toShort(), chunk1[f * 2 + 1])
+        }
+        for (f in 0 until 52) {
+            assertEquals(10_000.toShort(), chunk2[f * 2])
+            assertEquals((-10_000).toShort(), chunk2[f * 2 + 1])
+        }
+
+        // Fade-out: starts at global frame 92 (local 52) down to 0 at global frame 99 (local 59)
+        assertEquals(8_750.toShort(), chunk2[52 * 2])
+        assertEquals(5_000.toShort(), chunk2[55 * 2])
+        assertEquals((-5_000).toShort(), chunk2[55 * 2 + 1])
+        for (f in 52 until 59) {
+            assertTrue(chunk2[f * 2] > chunk2[(f + 1) * 2])
+        }
+        assertEquals(0.toShort(), chunk2[59 * 2])
+        assertEquals(0.toShort(), chunk2[59 * 2 + 1])
+    }
+
+    @Test
+    fun applyPcmEdgeFadeHandlesClipsShorterThanDoubleFadeWithoutOverlapOrInversion() {
+        // 10 ms clip at 1000 Hz (10 frames < 2 * 8 ms = 16 ms) -> effective fade is 5 frames each side
+        val evenShortClip = ShortArray(10 * 2) { 10_000 }
+        SoundStickerSpecs.applyPcmEdgeFade(
+            stereoSamples = evenShortClip,
+            stereoFrameOffset = 0L,
+            totalTargetStereoFrames = 10L,
+            sampleRate = 1000,
+            fadeDurationMs = 8L
+        )
+        val expectedEven = shortArrayOf(0, 2000, 4000, 6000, 8000, 8000, 6000, 4000, 2000, 0)
+        for (f in 0 until 10) {
+            assertEquals(expectedEven[f], evenShortClip[f * 2])
+            assertEquals(expectedEven[f], evenShortClip[f * 2 + 1])
+        }
+
+        // 11 ms clip at 1000 Hz (11 frames) -> center frame 5 stays untouched at 10_000
+        val oddShortClip = ShortArray(11 * 2) { 10_000 }
+        SoundStickerSpecs.applyPcmEdgeFade(
+            stereoSamples = oddShortClip,
+            stereoFrameOffset = 0L,
+            totalTargetStereoFrames = 11L,
+            sampleRate = 1000,
+            fadeDurationMs = 8L
+        )
+        val expectedOdd = shortArrayOf(0, 2000, 4000, 6000, 8000, 10000, 8000, 6000, 4000, 2000, 0)
+        for (f in 0 until 11) {
+            assertEquals(expectedOdd[f], oddShortClip[f * 2])
+            assertEquals(expectedOdd[f], oddShortClip[f * 2 + 1])
+        }
+
+        // 10 ms clip at default 44100 Hz (441 frames < 2 * 352 = 704)
+        val clip44k = ShortArray(441 * 2) { 20_000 }
+        SoundStickerSpecs.applyPcmEdgeFade(
+            stereoSamples = clip44k,
+            stereoFrameOffset = 0L,
+            totalTargetStereoFrames = 441L
+        )
+        assertEquals(0.toShort(), clip44k[0])
+        assertEquals(20_000.toShort(), clip44k[220 * 2])
+        assertEquals(0.toShort(), clip44k[440 * 2])
+        for (s in clip44k) {
+            assertTrue("Sample should stay non-negative without inversion: $s", s in 0..20_000)
+        }
+    }
 }
