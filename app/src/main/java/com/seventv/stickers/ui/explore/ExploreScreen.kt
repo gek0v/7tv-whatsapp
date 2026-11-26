@@ -51,6 +51,7 @@ import com.seventv.stickers.core.common.result.StickerResult
 import com.seventv.stickers.core.network.model.SevenTvEmote
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.ZoomIn
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -62,6 +63,7 @@ import com.seventv.stickers.ui.components.LocalEmotePeekController
 import com.seventv.stickers.ui.components.rememberEmotePeekState
 import com.seventv.stickers.ui.theme.ElectricCyan
 import com.seventv.stickers.ui.theme.NeonFuchsia
+import com.seventv.stickers.ui.theme.SunsetYellow
 import com.seventv.stickers.ui.theme.WhatsAppGlow
 import com.seventv.stickers.ui.components.AddToExistingPackDialog
 import com.seventv.stickers.ui.components.DockedDraftPill
@@ -91,6 +93,7 @@ fun ExploreScreen(
     viewModel: ExploreViewModel,
     onNavigateToPacks: () -> Unit = {},
     updateManager: AppUpdateManager? = null,
+    onCreateWithAudio: ((SevenTvEmote) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -539,8 +542,17 @@ fun ExploreScreen(
                                                                 icon = Icons.Default.Share,
                                                                 accentColor = NeonFuchsia,
                                                                 onClick = { shareEmote(emote) }
-                                                            )
-                                                        )
+                                                            ),
+                                                            if (onCreateWithAudio != null) {
+                                                                EmotePeekAction(
+                                                                    id = "audio",
+                                                                    label = "Audio",
+                                                                    icon = Icons.Default.MusicNote,
+                                                                    accentColor = SunsetYellow,
+                                                                    onClick = { onCreateWithAudio(emote) }
+                                                                )
+                                                            } else null
+                                                        ).filterNotNull()
                                                     )
                                                 )
                                             },
@@ -702,7 +714,8 @@ fun ExploreScreen(
                     isInDraft = isInDraft,
                     onToggleDraft = { viewModel.onToggleDraftEmote(emote) },
                     onShareSticker = { shareEmote(emote) },
-                    isSharingSticker = isSharingSticker
+                    isSharingSticker = isSharingSticker,
+                    onCreateWithAudio = onCreateWithAudio?.let { cb -> { cb(emote) } }
                 )
             }
         }

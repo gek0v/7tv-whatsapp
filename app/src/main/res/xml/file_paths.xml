@@ -2,5 +2,6 @@
 <paths xmlns:android="http://schemas.android.com/apk/res/android">
     <files-path name="sticker_packs" path="sticker_packs/" />
     <cache-path name="quick_share" path="quick_share/" />
+    <cache-path name="sound_studio" path="sound_studio/" />
     <cache-path name="updates" path="updates/" />
 </paths>

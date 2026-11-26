@@ -37,6 +37,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.BottomSheetDefaults
@@ -128,6 +129,7 @@ fun StickerInspectorSheet(
     isTrayIcon: Boolean = false,
     onFullscreenClick: (() -> Unit)? = null,
     onShareSticker: (() -> Unit)? = null,
+    onCreateWithAudio: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -589,6 +591,36 @@ fun StickerInspectorSheet(
                         text = if (isAnimated) "Compartir GIF animado" else "Compartir imagen WebP",
                         style = MaterialTheme.typography.labelLarge,
                         color = ElectricCyan,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+            }
+
+            // Action: Send to Sound Studio
+            if (onCreateWithAudio != null) {
+                OutlinedButton(
+                    onClick = {
+                        onCreateWithAudio()
+                        onDismiss()
+                    },
+                    shape = RoundedCornerShape(16.dp),
+                    border = BorderStroke(1.2.dp, SunsetYellow.copy(alpha = 0.7f)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.MusicNote,
+                        contentDescription = null,
+                        tint = SunsetYellow,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Añadir Audio (Sound Sticker)",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = SunsetYellow,
                         fontWeight = FontWeight.Bold
                     )
                 }

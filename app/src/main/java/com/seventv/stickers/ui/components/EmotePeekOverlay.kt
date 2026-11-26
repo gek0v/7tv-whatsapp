@@ -26,6 +26,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
@@ -745,6 +747,7 @@ private fun FrostedPeekCard(
 /**
  * Translucent horizontal pill bar containing quick actions beneath the peek card.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun QuickActionPillBar(
     actions: List<EmotePeekAction>,
@@ -770,10 +773,10 @@ private fun QuickActionPillBar(
         shadowElevation = 12.dp,
         modifier = modifier
     ) {
-        Row(
+        FlowRow(
             modifier = Modifier.padding(horizontal = 6.dp, vertical = 6.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalAlignment = Alignment.CenterVertically
+            horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             actions.forEachIndexed { index, action ->
                 val isHovered = hoveredIndex == index
@@ -803,7 +806,6 @@ private fun QuickActionPillBar(
 
                 Surface(
                     modifier = Modifier
-                        .weight(1f, fill = false)
                         .graphicsLayer {
                             scaleX = scale
                             scaleY = scale

@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material3.Icon
@@ -39,6 +40,10 @@ import com.seventv.stickers.ui.explore.ExploreViewModel
 import com.seventv.stickers.ui.packs.PackDetailScreen
 import com.seventv.stickers.ui.packs.PacksScreen
 import com.seventv.stickers.ui.packs.PacksViewModel
+import com.seventv.stickers.ui.studio.StudioScreen
+import com.seventv.stickers.ui.studio.StudioViewModel
+import com.seventv.stickers.ui.studio.StudioVisualSelection
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.platform.LocalContext
@@ -66,6 +71,7 @@ import com.seventv.stickers.ui.theme.NeonFuchsia
 sealed class Screen(val route: String, val title: String, val icon: ImageVector) {
     data object Explore : Screen("explore", "Explorar", Icons.Default.Search)
     data object Channel : Screen("channel", "Canales", Icons.Default.Tv)
+    data object Studio : Screen("studio", "Crear", Icons.Default.MusicNote)
     data object Packs : Screen("packs", "Mis Packs", Icons.Default.Folder)
     data object PackDetail : Screen("pack_detail/{packId}", "Detalle", Icons.Default.Folder) {
         fun createRoute(packId: String): String = "pack_detail/$packId"
@@ -75,6 +81,7 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector)
 val bottomNavItems = listOf(
     Screen.Explore,
     Screen.Channel,
+    Screen.Studio,
     Screen.Packs
 )
 
@@ -90,6 +97,17 @@ fun AppNavigation(
     val peekState = rememberEmotePeekState()
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
+
+    val openInStudio: (StudioVisualSelection) -> Unit = { selection ->
+        container.pendingStudioVisual.value = selection
+        navController.navigate(Screen.Studio.route) {
+            popUpTo(navController.graph.findStartDestination().id) {
+                saveState = true
+            }
+            launchSingleTop = true
+            restoreState = true
+        }
+    }
 
     LaunchedEffect(Unit) {
         container.appUpdateManager.checkForUpdatesIfNeeded()
@@ -207,6 +225,9 @@ fun AppNavigation(
                             }
                             launchSingleTop = true
                         }
+                    },
+                    onCreateWithAudio = { emote ->
+                        openInStudio(StudioVisualSelection.EmoteVisual(emote))
                     }
                 )
             }
@@ -229,7 +250,34 @@ fun AppNavigation(
                             }
                             launchSingleTop = true
                         }
+                    },
+                    onCreateWithAudio = { emote ->
+                        openInStudio(StudioVisualSelection.EmoteVisual(emote))
                     }
+                )
+            }
+
+            composable(Screen.Studio.route) {
+                val studioViewModel: StudioViewModel = viewModel(
+                    factory = StudioViewModel.Factory(
+                        context = context,
+                        sevenTvRepository = container.sevenTvRepository,
+                        aggregatedRepository = container.aggregatedEmoteCatalogRepository,
+                        emoteDownloader = container.emoteDownloader,
+                        audioInspector = container.audioInspector,
+                        voiceRecorder = container.voiceRecorderManager,
+                        soundStickerExporter = container.soundStickerExporter
+                    )
+                )
+                val pendingVisual by container.pendingStudioVisual.collectAsState()
+                LaunchedEffect(pendingVisual) {
+                    val pending = pendingVisual ?: return@LaunchedEffect
+                    studioViewModel.applyVisualSelection(pending)
+                    container.pendingStudioVisual.value = null
+                }
+                StudioScreen(
+                    viewModel = studioViewModel,
+                    shareManager = container.stickerShareManager
                 )
             }
 
@@ -275,6 +323,15 @@ fun AppNavigation(
                     viewModel = packsViewModel,
                     onNavigateBack = {
                         navController.popBackStack()
+                    },
+                    onCreateWithAudio = { sticker, isAnimated ->
+                        openInStudio(
+                            StudioVisualSelection.LocalFileVisual(
+                                filePath = sticker.filePath,
+                                displayName = sticker.emoteName,
+                                isAnimated = isAnimated
+                            )
+                        )
                     }
                 )
             }
