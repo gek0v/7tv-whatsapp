@@ -1,13 +1,20 @@
 package com.seventv.stickers.ui.studio
 
+import android.content.ContentProvider
+import android.content.ContentValues
 import android.content.Context
+import android.database.Cursor
+import android.database.MatrixCursor
 import android.net.Uri
+import android.provider.OpenableColumns
 import com.seventv.stickers.core.common.result.StickerError
 import com.seventv.stickers.core.common.result.StickerResult
+import com.seventv.stickers.core.media.model.AnimationFrame
 import com.seventv.stickers.core.media.sound.AudioInspector
 import com.seventv.stickers.core.media.sound.AudioTrackInfo
 import com.seventv.stickers.core.media.sound.SoundStickerExportResult
 import com.seventv.stickers.core.media.sound.SoundStickerExporter
+import com.seventv.stickers.core.media.sound.SoundStickerSpecs
 import com.seventv.stickers.core.media.sound.StudioCanvasBackground
 import com.seventv.stickers.core.media.sound.StudioLoopMode
 import com.seventv.stickers.core.media.sound.VoiceRecorderController
@@ -29,10 +36,12 @@ import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import java.io.File
@@ -158,6 +167,90 @@ class StudioViewModelTest {
         assertTrue(state.audioError != null)
     }
 
+    @Test
+    fun selectingGalleryVideoSetsAnimatedFiveSecondLimitAndAutoImportsAudioTrack() = runTest(testDispatcher) {
+        Robolectric.setupContentProvider(FakeGalleryContentProvider::class.java, FakeGalleryContentProvider.AUTHORITY)
+        val videoUri = Uri.parse("content://${FakeGalleryContentProvider.AUTHORITY}/clip_with_audio.mp4")
+        fakeAudioInspector.nextDurationMs = 12_000L
+
+        viewModel.onSelectGalleryVisual(videoUri)
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        val visual = state.visual as StudioVisualSelection.GalleryVisual
+        assertTrue(visual.isVideo)
+        assertTrue(visual.isAnimated)
+        assertEquals("clip_with_audio.mp4", visual.displayName)
+        assertTrue(state.isVisualAnimated)
+        assertEquals(SoundStickerSpecs.MAX_ANIMATED_CLIP_DURATION_MS, state.maxClipDurationMs)
+
+        // Video audio track is auto-imported and clamped to 5s animated ceiling
+        val audio = state.audio as StudioAudioSelection.Ready
+        assertEquals(videoUri, audio.info.uri)
+        assertEquals(0L, audio.trimStartMs)
+        assertEquals(5_000L, audio.trimEndMs)
+        assertFalse(audio.isFromMicrophone)
+        assertNull(state.audioError)
+        assertTrue(state.canGenerate)
+
+        // Exporting passes videoUri directly instead of buffering video bytes in RAM
+        viewModel.onGenerateSoundSticker()
+        advanceUntilIdle()
+        assertEquals(videoUri, fakeExporter.lastVideoUri)
+        assertEquals(0, fakeExporter.lastVisualBytes.size)
+        assertTrue(viewModel.uiState.value.exportState is StudioExportState.Success)
+    }
+
+    @Test
+    fun selectingSilentGalleryVideoDoesNotOverwriteExistingAudioOrShowAudioError() = runTest(testDispatcher) {
+        Robolectric.setupContentProvider(FakeGalleryContentProvider::class.java, FakeGalleryContentProvider.AUTHORITY)
+        val silentWebmUri = Uri.parse("content://${FakeGalleryContentProvider.AUTHORITY}/silent_loop.webm")
+
+        // Case 1: silent video with no prior audio -> remains ready for user to add audio, no error banner
+        fakeAudioInspector.shouldFail = true
+        viewModel.onSelectGalleryVisual(silentWebmUri)
+        advanceUntilIdle()
+
+        val afterSilent = viewModel.uiState.value
+        assertTrue((afterSilent.visual as StudioVisualSelection.GalleryVisual).isVideo)
+        assertTrue(afterSilent.audio is StudioAudioSelection.None)
+        assertNull(afterSilent.audioError)
+        assertEquals(5_000L, afterSilent.maxClipDurationMs)
+
+        // Case 2: user imports custom audio first, then picks a video with audio -> keeps user's audio clamped to 5s
+        fakeAudioInspector.shouldFail = false
+        fakeAudioInspector.nextDurationMs = 9_000L
+        val customAudioUri = Uri.parse("content://audio/voice_meme.mp3")
+        viewModel.onImportAudioUri(customAudioUri)
+        advanceUntilIdle()
+
+        val videoWithAudioUri = Uri.parse("content://${FakeGalleryContentProvider.AUTHORITY}/dance.mp4")
+        viewModel.onSelectGalleryVisual(videoWithAudioUri)
+        advanceUntilIdle()
+
+        val preserved = viewModel.uiState.value.audio as StudioAudioSelection.Ready
+        assertEquals(customAudioUri, preserved.info.uri)
+        assertEquals(0L, preserved.trimStartMs)
+        assertEquals(5_000L, preserved.trimEndMs)
+    }
+
+    @Test
+    fun selectingStaticGalleryImageKeepsTenSecondLimitAndDoesNotAutoImportAudio() = runTest(testDispatcher) {
+        Robolectric.setupContentProvider(FakeGalleryContentProvider::class.java, FakeGalleryContentProvider.AUTHORITY)
+        val imageUri = Uri.parse("content://${FakeGalleryContentProvider.AUTHORITY}/photo.png")
+
+        viewModel.onSelectGalleryVisual(imageUri)
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        val visual = state.visual as StudioVisualSelection.GalleryVisual
+        assertFalse(visual.isVideo)
+        assertFalse(visual.isAnimated)
+        assertFalse(state.isVisualAnimated)
+        assertEquals(SoundStickerSpecs.MAX_STATIC_CLIP_DURATION_MS, state.maxClipDurationMs)
+        assertTrue(state.audio is StudioAudioSelection.None)
+    }
+
     private fun sampleEmote(id: String, isAnimated: Boolean) = SevenTvEmote(
         id = id,
         name = id,
@@ -214,6 +307,8 @@ class StudioViewModelTest {
         var lastTrimEndMs: Long = -1L
         var lastBackground: StudioCanvasBackground? = null
         var lastLoopMode: StudioLoopMode? = null
+        var lastVideoUri: Uri? = null
+        var lastVisualBytes: ByteArray = ByteArray(0)
 
         override suspend fun exportMp4(
             visualBytes: ByteArray,
@@ -223,7 +318,31 @@ class StudioViewModelTest {
             background: StudioCanvasBackground,
             loopMode: StudioLoopMode,
             onProgress: (Float, String) -> Unit
+        ): StickerResult<SoundStickerExportResult> = exportMp4(
+            visualBytes = visualBytes,
+            audioUri = audioUri,
+            trimStartMs = trimStartMs,
+            trimEndMs = trimEndMs,
+            background = background,
+            loopMode = loopMode,
+            videoUri = null,
+            preExtractedFrames = null,
+            onProgress = onProgress
+        )
+
+        override suspend fun exportMp4(
+            visualBytes: ByteArray,
+            audioUri: Uri,
+            trimStartMs: Long,
+            trimEndMs: Long,
+            background: StudioCanvasBackground,
+            loopMode: StudioLoopMode,
+            videoUri: Uri?,
+            preExtractedFrames: List<AnimationFrame>?,
+            onProgress: (Float, String) -> Unit
         ): StickerResult<SoundStickerExportResult> {
+            lastVisualBytes = visualBytes
+            lastVideoUri = videoUri
             lastTrimStartMs = trimStartMs
             lastTrimEndMs = trimEndMs
             lastBackground = background
@@ -239,6 +358,41 @@ class StudioViewModelTest {
                 )
             )
         }
+    }
+
+    class FakeGalleryContentProvider : ContentProvider() {
+        companion object {
+            const val AUTHORITY = "com.seventv.stickers.test.gallery"
+        }
+
+        override fun onCreate(): Boolean = true
+
+        override fun getType(uri: Uri): String? {
+            val name = uri.lastPathSegment ?: return null
+            return when {
+                name.endsWith(".mp4") -> "video/mp4"
+                name.endsWith(".webm") -> "video/webm"
+                name.endsWith(".png") -> "image/png"
+                else -> "application/octet-stream"
+            }
+        }
+
+        override fun query(
+            uri: Uri,
+            projection: Array<out String>?,
+            selection: String?,
+            selectionArgs: Array<out String>?,
+            sortOrder: String?
+        ): Cursor {
+            val cols = arrayOf(OpenableColumns.DISPLAY_NAME)
+            val cursor = MatrixCursor(cols)
+            cursor.addRow(arrayOf(uri.lastPathSegment ?: "media"))
+            return cursor
+        }
+
+        override fun insert(uri: Uri, values: ContentValues?): Uri? = null
+        override fun delete(uri: Uri, selection: String?, selectionArgs: Array<out String>?): Int = 0
+        override fun update(uri: Uri, values: ContentValues?, selection: String?, selectionArgs: Array<out String>?): Int = 0
     }
 
     private class FakeStudioSevenTvRepository : SevenTvRepository {

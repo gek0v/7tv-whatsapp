@@ -22,7 +22,8 @@ sealed interface StudioVisualSelection {
     data class GalleryVisual(
         val uri: Uri,
         val displayName: String,
-        val isAnimated: Boolean
+        val isAnimated: Boolean,
+        val isVideo: Boolean = false
     ) : StudioVisualSelection
 
     data class LocalFileVisual(
@@ -81,7 +82,7 @@ data class StudioUiState(
         get() = when (visual) {
             is StudioVisualSelection.None -> false
             is StudioVisualSelection.EmoteVisual -> visual.emote.isAnimated
-            is StudioVisualSelection.GalleryVisual -> visual.isAnimated
+            is StudioVisualSelection.GalleryVisual -> visual.isAnimated || visual.isVideo
             is StudioVisualSelection.LocalFileVisual -> visual.isAnimated
         }
 
